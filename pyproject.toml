@@ -1,0 +1,75 @@
+# Copyright (c) 2018 DATADVANCE
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+# We use Poetry to manage the Python project:
+# https://poetry.eustace.io/docs/
+#
+# File format description on the Poetry site:
+# https://poetry.eustace.io/docs/pyproject/
+#
+# Version specification documentation:
+# https://poetry.eustace.io/docs/versions/
+#
+# File format is STANDARDIZED in the PEP 518:
+# https://www.python.org/dev/peps/pep-0518/
+
+[tool.poetry]
+name = "django-channels-graphql-ws"
+version = "0.1.5"
+description = """Django Channels based WebSocket GraphQL server with \
+                 Graphene-like subscriptions"""
+authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
+homepage = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
+repository = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
+license = "MIT"
+packages = [
+    { include = "channels_graphql_ws/" },
+]
+exclude = ["channels_graphql_ws/test_graphql_ws.py"]
+
+[tool.poetry.dependencies]
+python = "^3.7.0"
+asgiref = "^2.3"              # ASGI in-memory channel layer.
+channels = "^2.1"             # Django Channels for WebSockets, etc.
+django = "^2.0"               # Django web framework.
+graphene = "^2.1"             # GraphQL framework for Python.
+graphene_django = "^2.0"      # Graphene Django integration.
+graphql-core = "^2.0"         # GraphQL base implementation for Python.
+namedlist = "^1.7"            # Like namedtuple, but mutable.
+rx = "^1.6"                   # Reactive Extensions for Python.
+
+[tool.poetry.dev-dependencies]
+black = "^18.3-alpha.0"       # The uncompromising code formatter.
+channels-redis = "^2.2"       # Redis channel layer for Django Channels.
+isort = "^4.3"                # A Python utility to sort imports.
+pre-commit = "^1.10"          # Pre-commit hooks management framework.
+pylint = "^2.0"               # A Python source code analyzer.
+pylint_django = "^0.11.1"     # Pylint plugin to support Django.
+pylint_quotes = "^0.1.9"      # Pylint plugin for checking quotes.
+pytest = "^3.6"               # Testing framework.
+pytest-asyncio = "^0.8.0"     # PyTest plugin for asyncio support.
+pytest-cov = "^2.5"           # Test coverage reports.
+pytest-django = "^3.3"        # PyTest plugin to test Django projects.
+pytest-env = "^0.6.2"         # Set environment in the `pytest.ini`.
+pytest-pythonpath = "^0.7.2"  # Set PYTHONPATH from the `pytest.ini`.
+
+[tool.black]
+py36 = true

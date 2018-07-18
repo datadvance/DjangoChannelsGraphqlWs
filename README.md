@@ -1,4 +1,3 @@
-
 # Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
 
 ## Features
@@ -128,6 +127,27 @@ library by the Graphene authors. In particular
 [this pull request](https://github.com/graphql-python/graphql-ws/pull/9)
 gives a hope that there will be native Graphene implementation of the
 WebSocket transport with subscriptions one day.
+
+## Development
+
+Just a reminder of how to setup an environment for the development:
+
+```bash
+> python3 -m venv .venv
+> direnv allow
+> pip install poetry
+> poetry install
+> pre-commit install
+> pytest
+```
+
+Use:
+
+[![Code style: black](
+    https://img.shields.io/badge/code%20style-black-000000.svg
+)](
+    https://github.com/ambv/black
+)
 
 ## Contributing
 

@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2018
+# Copyright (c) 2018 DATADVANCE
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -19,33 +19,15 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-# Settings. Selected files can be added manually if necessary.
-**/.vscode
-
-# Python related.
-**/__pycache__
-**/.cache
-**/.cache
-**/.coverage
-**/.egg-info
-**/.eggs
-**/.eggs
-**/.mypy_cache
-**/.pytest_cache
-**/*.egg-info
-**/*.pyc
-**/*.pyd
-**/*.pyo
-/.venv
-
-# Build files & logs.
-**/*.sqlite3
-**/*.sqlite
-**/*.log
-
-# Mac BS.
-.DS_Store
-
-# Local temporary files (to store useful BS in there).
-/tmp/
+repos:
+- repo: https://github.com/ambv/black
+  rev: stable
+  hooks:
+  - id: black
+    language_version: python3.7
+- repo: https://github.com/pre-commit/mirrors-isort
+  rev: v4.3.4
+  hooks:
+    - id: isort
+      language: python_venv
+      language_version: python3.7
