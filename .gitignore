@@ -40,9 +40,10 @@
 /.venv
 
 # Build files & logs.
-**/*.sqlite3
-**/*.sqlite
 **/*.log
+**/*.sqlite
+**/*.sqlite3
+/dist
 
 # Mac BS.
 .DS_Store
