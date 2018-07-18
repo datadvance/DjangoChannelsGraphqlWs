@@ -35,27 +35,17 @@ import uuid
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = str(uuid.uuid4())
 DEBUG = True
-INSTALLED_APPS = [
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'channels',
-]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "channels"]
 
 
 # Unit-test use in-memory ASGI while example uses Redis.
-if 'TESTING' in os.environ:
-    CHANNEL_LAYERS = {
-        'default': {
-            'BACKEND': 'channels.layers.InMemoryChannelLayer',
-        }
-    }
+if "TESTING" in os.environ:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 else:
     CHANNEL_LAYERS = {
-        'default': {
-            'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {
-                'hosts': [('redis', 6379)],
-            }
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [("redis", 6379)]},
         }
     }
 
@@ -74,20 +64,18 @@ else:
 # locked`. Looks like shared cache does not respect the `timeout` value.
 test_db_tmpdir = tempfile.TemporaryDirectory()
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'OPTIONS': {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+        "OPTIONS": {
             # Experiment showed that value `2147483.647` is the maximum
             # allowed SQLite timeout. Setting `timeout` to the larger
             # one will simply disable it.
-            'timeout': 2147483.647
+            "timeout": 2147483.647
         },
-        'TEST': {
-            'NAME': os.path.join(test_db_tmpdir.name, 'test_db.sqlite'),
-        }
+        "TEST": {"NAME": os.path.join(test_db_tmpdir.name, "test_db.sqlite")},
     }
 }
 
-ROOT_URLCONF = 'django_example.example'
-ASGI_APPLICATION = 'django_example.example.application'
+ROOT_URLCONF = "django_example.example"
+ASGI_APPLICATION = "django_example.example.application"

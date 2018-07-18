@@ -38,7 +38,7 @@ library `subscription-transport-ws` (which is used by Apollo).
 
 # NOTE: The motivation is that currently there is no viable Python-based
 # GraphQL subscriptions implementation out of the box. Hopefully there
-# is a promising GraphQL WS (https://github.com/graphql-python/graphql-ws)
+# is a promising GraphQL WS https://github.com/graphql-python/graphql-ws
 # library by the Graphene authors. In particular this pull request
 # https://github.com/graphql-python/graphql-ws/pull/9 gives a hope that
 # implementation in the current file can be replaced with GraphQL WS one
@@ -56,6 +56,7 @@ library `subscription-transport-ws` (which is used by Apollo).
 
 import asyncio
 import collections
+import traceback
 import types
 
 import asgiref.sync
@@ -68,6 +69,7 @@ import graphene.types.utils
 import graphene.utils.get_unbound_function
 import graphene.utils.props
 import graphene_django.views
+import graphql.error
 from namedlist import namedlist
 import rx
 
@@ -104,7 +106,7 @@ class Subscription(graphene.ObjectType):
             group.
     """
 
-    # --------------------------------------------------- OVERWRITE IN SUBCLASS
+    # ------------------------------------------------------------ OVERWRITE IN SUBCLASS
 
     def publish(self, info, *args, **kwds):
         """GraphQL resolver for subscription notifications.
@@ -157,7 +159,7 @@ class Subscription(graphene.ObjectType):
         """
         pass
 
-    # ------------------------------------------ SUBSCRIPTION CONTROL INTERFACE
+    # --------------------------------------------------- SUBSCRIPTION CONTROL INTERFACE
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
@@ -175,10 +177,10 @@ class Subscription(graphene.ObjectType):
             channels.layers.get_channel_layer().group_send
         )
         group = cls._group_name(group)
-        group_send(group=group,
-                   message={'type': 'broadcast',
-                            'group': group,
-                            'payload': payload})
+        group_send(
+            group=group,
+            message={"type": "broadcast", "group": group, "payload": payload},
+        )
 
     @classmethod
     def unsubscribe(cls, *, group=None):
@@ -195,13 +197,12 @@ class Subscription(graphene.ObjectType):
             channels.layers.get_channel_layer().group_send
         )
         group = cls._group_name(group)
-        group_send(group=group,
-                   message={'type': 'unsubscribe',
-                            'group': group})
+        group_send(group=group, message={"type": "unsubscribe", "group": group})
 
     @classmethod
-    def Field(cls, name=None, description=None, deprecation_reason=None,
-              required=False):
+    def Field(
+        cls, name=None, description=None, deprecation_reason=None, required=False
+    ):
         """Represent subscription as a field to "deploy" it."""
         return graphene.Field(
             cls._meta.output,
@@ -214,9 +215,16 @@ class Subscription(graphene.ObjectType):
         )
 
     @classmethod
-    def __init_subclass_with_meta__(cls, subscribe=None, publish=None,
-                                    unsubscribed=None, output=None,
-                                    arguments=None, _meta=None, **options):  # pylint: arguments-differ
+    def __init_subclass_with_meta__(
+        cls,
+        subscribe=None,
+        publish=None,
+        unsubscribed=None,
+        output=None,
+        arguments=None,
+        _meta=None,
+        **options,
+    ):  # pylint: arguments-differ
         """Prepare subscription when on subclass creation.
 
         This method is invoked by the superclass `__init__subclass__`.
@@ -226,7 +234,7 @@ class Subscription(graphene.ObjectType):
         if not _meta:
             _meta = SubscriptionOptions(cls)
 
-        output = output or getattr(cls, 'Output', None)
+        output = output or getattr(cls, "Output", None)
         # Collect fields if output class is not explicitly defined.
         fields = {}
         if not output:
@@ -234,14 +242,13 @@ class Subscription(graphene.ObjectType):
             for base in reversed(cls.__mro__):
                 fields.update(
                     graphene.types.utils.yank_fields_from_attrs(
-                        base.__dict__,
-                        _as=graphene.Field,
+                        base.__dict__, _as=graphene.Field
                     )
                 )
             output = cls
 
         if not arguments:
-            input_class = getattr(cls, 'Arguments', None)
+            input_class = getattr(cls, "Arguments", None)
 
             if input_class:
                 arguments = graphene.utils.props.props(input_class)
@@ -249,14 +256,15 @@ class Subscription(graphene.ObjectType):
                 arguments = {}
 
         # Get `publish`, `subscribe`, and `unsubscribe` handlers.
-        subscribe = subscribe or getattr(cls, 'subscribe')
-        publish = publish or getattr(cls, 'publish')
+        subscribe = subscribe or getattr(cls, "subscribe")
+        publish = publish or getattr(cls, "publish")
         assert publish is not Subscription.publish, (
-            f'Subscription `{cls.__qualname__}` does not define a '
-            'method `publish`! All subscriptions must define '
-            '`publish` which processes a GraphQL query!')
+            f"Subscription `{cls.__qualname__}` does not define a "
+            "method `publish`! All subscriptions must define "
+            "`publish` which processes a GraphQL query!"
+        )
 
-        unsubscribed = unsubscribed or getattr(cls, 'unsubscribed')
+        unsubscribed = unsubscribed or getattr(cls, "unsubscribed")
 
         if _meta.fields:
             _meta.fields.update(fields)
@@ -298,8 +306,9 @@ class Subscription(graphene.ObjectType):
         # groups subscription must be attached to.
         subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
         subclass_groups = subclass_groups or []
-        assert isinstance(subclass_groups, (list, tuple)), (
-            'Subscribe must return a list or a tuple of group names!')
+        assert isinstance(
+            subclass_groups, (list, tuple)
+        ), "Subscribe must return a list or a tuple of group names!"
 
         groups += [cls._group_name(group) for group in subclass_groups]
 
@@ -314,15 +323,16 @@ class Subscription(graphene.ObjectType):
         def unsubscribed_callback():
             """Call `unsubscribed` with `None` as `self`."""
             return cls._meta.unsubscribed(None, info, *args, **kwds)
+
         return register(groups, publish_callback, unsubscribed_callback)
 
     @classmethod
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
 
-        name = f'SUBSCRIPTION-{cls.__module__}.{cls.__qualname__}'
+        name = f"SUBSCRIPTION-{cls.__module__}.{cls.__qualname__}"
         if group is not None:
-            name += '.' + group
+            name += "." + group
 
         return name
 
@@ -349,8 +359,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md
     """
 
-    # Subscription WebSocket subprotocol.
-    GRAPHQL_WS_SUBPROTOCOL = 'graphql-ws'
+    # ------------------------------------------------------------ OVERWRITE IN SUBCLASS
 
     # Overwrite this in the subclass to specify the GraphQL schema which
     # processes GraphQL queries.
@@ -359,14 +368,30 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # The interval to send keepalive messages to the clients.
     send_keepalive_every = None
 
+    async def on_connect(self, payload):
+        """Called after CONNECTION_INIT message from client.
+
+        Overwrite to raise an Exception to tell the server
+        to reject the connection when it's necessary.
+
+        Args:
+            payload: payload from CONNECTION_INIT message.
+        """
+        pass
+
+    # ------------------------------------------------------------------- IMPLEMENTATION
+
+    # Subscription WebSocket subprotocol.
+    GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
+
     # Structure that holds subscription information.
-    _SubInf = namedlist('_SubInf',
-                        ['groups', 'op_id', 'trigger', 'unsubscribed'])
+    _SubInf = namedlist("_SubInf", ["groups", "op_id", "trigger", "unsubscribed"])
 
     def __init__(self, *args, **kwargs):
         assert self.schema is not None, (
-            'An attribute `schema` is not set! Subclasses must specify '
-            'the schema which processes GraphQL subscription queries.')
+            "An attribute `schema` is not set! Subclasses must specify "
+            "the schema which processes GraphQL subscription queries."
+        )
 
         # Registry of active (subscribed) subscriptions.
         self._subscriptions = {}  # {'<sid>': '<SubInf>', ...}
@@ -377,20 +402,31 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         super().__init__(*args, **kwargs)
 
-    # ------------------------------------------------- CONSUMER EVENT HANDLERS
+    # ---------------------------------------------------------- CONSUMER EVENT HANDLERS
 
     async def connect(self):
         """Handle new WebSocket connection."""
 
         # Check the subprotocol told by the client.
-        assert self.GRAPHQL_WS_SUBPROTOCOL in self.scope['subprotocols'], (
-            f'WebSocket client does not request for the subprotocol '
-            f'{self.GRAPHQL_WS_SUBPROTOCOL}!')
+        #
+        # NOTE: In Python 3.6 `scope["subprotocols"]` was a string, but
+        # starting with Python 3.7 it is a bytes. This can be a proper
+        # change or just a bug in the Channels to be fixed. So let's
+        # accept both variants until it becomes clear.
+        assert self.GRAPHQL_WS_SUBPROTOCOL in (
+            (sp.decode() if isinstance(sp, bytes) else sp)
+            for sp in self.scope["subprotocols"]
+        ), (
+            f"WebSocket client does not request for the subprotocol "
+            f"{self.GRAPHQL_WS_SUBPROTOCOL}!"
+        )
 
         # Accept connection with the GraphQL-specific subprotocol.
         await self.accept(subprotocol=self.GRAPHQL_WS_SUBPROTOCOL)
 
-    async def disconnect(self, close_code):  # pylint: disable=unused-argument,arguments-differ
+    async def disconnect(
+        self, close_code
+    ):  # pylint: disable=unused-argument,arguments-differ
         """WebSocket disconnection handler."""
 
         # Remove itself from Channels groups and clear triggers.
@@ -400,23 +436,26 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Process WebSocket message received from the client."""
 
         # Extract message type based on which we select how to proceed.
-        msg_type = content['type'].upper()
+        msg_type = content["type"].upper()
 
-        if msg_type == 'CONNECTION_INIT':
-            await self._on_gql_connection_init(payload=content['payload'])
+        if msg_type == "CONNECTION_INIT":
+            await self._on_gql_connection_init(payload=content["payload"])
 
-        elif msg_type == 'CONNECTION_TERMINATE':
+        elif msg_type == "CONNECTION_TERMINATE":
             await self._on_gql_connection_terminate()
 
-        elif msg_type == 'START':
-            await self._on_gql_start(operation_id=content['id'],
-                                     payload=content['payload'])
+        elif msg_type == "START":
+            await self._on_gql_start(
+                operation_id=content["id"], payload=content["payload"]
+            )
 
-        elif msg_type == 'STOP':
-            await self._on_gql_stop(operation_id=content['id'])
+        elif msg_type == "STOP":
+            await self._on_gql_stop(operation_id=content["id"])
 
         else:
-            assert False, f'Message of unknown type "{msg_type}" received!'
+            await self._send_gql_error(
+                content["id"], f'Message of unknown type "{msg_type}" received!'
+            )
 
     async def broadcast(self, message):
         """The broadcast message handler.
@@ -427,14 +466,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         received from and trigger the observable which makes the
         subscription process the query and notify the client.
         """
-        group = message['group']
-        payload = message['payload']
+        group = message["group"]
+        payload = message["payload"]
 
         # Offload trigger to the thread (in threadpool) cause it may
         # work slowly and do DB operations.
         db_sync_to_async = channels.db.database_sync_to_async
-        triggers = (db_sync_to_async(self._subscriptions[op_id].trigger)
-                    for op_id in self._sids_by_group[group])
+        triggers = (
+            db_sync_to_async(self._subscriptions[op_id].trigger)
+            for op_id in self._sids_by_group[group]
+        )
         await asyncio.wait([trigger(payload) for trigger in triggers])
 
     async def unsubscribe(self, message):
@@ -446,7 +487,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         received from and stop all the active subscriptions in this
         group.
         """
-        group = message['group']
+        group = message["group"]
 
         # Unsubscribe all active subscriptions current client has in
         # the subscription group `group`.
@@ -454,27 +495,50 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             [self._on_gql_stop(sid) for sid in self._sids_by_group[group]]
         )
 
-    # ------------------------------------------------- GRAPHQL PROTOCOL EVENTS
+    # ---------------------------------------------------------- GRAPHQL PROTOCOL EVENTS
 
     async def _on_gql_connection_init(self, payload):  # pylint: disable=unused-argument
         """Process the CONNECTION_INIT message.
 
         Start sending keepalive messages if `send_keepalive_every` set.
+        Respond with either CONNECTION_ACK or CONNECTION_ERROR message.
         """
 
-        await self._send_gql_connection_ack()
-        # If keepalive enabled then send one message immediately and
-        # schedule periodic messages.
-        if self.send_keepalive_every is not None:
-            async def keepalive_sender():
-                """Send keepalive messages periodically."""
-                while True:
-                    await asyncio.sleep(self.send_keepalive_every)
-                    await self._send_gql_connection_keep_alive()
-            self._keepalive_task = asyncio.ensure_future(keepalive_sender())
-            # Immediately send keepalive message cause it is required by
-            # the protocol description.
-            await self._send_gql_connection_keep_alive()
+        try:
+            # Notify subclass a new client is connected.
+            await self.on_connect(payload)
+        except Exception as exc:
+            # Send CONNECTION_ERROR message.
+            error_to_dict = graphene_django.views.GraphQLView.format_error
+            await self._send_gql_connection_error(error_to_dict(exc))
+            # Close the connection.
+            await self._cleanup()
+            # NOTE: We use the 4000 code because there are two reasons:
+            # A) We can not use codes greater than 1000 and less than
+            # 3000 because daphne and autobahn do not allow this
+            # (see `sendClose` from `autobahn/websocket/protocol.py`
+            # and `daphne/ws_protocol.py`).
+            # B) https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+            # So mozilla offers us the following codes:
+            # 4000–4999 - Available for use by applications.
+            await self.close(code=4000)
+        else:
+            # Send CONNECTION_ACK message.
+            await self._send_gql_connection_ack()
+            # If keepalive enabled then send one message immediately and
+            # schedule periodic messages.
+            if self.send_keepalive_every is not None:
+
+                async def keepalive_sender():
+                    """Send keepalive messages periodically."""
+                    while True:
+                        await asyncio.sleep(self.send_keepalive_every)
+                        await self._send_gql_connection_keep_alive()
+
+                self._keepalive_task = asyncio.ensure_future(keepalive_sender())
+                # Immediately send keepalive message cause it is
+                # required by the protocol description.
+                await self._send_gql_connection_keep_alive()
 
     async def _on_gql_connection_terminate(self):
         """Process the CONNECTION_TERMINATE message."""
@@ -491,113 +555,122 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         This message holds query, mutation or subscription request.
         """
 
-        # Get the message data.
-        op_id = operation_id
-        query = payload['query']
-        operation_name = payload.get('operationName')
-        variables = payload.get('variables', {})
+        try:
+            if operation_id in self._subscriptions:
+                raise graphql.error.GraphQLError(
+                    f"Subscription with the given `id={operation_id}` "
+                    "already exists! Would you like to unsubscribe first?"
+                )
 
-        # Local alias for convenience.
-        async_to_sync = asgiref.sync.async_to_sync
+            # Get the message data.
+            op_id = operation_id
+            query = payload["query"]
+            operation_name = payload.get("operationName")
+            variables = payload.get("variables", {})
 
-        # The subject we will trigger on the `publish` message.
-        publishes = rx.subjects.Subject()
+            # Local alias for convenience.
+            async_to_sync = asgiref.sync.async_to_sync
 
-        # This function is called by subscription to associate a
-        # callback (which publishes notifications) with the groups.
-        def register(groups, publish_callback, unsubscribed_callback):
-            """Associate publish callback with the groups."""
-            # Put subscription information into the registry and start
-            # listening to the subscription groups.
-            trigger = publishes.on_next
-            subinf = self._SubInf(groups=groups, op_id=op_id, trigger=trigger,
-                                  unsubscribed=unsubscribed_callback)
-            self._subscriptions[op_id] = subinf
-            for group in groups:
-                self._sids_by_group.setdefault(group, []).append(op_id)
-                async_to_sync(self.channel_layer.group_add)(group,
-                                                            self.channel_name)
-            return publishes.map(publish_callback)
+            # The subject we will trigger on the `publish` message.
+            publishes = rx.subjects.Subject()
 
-        # Create object-like context (like in `Query` or `Mutation`)
-        # from the dict-like one provided by the Channels. The
-        # subscriptions groups must be set by the subscription using the
-        # `attach_to_groups` function.
-        context = types.SimpleNamespace(**self.scope)
-        context.register = register
+            # This function is called by subscription to associate a
+            # callback (which publishes notifications) with the groups.
+            def register(groups, publish_callback, unsubscribed_callback):
+                """Associate publish callback with the groups."""
+                # Put subscription information into the registry and
+                # start listening to the subscription groups.
+                trigger = publishes.on_next
+                subinf = self._SubInf(
+                    groups=groups,
+                    op_id=op_id,
+                    trigger=trigger,
+                    unsubscribed=unsubscribed_callback,
+                )
+                self._subscriptions[op_id] = subinf
+                for group in groups:
+                    self._sids_by_group.setdefault(group, []).append(op_id)
+                    async_to_sync(self.channel_layer.group_add)(
+                        group, self.channel_name
+                    )
+                return publishes.map(publish_callback)
 
-        # Process GraphQL request with Graphene. Offload it to the
-        # thread cause it may work slowly and do DB operations.
-        db_sync_to_async = channels.db.database_sync_to_async
-        result = await db_sync_to_async(self.schema.execute)(
-            query,
-            operation_name=operation_name,
-            variable_values=variables,
-            context_value=context,
-            allow_subscriptions=True,
-        )
+            # Create object-like context (like in `Query` or `Mutation`)
+            # from the dict-like one provided by the Channels. The
+            # subscriptions groups must be set by the subscription using
+            # the `attach_to_groups` function.
+            context = types.SimpleNamespace(**self.scope)
+            context.register = register
 
-        # Receiving an observer means the subscription has been
-        # processed. Otherwise it is just regular query or mutation.
-        if isinstance(result, rx.Observable):
-            # Client subscribed so subscribe to the observable returned
-            # from GraphQL and respond with the confirmation message.
-
-            # Subscribe to the observable.
-            # NOTE: Function `on_next` is called from a thread where
-            # trigger runs, so it is necessary to wrap our async method
-            # into `async_to_sync`, which carefully runs given a
-            # coroutine in the current eventloop.
-            # (See the implementation of `async_to_sync` for details.)
-            send_gql_data = async_to_sync(self._send_gql_data)
-            result.subscribe(lambda r: send_gql_data(op_id, r.data, r.errors))
-
-            # Send the subscription confirmation message.
-            await self._send_gql_data(op_id, data={}, errors=[])
-
+            # Process GraphQL request with Graphene. Offload it to the
+            # thread cause it may work slowly and do DB operations.
+            db_sync_to_async = channels.db.database_sync_to_async
+            result = await db_sync_to_async(self.schema.execute)(
+                query,
+                operation_name=operation_name,
+                variable_values=variables,
+                context_value=context,
+                allow_subscriptions=True,
+            )
+        except Exception as exc:
+            # something is wrong - send ERROR message
+            await self._send_gql_error(operation_id, traceback.format_exc())
         else:
-            # Query or mutation received - send a response immediately.
+            # Receiving an observer means the subscription has been
+            # processed. Otherwise it is just regular query or mutation.
+            if isinstance(result, rx.Observable):
+                # Client subscribed so subscribe to the observable
+                # returned from GraphQL and respond with
+                # the confirmation message.
 
-            # There are two different types of errors. If Graphene
-            # complains that the request is invalid (e.g. query contains
-            # syntax error), then we respond with a message of type
-            # `error`. Otherwise `data` message is sent. The `error`
-            # field in the `data` message indicates that error happend
-            # in some resolver, not on the GraphQL parsing level.
-            if not result.invalid:
+                # Subscribe to the observable.
+                # NOTE: Function `on_next` is called from a thread
+                # where trigger runs, so it is necessary to wrap our
+                # async method into `async_to_sync`, which carefully
+                # runs given a coroutine in the current eventloop.
+                # (See the implementation of `async_to_sync`
+                # for details.)
+                send_gql_data = async_to_sync(self._send_gql_data)
+                result.subscribe(lambda r: send_gql_data(op_id, r.data, r.errors))
+            else:
+                # Query or mutation received - send a response
+                # immediately.
+
+                # We respond with a message of type `data`.
+                # If Graphene complains that the request is invalid
+                # (e.g. query contains syntax error), then the `data`
+                # argument is None and the 'errors' argument contains
+                # all errors that occurred before or during execution.
+                # `result` is instance of ExecutionResult
                 # Respond with data.
                 await self._send_gql_data(op_id, result.data, result.errors)
                 # Tell the client that the request processing is over.
                 await self._send_gql_complete(op_id)
-            else:
-                # Respond with error.
-                assert len(result.errors) == 1, (
-                    'Multiple error objects received when only one is '
-                    'expected!')
-                await self._send_gql_error(op_id, result.errors[0])
 
     async def _on_gql_stop(self, operation_id):
         """Process the STOP message."""
-
-        assert operation_id in self._subscriptions, (
-            f'Given `id={operation_id}` does not match any active '
-            'subscription! Currently only subscriptions can be stopped!')
+        # Currently only subscriptions can be stopped.
+        # But we see but some clients (e.g. GraphiQL) send
+        # the stop message even for queries and mutations.
+        # We also see that the Apollo server ignores such messages,
+        # so we ignore them as well.
+        if not operation_id in self._subscriptions:
+            return
 
         # Unsubscribe: stop listening corresponding groups and
         # subscription from the registry.
         waitlist = []
         subinf = self._subscriptions.pop(operation_id)
         for group in subinf.groups:
-            waitlist.append(
-                self.channel_layer.group_discard(group, self.channel_name)
-            )
+            waitlist.append(self.channel_layer.group_discard(group, self.channel_name))
             # Remove operation if from groups it belongs to. And remove
             # group from `_sids_by_group` if there is not subscriptions
             # in it.
             assert self._sids_by_group[group].count(operation_id) == 1, (
-                f'Registry is inconsistent: group `{group}` has '
-                f'`{self._sids_by_group[group].count(operation_id)}` '
-                'occurrences of operation_id=`{operation_id}`!')
+                f"Registry is inconsistent: group `{group}` has "
+                f"`{self._sids_by_group[group].count(operation_id)}` "
+                "occurrences of operation_id=`{operation_id}`!"
+            )
 
             self._sids_by_group[group].remove(operation_id)
             if not self._sids_by_group[group]:
@@ -610,15 +683,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Send the unsubscription confirmation message.
         await self._send_gql_complete(operation_id)
 
-    # ----------------------------------------------- GRAPHQL PROTOCOL MESSAGES
+    # -------------------------------------------------------- GRAPHQL PROTOCOL MESSAGES
 
     async def _send_gql_connection_ack(self):
         """Sent in reply to the `connection_init` request."""
-        await self.send_json({'type': 'connection_ack'})
+        await self.send_json({"type": "connection_ack"})
 
     async def _send_gql_connection_error(self, error):
         """Connection error sent in reply to the `connection_init`."""
-        await self.send_json({'type': 'connection_error', 'payload': error})
+        await self.send_json({"type": "connection_error", "payload": error})
 
     async def _send_gql_data(self, operation_id, data, errors):
         """Send GraphQL `data` message to the client.
@@ -629,33 +702,35 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 GraphQL query. (Errors happened in the resolvers.)
         """
         error_to_dict = graphene_django.views.GraphQLView.format_error
-        await self.send_json({
-            'type': 'data',
-            'id': operation_id,
-            'payload': {
-                'data': data,
-                **({'errors': [error_to_dict(e) for e in errors]}
-                   if errors else {})
+        await self.send_json(
+            {
+                "type": "data",
+                "id": operation_id,
+                "payload": {
+                    "data": data,
+                    **(
+                        {"errors": [error_to_dict(e) for e in errors]} if errors else {}
+                    ),
+                },
             }
-        })
+        )
 
     async def _send_gql_error(self, operation_id, error):
         """Tell client there is a query processing error.
 
-        Server sends this message upon a failing operation, before the
-        GraphQL execution, usually due to GraphQL validation errors
-        (resolver errors are part of data message and must be sent by
-        the `_send_gql_data` method).
+        Server sends this message upon a failing operation.
+        It can be an unexpected or unexplained GraphQL execution error
+        or a bug in the code. It is unlikely that this is GraphQL
+        validation errors (such errors are part of data message and
+        must be sent by the `_send_gql_data` method).
 
         Args:
             operation_id: Id of the operation that failed on the server.
-            error: Exception that caused the error.
+            error: String with the information about the error.
         """
-        await self.send_json({
-            'type': 'error',
-            'id': operation_id,
-            'payload': graphene_django.views.GraphQLView.format_error(error),
-        })
+        await self.send_json(
+            {"type": "error", "id": operation_id, "payload": {"errors": [error]}}
+        )
 
     async def _send_gql_complete(self, operation_id):
         """Send GraphQL `complete` message to the client.
@@ -663,16 +738,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Args:
             operation_id: If of the corresponding operation.
         """
-        await self.send_json({
-            'type': 'complete',
-            'id': operation_id,
-        })
+        await self.send_json({"type": "complete", "id": operation_id})
 
     async def _send_gql_connection_keep_alive(self):
         """Send the keepalive (ping) message."""
-        await self.send_json({'type': 'ka'})
+        await self.send_json({"type": "ka"})
 
-    # --------------------------------------------------------------- AUXILIARY
+    # ------------------------------------------------------------------------ AUXILIARY
 
     async def _cleanup(self):
         """Cleanup before disconnect.
@@ -685,8 +757,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         waitlist = []
 
         # Unsubscribe from the Channels groups.
-        waitlist += [self.channel_layer.group_discard(group, self.channel_name)
-                     for group in self._sids_by_group.keys()]
+        waitlist += [
+            self.channel_layer.group_discard(group, self.channel_name)
+            for group in self._sids_by_group.keys()
+        ]
 
         if self._keepalive_task is not None:
             # Stop sending keepalive messages.

@@ -28,8 +28,7 @@ Here we test `Subscription` and `GraphqlWsConsumer` classes.
 
 # NOTE: Tests use the GraphQL over WebSockets setup. All the necessary
 #       items (schema, query, subscriptions, mutations, Channels
-#       consumer & application) are defined at the end on this file with
-#       the prefix "My".
+#       consumer & application) are defined at the end on this file.
 
 import json
 import textwrap
@@ -53,114 +52,116 @@ async def test_main_usecase():
     """Test main use-case with the GraphQL over WebSocket."""
 
     # Channels communicator to test WebSocket consumers.
-    comm = ch_testing.WebsocketCommunicator(application=my_app,
-                                            path='graphql/',
-                                            subprotocols='graphql-ws')
+    comm = ch_testing.WebsocketCommunicator(
+        application=my_app, path="graphql/", subprotocols=["graphql-ws"]
+    )
 
-    print('Establish WebSocket connection and check a subprotocol.')
+    print("Establish WebSocket connection and check a subprotocol.")
     connected, subprotocol = await comm.connect(timeout=TIMEOUT)
-    assert connected, ('Could not connect to the GraphQL subscriptions '
-                       'WebSocket!')
-    assert subprotocol == 'graphql-ws', 'Wrong subprotocol received!'
+    assert connected, "Could not connect to the GraphQL subscriptions WebSocket!"
+    assert subprotocol == "graphql-ws", "Wrong subprotocol received!"
 
-    print('Initialize GraphQL connection.')
-    await comm.send_json_to({'type': 'connection_init', 'payload': ''})
+    print("Initialize GraphQL connection.")
+    await comm.send_json_to({"type": "connection_init", "payload": ""})
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['type'] == 'connection_ack'
+    assert resp["type"] == "connection_ack"
 
-    print('Make simple GraphQL query and check the response.')
+    print("Make simple GraphQL query and check the response.")
     uniq_id = str(uuid.uuid4().hex)
-    await comm.send_json_to({
-        'id': uniq_id,
-        'type': 'start',
-        'payload': {
-            'query': textwrap.dedent('''
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
                 query MyOperationName {
                     value
                 }
-            '''),
-            'variables': {},
-            'operationName': 'MyOperationName',
+            """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
         }
-    })
+    )
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'data', 'Type `data` expected!'
-    assert 'errors' not in resp['payload']
-    assert resp['payload']['data']['value'] == MyQuery.VALUE
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    assert "errors" not in resp["payload"]
+    assert resp["payload"]["data"]["value"] == MyQuery.VALUE
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'complete', 'Type `complete` expected!'
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
 
-    print('Subscribe to GraphQL subscription.')
-    uniq_id = str(uuid.uuid4().hex)
-    sub_id = uniq_id
-    sub_param1 = str(uuid.uuid4().hex)
-    sub_param2 = str(uuid.uuid4().hex)
-    await comm.send_json_to({
-        'id': uniq_id,
-        'type': 'start',
-        'payload': {
-            'query': textwrap.dedent('''
-                subscription MyOperationName($sub_param1: String,
-                                                $sub_param2: String) {
-                    my_sub(param1: $sub_param1, param2: $sub_param2) {
-                        event
-                    }
-                }
-            '''),
-            'variables': {'sub_param1': sub_param1,
-                            'sub_param2': sub_param2},
-            'operationName': 'MyOperationName',
-        }
-    })
-    resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'data', 'Type `data` expected!'
-    assert 'errors' not in resp['payload']
-    assert resp['payload']['data'] == {}
+    print("Subscribe to GraphQL subscription.")
+    subscription_id = str(uuid.uuid4().hex)
 
-    print('Trigger the subscription by mutation to receive notification.')
-    uniq_id = str(uuid.uuid4().hex)
-    await comm.send_json_to({
-        'id': uniq_id,
-        'type': 'start',
-        'payload': {
-            'query': textwrap.dedent('''
-                mutation MyOperationName($mut_param: String) {
-                    my_mutation(param: $mut_param, cmd: BROADCAST) {
-                        ok
+    await comm.send_json_to(
+        {
+            "id": subscription_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    subscription MyOperationName {
+                        on_chat_message_sent(userId: ALICE) {
+                            event
+                        }
                     }
-                }
-            '''),
-            'variables': {'mut_param': sub_param1},
-            'operationName': 'MyOperationName',
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
         }
-    })
+    )
+
+    print("Trigger the subscription by mutation to receive notification.")
+    uniq_id = str(uuid.uuid4().hex)
+    message = "Hi!"
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    mutation MyOperationName($message: String!) {
+                        send_chat_message(message: $message) {
+                            message
+                        }
+                    }
+                    """
+                ),
+                "variables": {"message": message},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
 
     # Mutation response.
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'data', 'Type `data` expected!'
-    assert 'errors' not in resp['payload']
-    assert resp['payload']['data'] == {'my_mutation': {'ok': True}}
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    assert "errors" not in resp["payload"]
+    assert resp["payload"]["data"] == {"send_chat_message": {"message": message}}
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'complete', 'Type `complete` expected!'
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
 
     # Subscription notification.
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == sub_id, ('Notification id != subscription id!')
-    assert resp['type'] == 'data', 'Type `data` expected!'
-    assert 'errors' not in resp['payload']
-    assert json.loads(resp['payload']['data']['my_sub']['event']) == {
-        'value': MySubscription.VALUE,
-        'sub_param1': sub_param1,
-        'sub_param2': sub_param2,
-        'payload': MyMutation.PAYLOAD,
-    }, 'Subscription notification contains wrong data!'
+    assert resp["id"] == subscription_id, "Notification id != subscription id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    assert "errors" not in resp["payload"]
+    event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
+    assert json.loads(event) == {
+        "userId": UserId.ALICE,
+        "payload": message,
+    }, "Subscription notification contains wrong data!"
 
-    print('Disconnect and wait the application to finish gracefully.')
+    print("Disconnect and wait the application to finish gracefully.")
     await comm.disconnect(timeout=TIMEOUT)
     await comm.wait(timeout=TIMEOUT)
 
@@ -169,231 +170,704 @@ async def test_main_usecase():
 async def test_error_cases():
     """Test that server responds correctly when errors happen.
 
-    Check that server responds with message of type `error` when there
-    is a syntax error in the request, but `data` with `errors` field
-    responds to the exception in a resolver.
+    Check that server responds with message of type `data` when there
+    is a syntax error in the request or the exception in a resolver
+    was raised. Check that server responds with message of type `error`
+    when there was an exceptional situation, for example, field `query`
+    of `payload` is missing or field `type` has a wrong value.
     """
 
     # Channels communicator to test WebSocket consumers.
-    comm = ch_testing.WebsocketCommunicator(application=my_app,
-                                            path='graphql/',
-                                            subprotocols='graphql-ws')
+    comm = ch_testing.WebsocketCommunicator(
+        application=my_app, path="graphql/", subprotocols=["graphql-ws"]
+    )
 
-    print('Establish & initialize the connection.')
+    print("Establish & initialize the connection.")
     await comm.connect(timeout=TIMEOUT)
-    await comm.send_json_to({'type': 'connection_init', 'payload': ''})
+    await comm.send_json_to({"type": "connection_init", "payload": ""})
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['type'] == 'connection_ack'
+    assert resp["type"] == "connection_ack"
 
-    print('Check that query syntax error leads to the `error` response.')
+    print("Check that query syntax error leads to the `error` response.")
     uniq_id = str(uuid.uuid4().hex)
-    await comm.send_json_to({
-        'id': uniq_id,
-        'type': 'start',
-        'payload': {
-            'query': textwrap.dedent('''
-                This list produces a syntax error!
-            '''),
-            'variables': {},
-            'operationName': 'MyOperationName',
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "wrong_type__(ツ)_/¯",
+            "payload": {"variables": {}, "operationName": "MyOperationName"},
         }
-    })
+    )
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'error', 'Type `error` expected!'
-    payload = resp['payload']
-    assert ('message' in payload and
-            'locations' in payload), 'Response missing mandatory fields!'
-    assert len(payload) == 2, 'Extra fields detected in the response!'
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "error", "Type `error` expected!"
+    assert len(resp["payload"]) == 1, "Single error expected!"
+    assert isinstance(
+        resp["payload"]["errors"][0], str
+    ), "Error must be of string type!"
 
-    print('Check that resolver error leads to the `data` message.')
+    print(
+        "Check that query syntax error leads to the `data` response "
+        "with `errors` array."
+    )
     uniq_id = str(uuid.uuid4().hex)
-    await comm.send_json_to({
-        'id': uniq_id,
-        'type': 'start',
-        'payload': {
-            'query': textwrap.dedent('''
-                query MyOperationName {
-                    value(issue_error: true)
-                }
-            '''),
-            'variables': {},
-            'operationName': 'MyOperationName',
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    This list produces a syntax error!
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
         }
-    })
+    )
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['id'] == uniq_id, 'Response id != request id!'
-    assert resp['type'] == 'data', 'Type `data` expected!'
-    payload = resp['payload']
-    assert payload['data']['value'] is None
-    errors = payload['errors']
-    assert len(errors) == 1, 'Single error expected!'
-    assert errors[0]['message'] == MyQuery.VALUE
-    assert 'locations' in errors[0]
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    payload = resp["payload"]
+    assert payload["data"] is None
+    errors = payload["errors"]
+    assert len(errors) == 1, "Single error expected!"
+    assert (
+        "message" in errors[0] and "locations" in errors[0]
+    ), "Response missing mandatory fields!"
+    assert errors[0]["locations"] == [{"line": 1, "column": 1}]
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
 
-    print('Disconnect and wait the application to finish gracefully.')
+    print(
+        "Check that query syntax error leads to the `data` response "
+        "with `errors` array."
+    )
+    uniq_id = str(uuid.uuid4().hex)
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    query MyOperationName {
+                        value(issue_error: true)
+                    }
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    payload = resp["payload"]
+    assert payload["data"]["value"] is None
+    errors = payload["errors"]
+    assert len(errors) == 1, "Single error expected!"
+    assert errors[0]["message"] == MyQuery.VALUE
+    assert "locations" in errors[0]
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+
+    print("Check multiple errors in the `data` message.")
+    uniq_id = str(uuid.uuid4().hex)
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    query {
+                        projects {
+                            path
+                            wrong_filed
+                        }
+                    }
+
+                    query a {
+                        projects
+                    }
+
+                    { wrong_name }
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    payload = resp["payload"]
+    assert payload["data"] is None
+    errors = payload["errors"]
+    assert len(errors) == 5, "Five errors expected!"
+    # Message is here: `This anonymous operation must be
+    # the only defined operation`.
+    assert errors[0]["message"] == errors[3]["message"]
+    assert "locations" in errors[2], "The `locations` field expected"
+    assert "locations" in errors[4], "The `locations` field expected"
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+
+    print("Disconnect and wait the application to finish gracefully.")
     await comm.disconnect(timeout=TIMEOUT)
     await comm.wait(timeout=TIMEOUT)
 
+
+@pytest.mark.asyncio
+async def test_connection_error():
+    """Test that server responds correctly when connection errors happen.
+
+    Check that server responds with message of type `connection_error`
+    when there was an exception in `on_connect` method.
+    """
+
+    print("Prepare application.")
+
+    class MyGraphqlWsConsumerConnectionError(GraphqlWsConsumer):
+        """Channels WebSocket consumer which provides GraphQL API."""
+
+        schema = ""
+
+        async def on_connect(self, payload):
+            from graphql.error import GraphQLError
+
+            # Always close the connection.
+            raise GraphQLError("Reject connection")
+
+    application = channels.routing.ProtocolTypeRouter(
+        {
+            "websocket": channels.routing.URLRouter(
+                [
+                    django.urls.path(
+                        "graphql-connection-error/", MyGraphqlWsConsumerConnectionError
+                    )
+                ]
+            )
+        }
+    )
+
+    # Channels communicator to test WebSocket consumers.
+    comm = ch_testing.WebsocketCommunicator(
+        application=application,
+        path="graphql-connection-error/",
+        subprotocols=["graphql-ws"],
+    )
+
+    print("Try to initialize the connection.")
+    await comm.connect(timeout=TIMEOUT)
+    await comm.send_json_to({"type": "connection_init", "payload": ""})
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["type"] == "connection_error"
+    assert resp["payload"]["message"] == "Reject connection"
+    resp = await comm.receive_output(timeout=TIMEOUT)
+    assert resp["type"] == "websocket.close"
+    assert resp["code"] == 4000
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.disconnect(timeout=TIMEOUT)
+    await comm.wait(timeout=TIMEOUT)
+
+
 @pytest.mark.asyncio
 async def test_subscribe_unsubscribe():
-    # TODO: WRITE TEST HERE!
-    # 1. subscribe -> unsubscribe from the client
-    # 2. subscribe -> unsubscribe from the server
-    pass
+    """Test subscribe-unsubscribe behavior with the GraphQL over WebSocket.
+
+    0. Subscribe to GraphQL subscription: messages for Alice.
+    1. Send STOP message and unsubscribe.
+    2. Subscribe to GraphQL subscription: messages for Tom.
+    3. Call unsubscribe method of the Subscription instance
+    (via `kick_out_user` mutation).
+    4. Execute some mutation.
+    5. Check subscription notifications: there are no notifications.
+    """
+
+    # Channels communicator to test WebSocket consumers.
+    comm = ch_testing.WebsocketCommunicator(
+        application=my_app, path="graphql/", subprotocols=["graphql-ws"]
+    )
+
+    print("Establish and initialize WebSocket GraphQL connection.")
+    await comm.connect(timeout=TIMEOUT)
+    await comm.send_json_to({"type": "connection_init", "payload": ""})
+    await comm.receive_json_from(timeout=TIMEOUT)
+
+    print("Subscribe to GraphQL subscription.")
+    sub_id = str(uuid.uuid4().hex)
+    await comm.send_json_to(
+        {
+            "id": sub_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    subscription MyOperationName {
+                        on_chat_message_sent(userId: ALICE) { event }
+                    }
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+
+    print("Stop subscription by id.")
+    await comm.send_json_to({"id": sub_id, "type": "stop"})
+    # Subscription notification with unsubscribe information.
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == sub_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+
+    print("Subscribe to GraphQL subscription.")
+    sub_id = str(uuid.uuid4().hex)
+    await comm.send_json_to(
+        {
+            "id": sub_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    subscription MyOperationName {
+                        on_chat_message_sent(userId: TOM) { event }
+                    }
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+
+    print("Stop all subscriptions for TOM.")
+    uniq_id = str(uuid.uuid4().hex)
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    mutation MyOperationName {
+                        kick_out_user(userId: TOM) { success }
+                    }
+                    """
+                ),
+                "variables": {},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+    # Mutation response.
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+    # Subscription notification with unsubscribe information.
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == sub_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+
+    print("Trigger the subscription by mutation to receive notification.")
+    uniq_id = str(uuid.uuid4().hex)
+    message = "Is anybody here?"
+    await comm.send_json_to(
+        {
+            "id": uniq_id,
+            "type": "start",
+            "payload": {
+                "query": textwrap.dedent(
+                    """
+                    mutation MyOperationName($message: String!) {
+                        send_chat_message(message: $message) {
+                            message
+                        }
+                    }
+                    """
+                ),
+                "variables": {"message": message},
+                "operationName": "MyOperationName",
+            },
+        }
+    )
+    # Mutation response.
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "data", "Type `data` expected!"
+    resp = await comm.receive_json_from(timeout=TIMEOUT)
+    assert resp["id"] == uniq_id, "Response id != request id!"
+    assert resp["type"] == "complete", "Type `complete` expected!"
+
+    # Check notifications: there are no notifications! Previously,
+    # there was an unsubscription from all subscriptions.
+    assert await comm.receive_nothing() is True, "No notifications expected!"
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.disconnect(timeout=TIMEOUT)
+    await comm.wait(timeout=TIMEOUT)
 
 
 @pytest.mark.asyncio
 async def test_groups():
-    # TODO: WRITE TEST HERE!
-    # 1. subscribe to group1, trigger group1
-    # 2. subscribe to group2, trigger group2
-    pass
+    """Test notifications and subscriptions behavior depending on the
+    different subscription groups.
+
+    0. Subscribe to the group1: messages for Alice.
+    1. Subscribe to the group2: messages for Tom.
+    2. Trigger group1 (send message to Alice) and check subscribed
+    recipients: Alice.
+    3. Trigger group2 (send message to Tom) and check subscribed
+    recipients: Tom.
+    4. Trigger all groups (send messages for all users) and check
+    subscribed recipients: Alice, Tom.
+    """
+
+    async def create_and_subscribe(userId):
+        """Establish and initialize WebSocket GraphQL connection.
+
+        Subscribe to GraphQL subscription by userId.
+
+        Args:
+            userId: User ID for `on_chat_message_sent` subscription.
+
+        Returns:
+            sub_id: Subscription uid.
+            comm: Client, instance of the `WebsocketCommunicator`.
+        """
+        comm = ch_testing.WebsocketCommunicator(
+            application=my_app, path="graphql/", subprotocols=["graphql-ws"]
+        )
+
+        await comm.connect(timeout=TIMEOUT)
+        await comm.send_json_to({"type": "connection_init", "payload": ""})
+        await comm.receive_json_from(timeout=TIMEOUT)
+
+        sub_id = str(uuid.uuid4().hex)
+        await comm.send_json_to(
+            {
+                "id": sub_id,
+                "type": "start",
+                "payload": {
+                    "query": textwrap.dedent(
+                        """
+                        subscription MyOperationName($userId: UserId) {
+                            on_chat_message_sent(userId: $userId) { event }
+                        }
+                        """
+                    ),
+                    "variables": {"userId": userId},
+                    "operationName": "MyOperationName",
+                },
+            }
+        )
+        return sub_id, comm
+
+    async def trigger_subscription(comm, userId, message):
+        """Send a message to user using `send_chat_message` mutation.
+
+        Args:
+            comm: Client, instance of WebsocketCommunicator.
+            userId: User ID for `send_chat_message` mutation.
+            message: Any string message.
+        """
+        uniq_id = str(uuid.uuid4().hex)
+        await comm.send_json_to(
+            {
+                "id": uniq_id,
+                "type": "start",
+                "payload": {
+                    "query": textwrap.dedent(
+                        """
+                        mutation MyOperationName($message: String!,
+                                                 $userId: UserId) {
+                            send_chat_message(message: $message,
+                                              userId: $userId) { message }
+                        }
+                        """
+                    ),
+                    "variables": {"message": message, "userId": userId},
+                    "operationName": "MyOperationName",
+                },
+            }
+        )
+        # Mutation response.
+        resp = await comm.receive_json_from(timeout=TIMEOUT)
+        assert resp["id"] == uniq_id, "Response id != request id!"
+        resp = await comm.receive_json_from(timeout=TIMEOUT)
+        assert resp["id"] == uniq_id, "Response id != request id!"
+
+    def check_resp(resp, uid, user_id, message):
+        """Check the responce from `on_chat_message_sent` subscription.
+
+        Args:
+            uid: Expected value of field `id` of responce.
+            userId: Expected user ID.
+            message: Expected message string.
+        """
+        assert resp["id"] == uid, "Notification id != subscription id!"
+        assert resp["type"] == "data", "Type `data` expected!"
+        assert "errors" not in resp["payload"]
+        event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
+        assert json.loads(event) == {
+            "userId": user_id,
+            "payload": message,
+        }, "Subscription notification contains wrong data!"
+
+    async def disconnect(comm):
+        """Disconnect and wait the application to finish gracefully."""
+        await comm.disconnect(timeout=TIMEOUT)
+        await comm.wait(timeout=TIMEOUT)
+
+    print("Initialize the connection, create subscriptions.")
+    alice_id = "ALICE"
+    tom_id = "TOM"
+    # Subscribe to messages for TOM.
+    uid_tom, comm_tom = await create_and_subscribe(tom_id)
+    # Subscribe to messages for Alice.
+    uid_alice, comm_alice = await create_and_subscribe(alice_id)
+
+    print("Trigger subscription: send message to Tom.")
+    message = "Hi, Tom!"
+    # Note: Strictly speaking, we do not have confidence that `comm_tom`
+    # had enough time to subscribe. So Tom may not be able to receive
+    # a message from Alice. But in this simple test, we performed the
+    # Tom's subscription before the Alice's subscription and
+    # that should be enough.
+    await trigger_subscription(comm_alice, tom_id, message)
+    # Check Tom's notifications.
+    resp = await comm_tom.receive_json_from(timeout=TIMEOUT)
+    check_resp(resp, uid_tom, UserId[tom_id].value, message)
+    # Any other did not receive any notifications.
+    assert await comm_alice.receive_nothing() is True, "No notifications expected!"
+
+    print("Trigger subscription: send message to Alice.")
+    message = "Hi, Alice!"
+    await trigger_subscription(comm_tom, alice_id, message)
+    # Check Tom's notifications.
+    resp = await comm_alice.receive_json_from(timeout=TIMEOUT)
+    check_resp(resp, uid_alice, UserId[alice_id].value, message)
+    # Any other did not receive any notifications.
+    assert await comm_tom.receive_nothing() is True, "No notifications expected!"
+
+    print("Trigger subscription: send message to all groups.")
+    message = "test... ping..."
+    await trigger_subscription(comm_tom, None, message)
+    # Check Tom's and Alice's notifications.
+    resp = await comm_tom.receive_json_from(timeout=TIMEOUT)
+    check_resp(resp, uid_tom, UserId[tom_id].value, message)
+    resp = await comm_alice.receive_json_from(timeout=TIMEOUT)
+    check_resp(resp, uid_alice, UserId[alice_id].value, message)
+
+    # Disconnect.
+    await disconnect(comm_tom)
+    await disconnect(comm_alice)
+
 
 @pytest.mark.asyncio
 async def test_keepalive():
     """Test that server sends keepalive messages."""
 
+    print("Prepare application.")
+
+    class MyGraphqlWsConsumerKeepalive(GraphqlWsConsumer):
+        """Channels WebSocket consumer which provides GraphQL API."""
+
+        schema = ""
+        # Period to send keepalive mesages. Just some reasonable number.
+        send_keepalive_every = 0.05
+
+    application = channels.routing.ProtocolTypeRouter(
+        {
+            "websocket": channels.routing.URLRouter(
+                [django.urls.path("graphql-keepalive/", MyGraphqlWsConsumerKeepalive)]
+            )
+        }
+    )
+
     # Channels communicator to test WebSocket consumers.
-    comm = ch_testing.WebsocketCommunicator(application=my_app,
-                                            path='graphql-keepalive/',
-                                            subprotocols='graphql-ws')
+    comm = ch_testing.WebsocketCommunicator(
+        application=application, path="graphql-keepalive/", subprotocols=["graphql-ws"]
+    )
 
-    print('Establish & initialize the connection.')
+    print("Establish & initialize the connection.")
     await comm.connect(timeout=TIMEOUT)
-    await comm.send_json_to({'type': 'connection_init', 'payload': ''})
+    await comm.send_json_to({"type": "connection_init", "payload": ""})
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['type'] == 'connection_ack'
+    assert resp["type"] == "connection_ack"
     resp = await comm.receive_json_from(timeout=TIMEOUT)
-    assert resp['type'] == 'ka', (
-        'Keepalive message expected right after `connection_ack`!')
+    assert (
+        resp["type"] == "ka"
+    ), "Keepalive message expected right after `connection_ack`!"
 
-    print('Receive several keepalive messages.')
+    print("Receive several keepalive messages.")
     pings = []
     for _ in range(3):
         pings.append(await comm.receive_json_from(timeout=TIMEOUT))
-    assert all([ping['type'] == 'ka' for ping in pings])
+    assert all([ping["type"] == "ka" for ping in pings])
 
-    print('Send connection termination message.')
-    await comm.send_json_to({'type': 'connection_terminate'})
+    print("Send connection termination message.")
+    await comm.send_json_to({"type": "connection_terminate"})
 
-    print('Disconnect and wait the application to finish gracefully.')
+    print("Disconnect and wait the application to finish gracefully.")
     await comm.disconnect(timeout=TIMEOUT)
     await comm.wait(timeout=TIMEOUT)
 
-# ------------------------------------------------ GRAPHQL OVER WEBSOCKET SETUP
+
+# --------------------------------------------------------- GRAPHQL OVER WEBSOCKET SETUP
 
 
-class MySubscription(Subscription):
-    """Test GraphQL subscription."""
+class UserId(graphene.Enum):
+    """User IDs for sending messages."""
 
-    VALUE = str(uuid.uuid4().hex)
+    TOM = 0
+    ALICE = 1
+
+
+class OnChatMessageSent(Subscription):
+    """Test GraphQL subscription.
+
+    Subscribe to receive messages by user ID.
+    """
+
     event = graphene.JSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""
-        param1 = graphene.String()
-        param2 = graphene.String()
 
-    def subscribe(self, info, param1, param2):  # pylint: disable=unused-argument,arguments-differ
+        userId = UserId()
+
+    def subscribe(
+        self, info, userId
+    ):  # pylint: disable=unused-argument,arguments-differ
         """Specify subscription groups when client subscribes."""
-        assert self is None, 'Root `self` expected to be `None`!'
-        return [f'{param1}']
+        assert self is None, "Root `self` expected to be `None`!"
+        # Subscribe to the group corresponding to the user.
+        if not userId is None:
+            return [f"user_{userId}"]
+        # Subscribe to default group.
+        return []
 
-    def publish(self, info, param1, param2):  # pylint: disable=unused-argument
+    def publish(self, info, userId):  # pylint: disable=unused-argument,arguments-differ
         """Publish query result to the subscribers."""
+        event = {"userId": userId, "payload": self}
 
-        event = {
-            'value': MySubscription.VALUE,
-            'sub_param1': param1,
-            'sub_param2': param2,
-            'payload': self,
-        }
-
-        return MySubscription(event=event)
+        return OnChatMessageSent(event=event)
 
     @classmethod
-    def broadcast(cls, param, payload):  # pylint: disable=arguments-differ
-        """Example of the `broadcast` classmethod usage."""
-        super().broadcast(group=f'{param}', payload=payload)
+    def notify(cls, userId, message):  # pylint: disable=arguments-differ
+        """Example of the `notify` classmethod usage."""
+        # Find the subscription group for user.
+        group = None if userId is None else f"user_{userId}"
+        super().broadcast(group=group, payload=message)
 
 
-class MySubscriptions(graphene.ObjectType):
-    """GraphQL subscriptions."""
-    my_sub = MySubscription.Field()
+class SendChatMessage(graphene.Mutation):
+    """Test GraphQL mutation.
 
-
-class Command(graphene.Enum):
-    """Command to the mutation what to do."""
-    BROADCAST = 0
-    UNSUBSCRIBE = 1
-
-
-class MyMutation(graphene.Mutation):
-    """Test GraphQL mutation."""
-
-    PAYLOAD = str(uuid.uuid4().hex)
+    Send message to the user or all users.
+    """
 
     class Output(graphene.ObjectType):
         """Mutation result."""
-        ok = graphene.Boolean()
+
+        message = graphene.String()
+        userId = UserId()
 
     class Arguments:
         """That is how mutation arguments are defined."""
-        cmd = Command()
-        param = graphene.String()
 
-    def mutate(self, info, cmd, param):  # pylint: disable=unused-argument
-        """Do some operation on the subscription."""
-        assert self is None, 'Root `self` expected to be `None`!'
-        if Command.get(cmd) == Command.BROADCAST:
-            MySubscription.broadcast(param=param, payload=MyMutation.PAYLOAD)
-        elif Command.get(cmd) == Command.UNSUBSCRIBE:
-            MySubscription.unsubscribe()
+        message = graphene.String(required=True)
+        userId = graphene.Argument(UserId, required=False)
 
-        return MyMutation.Output(ok=True)
+    def mutate(self, info, message, userId=None):  # pylint: disable=unused-argument
+        """Send message to the user or all users."""
+        assert self is None, "Root `self` expected to be `None`!"
+
+        # Notify subscribers.
+        OnChatMessageSent.notify(message=message, userId=userId)
+
+        return SendChatMessage.Output(message=message, userId=userId)
 
 
-class MyMutations(graphene.ObjectType):
+class KickOutUser(graphene.Mutation):
+    """Test GraphQL mutation.
+
+    Stop all subscriptions associated with the user.
+    """
+
+    class Arguments:
+        """That is how mutation arguments are defined."""
+
+        userId = UserId()
+
+    success = graphene.Boolean()
+
+    def mutate(self, info, userId):  # pylint: disable=unused-argument
+        """Unsubscribe everyone associated with the userId."""
+        assert self is None, "Root `self` expected to be `None`!"
+
+        OnChatMessageSent.unsubscribe(group=f"user_{userId}")
+
+        return KickOutUser(success=True)
+
+
+class MySubscription(graphene.ObjectType):
+    """GraphQL subscriptions."""
+
+    on_chat_message_sent = OnChatMessageSent.Field()
+
+
+class MyMutation(graphene.ObjectType):
     """GraphQL mutations."""
-    my_mutation = MyMutation.Field()
+
+    send_chat_message = SendChatMessage.Field()
+    kick_out_user = KickOutUser.Field()
 
 
 class MyQuery(graphene.ObjectType):
     """Root GraphQL query."""
 
     VALUE = str(uuid.uuid4().hex)
-    value = graphene.String(
-        args={'issue_error': graphene.Boolean(default_value=False)}
-    )
+    value = graphene.String(args={"issue_error": graphene.Boolean(default_value=False)})
 
     def resolve_value(self, info, issue_error):  # pylint: disable=unused-argument
         """Resolver to return predefined value which can be tested."""
-        assert self is None, 'Root `self` expected to be `None`!'
+        assert self is None, "Root `self` expected to be `None`!"
         if issue_error:
             raise RuntimeError(MyQuery.VALUE)
         return MyQuery.VALUE
 
 
-my_schema = graphene.Schema(query=MyQuery, subscription=MySubscriptions,
-                            mutation=MyMutations, auto_camelcase=False)
+my_schema = graphene.Schema(
+    query=MyQuery,
+    subscription=MySubscription,
+    mutation=MyMutation,
+    auto_camelcase=False,
+)
 
 
 class MyGraphqlWsConsumer(GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
+
     schema = my_schema
 
 
-class MyGraphqlWsConsumerKeepalive(GraphqlWsConsumer):
-    """Channels WebSocket consumer which provides GraphQL API."""
-    schema = my_schema
-    # Period to send keepalive mesages. Just some reasonable number.
-    send_keepalive_every = 0.05
-
-
-my_app = channels.routing.ProtocolTypeRouter({
-    'websocket': channels.routing.URLRouter([
-        django.urls.path('graphql/', MyGraphqlWsConsumer),
-        django.urls.path('graphql-keepalive/', MyGraphqlWsConsumerKeepalive),
-    ])
-})
+my_app = channels.routing.ProtocolTypeRouter(
+    {
+        "websocket": channels.routing.URLRouter(
+            [django.urls.path("graphql/", MyGraphqlWsConsumer)]
+        )
+    }
+)
