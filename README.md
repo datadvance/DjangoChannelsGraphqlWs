@@ -9,6 +9,12 @@
 
 ## Quick start
 
+Installation:
+
+```bash
+pip install django-channels-graphql-ws
+```
+
 The `channels_graphql_ws` module provides two classes: `Subscription`
 and `GraphqlWsConsumer`. The `Subscription` class itself is a "creative"
 copy of `Mutation` class from the Graphene
