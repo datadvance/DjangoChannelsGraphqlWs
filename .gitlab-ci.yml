@@ -1,0 +1,26 @@
+# Copyright (C) DATADVANCE, 2010-2018
+
+# GitLab CI configuration.
+
+# Documentations:
+# https://docs.gitlab.com/ce/ci/yaml/README.html
+# List of available environment variables:
+# https://docs.gitlab.com/ce/ci/variables/README.html
+
+variables:
+    PIP_PROXY: http://nexus.macros:8081/repository/pypi-proxy/simple/
+
+build_and_test:
+    script:
+        - |
+            pip config set global.index-url $PIP_PROXY
+            pip config set global.trusted-host $(echo $PIP_PROXY | awk -F[/:] '{print $4}')
+            pip install --progress-bar off poetry
+            poetry install
+            poetry build
+            poetry run pytest
+    tags:
+        - python3.7
+
+
+
