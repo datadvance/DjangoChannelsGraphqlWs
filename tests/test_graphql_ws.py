@@ -40,7 +40,7 @@ import django.urls
 import graphene
 import pytest
 
-from .graphql_ws import GraphqlWsConsumer, Subscription
+from channels_graphql_ws.graphql_ws import GraphqlWsConsumer, Subscription
 
 
 # Default timeout. Increased to avoid TimeoutErrors on slow machines.
@@ -511,7 +511,7 @@ async def test_subscribe_unsubscribe():
     assert resp["type"] == "complete", "Type `complete` expected!"
 
     # Check notifications: there are no notifications! Previously,
-    # there was an unsubscription from all subscriptions.
+    # we have unsubscribed from all subscriptions.
     assert await comm.receive_nothing() is True, "No notifications expected!"
 
     print("Disconnect and wait the application to finish gracefully.")

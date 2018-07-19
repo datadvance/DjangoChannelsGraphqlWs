@@ -43,7 +43,6 @@ license = "MIT"
 packages = [
     { include = "channels_graphql_ws/" },
 ]
-exclude = ["channels_graphql_ws/test_graphql_ws.py"]
 
 [tool.poetry.dependencies]
 python = "^3.7.0"
