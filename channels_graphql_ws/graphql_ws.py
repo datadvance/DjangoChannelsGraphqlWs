@@ -56,6 +56,7 @@ library `subscription-transport-ws` (which is used by Apollo).
 
 import asyncio
 import collections
+import concurrent
 import traceback
 import types
 
@@ -63,14 +64,18 @@ import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
 import channels.layers
+import django.db
 import graphene
 import graphene.types.objecttype
 import graphene.types.utils
 import graphene.utils.get_unbound_function
 import graphene.utils.props
 import graphene_django.views
+import graphql
 import graphql.error
+import graphql.execution.executors.asyncio
 from namedlist import namedlist
+import promise
 import rx
 
 
@@ -124,7 +129,7 @@ class Subscription(graphene.ObjectType):
         """
         raise NotImplementedError()
 
-    def subscribe(self, info, *args, **kwds):  # pylint: disable=unused-argument
+    def subscribe(self, info, *args, **kwds):
         """Called when client subscribes.
 
         Overwrite this to do some extra work when client subscribes and
@@ -144,7 +149,7 @@ class Subscription(graphene.ObjectType):
             only put to the default group (the one which corresponds to
             the `Subscription` subclass).
         """
-        return
+        pass
 
     def unsubscribed(self, info, *args, **kwds):
         """Called when client unsubscribes.
@@ -224,7 +229,7 @@ class Subscription(graphene.ObjectType):
         arguments=None,
         _meta=None,
         **options,
-    ):  # pylint: arguments-differ
+    ):  # pylint: disable=arguments-differ
         """Prepare subscription when on subclass creation.
 
         This method is invoked by the superclass `__init__subclass__`.
@@ -274,6 +279,7 @@ class Subscription(graphene.ObjectType):
         # Auxiliary alias.
         get_function = graphene.utils.get_unbound_function.get_unbound_function
 
+        # pylint: disable=attribute-defined-outside-init
         _meta.arguments = arguments
         _meta.output = output
         _meta.resolver = get_function(cls._subscribe)
@@ -284,7 +290,7 @@ class Subscription(graphene.ObjectType):
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
     @classmethod
-    def _subscribe(cls, obj, info, *args, **kwds):  # pylint: disable=unused-argument
+    def _subscribe(cls, obj, info, *args, **kwds):
         """Subscription request received.
 
         This is called by the Graphene when a client subscribes.
@@ -365,8 +371,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # processes GraphQL queries.
     schema = None
 
-    # The interval to send keepalive messages to the clients.
+    # The interval to send keepalive messages to the clients (seconds).
     send_keepalive_every = None
+
+    # Set to `True` to process requests (i.e. GraphQL documents) from
+    # a client in order of arrival, which is the same as sending order,
+    # as guaranteed by the WebSocket protocol. This means that request
+    # processing for this particular client becomes serial - in other
+    # words, the server will not start processing another request
+    # before it finishes the current one. Note that requests from
+    # different clients (within different WebSocket connections)
+    # are still processed asynchronously.
+    strict_ordering = False
 
     async def on_connect(self, payload):
         """Called after CONNECTION_INIT message from client.
@@ -375,11 +391,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         to reject the connection when it's necessary.
 
         Args:
-            payload: payload from CONNECTION_INIT message.
+            payload: Payload from CONNECTION_INIT message.
         """
         pass
 
     # ------------------------------------------------------------------- IMPLEMENTATION
+
+    workers = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="GraphqlWs.")
+
+    # Disable promise's "trampoline" (whatever it means), cause when it
+    # is enabled (which is by default) the promise is not thread-safe.
+    # This leads to hanging threads and unanswered requests.
+    # https://github.com/syrusakbary/promise/issues/57#issuecomment-406778476
+    promise.promise.async_instance.disable_trampoline()
 
     # Subscription WebSocket subprotocol.
     GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
@@ -399,6 +423,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Task that sends keepalive messages periodically.
         self._keepalive_task = None
+
+        # Request-processing tasks. When `strict_ordering` is `False`
+        # we spawn an asyncio task per request.
+        self._req_tasks = []
 
         super().__init__(*args, **kwargs)
 
@@ -424,38 +452,76 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Accept connection with the GraphQL-specific subprotocol.
         await self.accept(subprotocol=self.GRAPHQL_WS_SUBPROTOCOL)
 
-    async def disconnect(
-        self, close_code
-    ):  # pylint: disable=unused-argument,arguments-differ
+    async def disconnect(self, code):
         """WebSocket disconnection handler."""
+        del code
 
-        # Remove itself from Channels groups and clear triggers.
-        await self._cleanup()
+        # Remove itself from the Channels groups, clear triggers and
+        # stop sending keepalive messages.
+
+        # The list of awaitables to simultaneously wait at the end.
+        waitlist = []
+
+        # Unsubscribe from the Channels groups.
+        waitlist += [
+            self.channel_layer.group_discard(group, self.channel_name)
+            for group in self._sids_by_group
+        ]
+
+        # Cancel all currently running requests.
+        for req_task in self._req_tasks:
+            req_task.cancel()
+        waitlist += self._req_tasks
+
+        # Stop sending keepalive messages (if enabled).
+        if self._keepalive_task is not None:
+            self._keepalive_task.cancel()
+            waitlist += [self._keepalive_task]
+
+        if waitlist:
+            await asyncio.wait(waitlist)
+
+        self._subscriptions.clear()
+        self._sids_by_group.clear()
+        self._req_tasks.clear()
 
     async def receive_json(self, content):  # pylint: disable=arguments-differ
         """Process WebSocket message received from the client."""
 
-        # Extract message type based on which we select how to proceed.
-        msg_type = content["type"].upper()
+        async def process_message():
+            # Extract message type based on which we select how to proceed.
+            msg_type = content["type"].upper()
 
-        if msg_type == "CONNECTION_INIT":
-            await self._on_gql_connection_init(payload=content["payload"])
+            if msg_type == "CONNECTION_INIT":
+                await self._on_gql_connection_init(payload=content["payload"])
 
-        elif msg_type == "CONNECTION_TERMINATE":
-            await self._on_gql_connection_terminate()
+            elif msg_type == "CONNECTION_TERMINATE":
+                await self._on_gql_connection_terminate()
 
-        elif msg_type == "START":
-            await self._on_gql_start(
-                operation_id=content["id"], payload=content["payload"]
-            )
+            elif msg_type == "START":
+                await self._on_gql_start(
+                    operation_id=content["id"], payload=content["payload"]
+                )
 
-        elif msg_type == "STOP":
-            await self._on_gql_stop(operation_id=content["id"])
+            elif msg_type == "STOP":
+                await self._on_gql_stop(operation_id=content["id"])
 
+            else:
+                await self._send_gql_error(
+                    content["id"], f"Message of unknown type '{msg_type}' received!"
+                )
+
+        # If strict ordering is required then simply wait until the
+        # message processing is finished. Otherwise spawn a task so
+        # Channels may continue calling `receive_json` while requests
+        # (i.e. GraphQL documents) are being processed.
+        if self.strict_ordering:
+            await process_message()
         else:
-            await self._send_gql_error(
-                content["id"], f'Message of unknown type "{msg_type}" received!'
-            )
+            background_task = asyncio.create_task(process_message())
+            self._req_tasks.append(background_task)
+            # Schedule automatic removal from the list when finishes.
+            background_task.add_done_callback(self._req_tasks.remove)
 
     async def broadcast(self, message):
         """The broadcast message handler.
@@ -497,7 +563,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # ---------------------------------------------------------- GRAPHQL PROTOCOL EVENTS
 
-    async def _on_gql_connection_init(self, payload):  # pylint: disable=unused-argument
+    async def _on_gql_connection_init(self, payload):
         """Process the CONNECTION_INIT message.
 
         Start sending keepalive messages if `send_keepalive_every` set.
@@ -507,12 +573,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         try:
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             # Send CONNECTION_ERROR message.
             error_to_dict = graphene_django.views.GraphQLView.format_error
             await self._send_gql_connection_error(error_to_dict(exc))
             # Close the connection.
-            await self._cleanup()
             # NOTE: We use the 4000 code because there are two reasons:
             # A) We can not use codes greater than 1000 and less than
             # 3000 because daphne and autobahn do not allow this
@@ -542,9 +607,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def _on_gql_connection_terminate(self):
         """Process the CONNECTION_TERMINATE message."""
-
-        # Remove itself from Channels groups and clear triggers.
-        await self._cleanup()
 
         # Close the connection.
         await self.close(code=1000)
@@ -598,23 +660,57 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels. The
             # subscriptions groups must be set by the subscription using
-            # the `attach_to_groups` function.
+            # the `register` function.
             context = types.SimpleNamespace(**self.scope)
             context.register = register
 
-            # Process GraphQL request with Graphene. Offload it to the
-            # thread cause it may work slowly and do DB operations.
-            db_sync_to_async = channels.db.database_sync_to_async
-            result = await db_sync_to_async(self.schema.execute)(
-                query,
-                operation_name=operation_name,
-                variable_values=variables,
-                context_value=context,
-                allow_subscriptions=True,
+            # Process the request with Graphene/GraphQL.
+            # NOTE: We offload the GraphQL processing to the worker
+            # thread (with `channels.db.database_sync_to_async`) because
+            # according to our experiments even GraphQL document parsing
+            # may take a while (and depends approx. linearly on the size
+            # of the selection set). Moreover it is highly probable that
+            # resolvers will invoke blocking DB operations so it is
+            # better to offload the whole thing to a worker thread.
+            def thread_func():
+                """Execute schema in a worker thread."""
+
+                # Create an eventloop if this worker thread does not
+                # have one yet. Eventually each worker will have its own
+                # eventloop so the `AsyncioExecutor` will use it.
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                try:
+                    return graphql.graphql(
+                        self.schema,
+                        request_string=query,
+                        operation_name=operation_name,
+                        variable_values=variables,
+                        context_value=context,
+                        allow_subscriptions=True,
+                        executor=graphql.execution.executors.asyncio.AsyncioExecutor(
+                            loop
+                        ),
+                    )
+                finally:
+                    # Resolvers can open the connections to the database
+                    # so close them. Django Channels does the same in
+                    # the `channels.db.database_sync_to_async`.
+                    django.db.close_old_connections()
+
+            result = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(self.workers, thread_func),
+                timeout=None,
             )
-        except Exception as exc:
-            # something is wrong - send ERROR message
+
+        except Exception:  # pylint: disable=broad-except
+            # Something is wrong - send error message.
             await self._send_gql_error(operation_id, traceback.format_exc())
+
         else:
             # Receiving an observer means the subscription has been
             # processed. Otherwise it is just regular query or mutation.
@@ -649,11 +745,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def _on_gql_stop(self, operation_id):
         """Process the STOP message."""
-        # Currently only subscriptions can be stopped.
-        # But we see but some clients (e.g. GraphiQL) send
-        # the stop message even for queries and mutations.
-        # We also see that the Apollo server ignores such messages,
-        # so we ignore them as well.
+        # Currently only subscriptions can be stopped. But we see but
+        # some clients (e.g. GraphiQL) send the stop message even for
+        # queries and mutations. We also see that the Apollo server
+        # ignores such messages, so we ignore them as well.
         if not operation_id in self._subscriptions:
             return
 
@@ -697,7 +792,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Send GraphQL `data` message to the client.
 
         Args:
-            data: Dict with GraphQL query responce.
+            data: Dict with GraphQL query response.
             errors: List with exceptions occurred during processing the
                 GraphQL query. (Errors happened in the resolvers.)
         """
@@ -743,32 +838,3 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _send_gql_connection_keep_alive(self):
         """Send the keepalive (ping) message."""
         await self.send_json({"type": "ka"})
-
-    # ------------------------------------------------------------------------ AUXILIARY
-
-    async def _cleanup(self):
-        """Cleanup before disconnect.
-
-        Remove itself from the Channels groups, clear triggers and stop
-        sending keepalive messages.
-        """
-
-        # The list of awaitables to simultaneously wait at the end.
-        waitlist = []
-
-        # Unsubscribe from the Channels groups.
-        waitlist += [
-            self.channel_layer.group_discard(group, self.channel_name)
-            for group in self._sids_by_group.keys()
-        ]
-
-        if self._keepalive_task is not None:
-            # Stop sending keepalive messages.
-            self._keepalive_task.cancel()
-            waitlist += [self._keepalive_task]
-
-        if waitlist:
-            await asyncio.wait(waitlist)
-
-        self._subscriptions.clear()
-        self._sids_by_group.clear()

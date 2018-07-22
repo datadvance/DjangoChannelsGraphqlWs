@@ -3,9 +3,9 @@
 ## Features
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
-- Graphene-like subscriptions support.
-- Operation order is guaranteed due to WebSocket usage.
-- Subscription groups support based on the Django Channels groups.
+- Graphene-like subscriptions.
+- Subscription groups based on the Django Channels groups.
+- Parallel execution of requests.
 
 ## Quick start
 
@@ -67,7 +67,7 @@ class Subscription(graphene.ObjectType):
     """Root GraphQL subscription."""
     my_subscription = MySubscription.Field()
 
-my_schema = graphene.Schema(
+graphql_schema = graphene.Schema(
     query=Query,
     mutation=Mutation,
     subscription=Subscription,
@@ -79,7 +79,7 @@ Make your own WebSocket consumer subclass and set the schema it serves:
 ```python
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
-    schema = my_schema
+    schema = graphql_schema
 ```
 
 Setup Django Channels routing:
@@ -121,6 +121,22 @@ The implemented WebSocket-based protocol was taken from the library
 which is used by the [Apollo GraphQL](https://github.com/apollographql).
 Check the [protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
 for details.
+
+### Execution
+
+- Different requests from different WebSocket client are processed
+  asynchronously.
+- By default different requests (WebSocket messages) from a single
+  client are processed concurrently in different worker threads. So
+  there is no guarantee that requests will be processed in the same
+  the client sent these requests. Actually, with HTTP we have this
+  behavior for years.
+- It is possible to serialize message processing by setting
+  `strict_ordering` to `True`. But note, this disables parallel requests
+  execution - in other words, the server will not start processing
+  another request from the client before it finishes the current one.
+  See comments in the class `GraphqlWsConsumer`.
+
 
 ## Alternatives
 
