@@ -34,7 +34,7 @@ import django
 import graphene
 import pytest
 
-import channels_graphql_ws.graphql_ws
+import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -176,7 +176,7 @@ class Query(graphene.ObjectType):
         return True
 
 
-class GraphqlWsConsumer(channels_graphql_ws.graphql_ws.GraphqlWsConsumer):
+class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
     schema = graphene.Schema(query=Query, mutation=Mutation, auto_camelcase=False)

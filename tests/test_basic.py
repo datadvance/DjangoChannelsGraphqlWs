@@ -33,7 +33,7 @@ import uuid
 import graphene
 import pytest
 
-import channels_graphql_ws.graphql_ws
+import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -381,7 +381,7 @@ class UserId(graphene.Enum):
     ALICE = 1
 
 
-class OnChatMessageSent(channels_graphql_ws.graphql_ws.Subscription):
+class OnChatMessageSent(channels_graphql_ws.Subscription):
     """Test GraphQL subscription.
 
     Subscribe to receive messages by user ID.

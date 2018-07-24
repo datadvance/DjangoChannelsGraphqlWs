@@ -31,7 +31,7 @@ import django
 import graphene
 import pytest
 
-import channels_graphql_ws.graphql_ws
+import channels_graphql_ws
 
 
 # Increase default timeout to avoid errors on slow machines.
@@ -84,7 +84,7 @@ def gql_communicator():
         on_connect_arg = on_connect
         send_keepalive_every_arg = send_keepalive_every
 
-        class ChannelsConsumer(channels_graphql_ws.graphql_ws.GraphqlWsConsumer):
+        class ChannelsConsumer(channels_graphql_ws.GraphqlWsConsumer):
             """Channels WebSocket consumer which provides GraphQL API."""
 
             schema = graphene.Schema(
