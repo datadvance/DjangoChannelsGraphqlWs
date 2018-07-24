@@ -1,0 +1,24 @@
+{
+    "version": "0.1",
+    "language": "en,ru,en-US",
+    "words": [
+        "ASGI",
+        "asgiref",
+        "asyncio",
+        "Graphi",
+        "graphql",
+        "pylint",
+        "pytest",
+        "unsubscription",
+        "wakeup"
+    ],
+    "flagWords": [
+        "hte",
+        "responce"
+    ],
+    "ignorePaths": [
+        "**/.git/**",
+        "**/.venv/**",
+        ".vscode"
+    ]
+}
