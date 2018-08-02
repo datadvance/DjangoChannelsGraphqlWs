@@ -4,32 +4,28 @@
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
 - Graphene-like subscriptions.
-- Subscription groups based on the Django Channels groups.
 - Parallel execution of requests.
+- Customizable notification strategies:
+  - Single subscription can be put to multiple subscription groups.
+  - Notification can be suppressed in the resolver. Useful to avoid
+    self-notifications.
 
-## Quick start
-
-Installation:
+## Installation
 
 ```bash
 pip install django-channels-graphql-ws
 ```
 
-The `channels_graphql_ws` module provides two classes: `Subscription`
-and `GraphqlWsConsumer`. The `Subscription` class itself is a "creative"
-copy of `Mutation` class from the Graphene
-(`graphene/types/mutation.py`). The `GraphqlWsConsumer` is a Channels
-WebSocket consumer which maintains WebSocket connection with the client.
+## Getting started
 
-Create GraphQL schema, e.g. using Graphene (note that subscription
-definition syntax is close to the Graphene mutation definition):
+Create a GraphQL schema using Graphene. Note the `MySubscription` class.
 
 ```python
 import channels_graphql_ws
 import graphene
 
 class MySubscription(channels_graphql_ws.Subscription):
-    """Sample GraphQL subscription."""
+    """Simple GraphQL subscription."""
 
     # Subscription payload.
     event = graphene.String()
@@ -49,7 +45,10 @@ class MySubscription(channels_graphql_ws.Subscription):
         """Called to notify the client."""
 
         # Here `self` contains the `payload` from the `broadcast()`
-        # invocation (see below).
+        # invocation (see below). You can return `MySubscription.SKIP`
+        # if you wish to suppress the notification to a particular
+        # client. For example, this allows to avoid notifications for
+        # the actions made by this particular client.
 
         return MySubscription(event='Something has happened!')
 
@@ -80,6 +79,17 @@ Make your own WebSocket consumer subclass and set the schema it serves:
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
     schema = graphql_schema
+
+    # Uncomment to send keepalive message every 42 seconds.
+    # send_keepalive_every = 42
+
+    # Uncomment to process requests sequentially (useful for tests).
+    # strict_ordering = True
+
+    async def on_connect(self, payload):
+        """New client connection handler."""
+        # You can `raise` from here to reject the connection.
+        print("New client connected!")
 ```
 
 Setup Django Channels routing:
@@ -104,6 +114,14 @@ MySubscription.broadcast(
 ```
 
 ## Details
+
+The `channels_graphql_ws` module provides two classes:
+
+- `GraphqlWsConsumer`: Django Channels WebSocket consumer which
+    maintains WebSocket connection with the client.
+- `Subscription`: Subclass this to define GraphQL subscription. Very
+    similar to defining mutations with Graphene. (The class itself is a
+    "creative" copy of the Graphene `Mutation` class.)
 
 For details check the [source code](channels_graphql_ws/graphql_ws.py)
 which is thoroughly commented. (The docstrings of the `Subscription`
@@ -130,13 +148,31 @@ for details.
   client are processed concurrently in different worker threads. So
   there is no guarantee that requests will be processed in the same
   the client sent these requests. Actually, with HTTP we have this
-  behavior for years.
+  behavior for decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
   execution - in other words, the server will not start processing
   another request from the client before it finishes the current one.
   See comments in the class `GraphqlWsConsumer`.
 
+### Authentication
+
+Implementing authentication is straightforward. Follow
+[the Channels documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
+
+Here is an example. Note the `channels.auth.AuthMiddlewareStack` class.
+
+```python
+application = channels.routing.ProtocolTypeRouter({
+    'websocket': channels.auth.AuthMiddlewareStack(
+        channels.routing.URLRouter([
+            django.urls.path('graphql/', MyGraphqlWsConsumer),
+        ])
+    ),
+})
+```
+
+This gives you a Django user `info.context.user` in all the resolvers.
 
 ## Alternatives
 

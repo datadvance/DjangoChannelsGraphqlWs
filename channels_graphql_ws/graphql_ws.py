@@ -111,13 +111,15 @@ class Subscription(graphene.ObjectType):
             group.
     """
 
-    # ------------------------------------------------------------ OVERWRITE IN SUBCLASS
+    # ----------------------------------------------------------------------- PUBLIC API
 
     def publish(self, info, *args, **kwds):
         """GraphQL resolver for subscription notifications.
 
         Overwrite this to "resolve" subscription query. This method
-        invoked each time subscription "triggers".
+        invoked each time subscription "triggers". Raising an exception
+        here will lead to sending the notification with the error. To
+        suppress the notification return `Subscription.SKIP`.
 
         Args:
             self: The value provided as `payload` when `publish` called.
@@ -125,9 +127,14 @@ class Subscription(graphene.ObjectType):
                 context with all the connection information.
             args, kwds: Values of the GraphQL subscription inputs.
         Returns:
-            The same the any Graphene resolver returns.
+            The same the any Graphene resolver returns. Returning
+            a special object `Subscription.SKIP` indicates that this
+            notification shall not be sent to the client at all.
         """
         raise NotImplementedError()
+
+    # Return this from the `publish` to suppress the notification.
+    SKIP = object()
 
     def subscribe(self, info, *args, **kwds):
         """Called when client subscribes.
@@ -163,8 +170,6 @@ class Subscription(graphene.ObjectType):
             args, kwds: Values of the GraphQL subscription inputs.
         """
         pass
-
-    # --------------------------------------------------- SUBSCRIPTION CONTROL INTERFACE
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
@@ -218,6 +223,8 @@ class Subscription(graphene.ObjectType):
             deprecation_reason=deprecation_reason,
             required=required,
         )
+
+    # ------------------------------------------------------------------- IMPLEMENTATION
 
     @classmethod
     def __init_subclass_with_meta__(
@@ -336,7 +343,10 @@ class Subscription(graphene.ObjectType):
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
 
-        name = f"SUBSCRIPTION-{cls.__module__}.{cls.__qualname__}"
+        name = f"SUBSCRIPTION-{cls.__module__}...{cls.__qualname__}"
+        # Replace `<` and `>` with underscore `_` to handle `<locals>`
+        # which can appear in the `cls.__qualname__`.
+        name = name.replace("<", "_").replace(">", "_")
         if group is not None:
             name += "." + group
 
@@ -357,15 +367,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     NOTE: Each instance of this class maintains one WebSocket
     connection to a single client.
-    NOTE: The class made async only to send keepalive messages using
-    eventloop. I am not sure it is brilliant idea though.
 
     This class implements the WebSocket-based GraphQL protocol used by
     `subscriptions-transport-ws` library (used by Apollo):
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md
     """
 
-    # ------------------------------------------------------------ OVERWRITE IN SUBCLASS
+    # ----------------------------------------------------------------- PUBLIC INTERFACE
 
     # Overwrite this in the subclass to specify the GraphQL schema which
     # processes GraphQL queries.
@@ -381,7 +389,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # words, the server will not start processing another request
     # before it finishes the current one. Note that requests from
     # different clients (within different WebSocket connections)
-    # are still processed asynchronously.
+    # are still processed asynchronously. Useful for tests.
     strict_ordering = False
 
     async def on_connect(self, payload):
@@ -397,7 +405,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # ------------------------------------------------------------------- IMPLEMENTATION
 
-    workers = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="GraphqlWs.")
+    # Threadpool used to process requests.
+    _workers = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="GraphqlWs.")
 
     # Disable promise's "trampoline" (whatever it means), cause when it
     # is enabled (which is by default) the promise is not thread-safe.
@@ -406,7 +415,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     promise.promise.async_instance.disable_trampoline()
 
     # Subscription WebSocket subprotocol.
-    GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
+    _GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
 
     # Structure that holds subscription information.
     _SubInf = namedlist("_SubInf", ["groups", "op_id", "trigger", "unsubscribed"])
@@ -441,16 +450,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # starting with Python 3.7 it is a bytes. This can be a proper
         # change or just a bug in the Channels to be fixed. So let's
         # accept both variants until it becomes clear.
-        assert self.GRAPHQL_WS_SUBPROTOCOL in (
+        assert self._GRAPHQL_WS_SUBPROTOCOL in (
             (sp.decode() if isinstance(sp, bytes) else sp)
             for sp in self.scope["subprotocols"]
         ), (
             f"WebSocket client does not request for the subprotocol "
-            f"{self.GRAPHQL_WS_SUBPROTOCOL}!"
+            f"{self._GRAPHQL_WS_SUBPROTOCOL}!"
         )
 
         # Accept connection with the GraphQL-specific subprotocol.
-        await self.accept(subprotocol=self.GRAPHQL_WS_SUBPROTOCOL)
+        await self.accept(subprotocol=self._GRAPHQL_WS_SUBPROTOCOL)
 
     async def disconnect(self, code):
         """WebSocket disconnection handler."""
@@ -633,8 +642,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Local alias for convenience.
             async_to_sync = asgiref.sync.async_to_sync
 
-            # The subject we will trigger on the `publish` message.
-            publishes = rx.subjects.Subject()
+            # The subject we will trigger on the `broadcast` message.
+            broadcasts = rx.subjects.Subject()
 
             # This function is called by subscription to associate a
             # callback (which publishes notifications) with the groups.
@@ -642,7 +651,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 """Associate publish callback with the groups."""
                 # Put subscription information into the registry and
                 # start listening to the subscription groups.
-                trigger = publishes.on_next
+                trigger = broadcasts.on_next
                 subinf = self._SubInf(
                     groups=groups,
                     op_id=op_id,
@@ -655,7 +664,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     async_to_sync(self.channel_layer.group_add)(
                         group, self.channel_name
                     )
-                return publishes.map(publish_callback)
+
+                # Enqueue the `publish` method execution.
+                stream = broadcasts.map(publish_callback)
+                # Do not notify clients when `publish` returns `SKIP` by
+                # filtering out such items from the stream.
+                stream = stream.filter(
+                    lambda publish_returned: publish_returned is not Subscription.SKIP
+                )
+                return stream
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels. The
@@ -703,7 +720,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     django.db.close_old_connections()
 
             result = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(self.workers, thread_func),
+                asyncio.get_running_loop().run_in_executor(self._workers, thread_func),
                 timeout=None,
             )
 
