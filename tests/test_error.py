@@ -53,7 +53,9 @@ async def test_error_cases(gql_communicator):
     msg_id = await comm.gql_send(
         type="wrong_type__(ツ)_/¯", payload={"variables": {}, "operationName": ""}
     )
-    resp = await comm.gql_receive(assert_id=msg_id, assert_type="error")
+    resp = await comm.gql_receive(
+        assert_id=msg_id, assert_type="error", assert_no_errors=False
+    )
     assert (
         len(resp["payload"]) == 1
     ), "Multiple errors received while a single error expected!"
@@ -74,7 +76,9 @@ async def test_error_cases(gql_communicator):
             "operationName": "",
         },
     )
-    resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
+    resp = await comm.gql_receive(
+        assert_id=msg_id, assert_type="data", assert_no_errors=False
+    )
     assert resp["payload"]["data"] is None
     errors = resp["payload"]["errors"]
     assert len(errors) == 1, "Single error expected!"
@@ -93,7 +97,9 @@ async def test_error_cases(gql_communicator):
             "operationName": "op_name",
         },
     )
-    resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
+    resp = await comm.gql_receive(
+        assert_id=msg_id, assert_type="data", assert_no_errors=False
+    )
     assert resp["payload"]["data"]["value"] is None
     errors = resp["payload"]["errors"]
     assert len(errors) == 1, "Single error expected!"
@@ -116,7 +122,9 @@ async def test_error_cases(gql_communicator):
             "operationName": "",
         },
     )
-    resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
+    resp = await comm.gql_receive(
+        assert_id=msg_id, assert_type="data", assert_no_errors=False
+    )
     assert resp["payload"]["data"] is None
     errors = resp["payload"]["errors"]
     assert len(errors) == 5, f"Five errors expected, but {len(errors)} errors received!"
@@ -143,7 +151,9 @@ async def test_connection_error(gql_communicator):
         del self, payload
         raise RuntimeError("Connection rejected!")
 
-    comm = gql_communicator(strict_ordering=True, on_connect=on_connect)
+    comm = gql_communicator(
+        consumer_attrs={"strict_ordering": True, "on_connect": on_connect}
+    )
     await comm.gql_connect()
 
     print("Try to initialize the connection.")

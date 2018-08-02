@@ -49,12 +49,9 @@ def gql_communicator():
         query: Root GraphQL query.
         mutation: Root GraphQL mutation.
         subscription: Root GraphQL subscription.
-        strict_ordering: The `GraphqlWsConsumer` subclass attribute.
-            See `GraphqlWsConsumer` comments for details.
-        on_connect: The `GraphqlWsConsumer` subclass attribute.
-            See `GraphqlWsConsumer` comments for details.
-        send_keepalive_every: The `GraphqlWsConsumer` subclass
-            attribute. See `GraphqlWsConsumer` comments for details.
+        consumer_attrs: `GraphqlWsConsumer` attributes dict.
+        communicator_kwds: Extra keyword arguments for the Channels
+            `channels.testing.WebsocketCommunicator`.
 
     Used like this:
     ```
@@ -76,14 +73,10 @@ def gql_communicator():
         query=None,
         mutation=None,
         subscription=None,
-        strict_ordering=False,
-        on_connect=None,
-        send_keepalive_every=None,
+        *,
+        consumer_attrs=None,
+        communicator_kwds=None,
     ):
-        strict_ordering_arg = strict_ordering
-        on_connect_arg = on_connect
-        send_keepalive_every_arg = send_keepalive_every
-
         class ChannelsConsumer(channels_graphql_ws.GraphqlWsConsumer):
             """Channels WebSocket consumer which provides GraphQL API."""
 
@@ -93,11 +86,11 @@ def gql_communicator():
                 subscription=subscription,
                 auto_camelcase=False,
             )
-            strict_ordering = strict_ordering_arg
-            if on_connect_arg is not None:
-                on_connect = on_connect_arg
-            if send_keepalive_every_arg is not None:
-                send_keepalive_every = send_keepalive_every_arg
+
+        # Set additional attributes to the `ChannelsConsumer`.
+        if consumer_attrs is not None:
+            for attr, val in consumer_attrs.items():
+                setattr(ChannelsConsumer, attr, val)
 
         application = channels.routing.ProtocolTypeRouter(
             {
@@ -108,7 +101,10 @@ def gql_communicator():
         )
 
         graphql_ws_communicator = GraphqlWsCommunicator(
-            application=application, path="graphql/", subprotocols=["graphql-ws"]
+            application=application,
+            path="graphql/",
+            subprotocols=["graphql-ws"],
+            **(communicator_kwds or {}),
         )
 
         return graphql_ws_communicator
@@ -134,7 +130,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
 
     AUTO = object()
 
-    async def gql_send(self, id=AUTO, type=None, payload=None):
+    async def gql_send(self, *, id=AUTO, type=None, payload=None):
         """Send GraphQL message.
 
         When any argument is `None` it is excluded from the message.
@@ -149,8 +145,19 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
         await self.send_json_to(message)
         return id
 
-    async def gql_receive(self, assert_id=None, assert_type=None):
-        """Receive GraphQL message checking `id` an `type` if given."""
+    async def gql_receive(
+        self, *, assert_id=None, assert_type=None, assert_no_errors=True
+    ):
+        """Receive GraphQL message checking its content.
+
+        Args:
+            assert_id: Assert the response has a given message id.
+            assert_type: Assert the response has a given message type.
+            assert_no_errors: Assert the response has no
+                `payload.errors` field.
+        Returns:
+            The message received.
+        """
         response = await self.receive_json_from(timeout=TIMEOUT)
         if assert_id is not None:
             assert response["id"] == assert_id, "Response id != expected id!"
@@ -159,6 +166,11 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
                 f"Type `{assert_type}` expected, but `{response['type']}` received! "
                 f"Response: {response}."
             )
+        if assert_no_errors and "payload" in response:
+            assert (
+                "errors" not in response["payload"]
+            ), f"Response contains errors! Response: {response}"
+
         return response
 
     async def gql_finalize(self):

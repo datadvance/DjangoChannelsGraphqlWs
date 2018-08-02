@@ -41,7 +41,9 @@ async def test_main_usecase(gql_communicator):
     """Test main use-case with the GraphQL over WebSocket."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(Query, Mutation, Subscription, strict_ordering=True)
+    comm = gql_communicator(
+        Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+    )
     await comm.gql_connect()
     await comm.gql_init()
 
@@ -55,7 +57,6 @@ async def test_main_usecase(gql_communicator):
         },
     )
     resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
-    assert "errors" not in resp["payload"]
     assert resp["payload"]["data"]["value"] == Query.VALUE
     await comm.gql_receive(assert_id=msg_id, assert_type="complete")
 
@@ -98,13 +99,11 @@ async def test_main_usecase(gql_communicator):
 
     # Mutation response.
     resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
-    assert "errors" not in resp["payload"]
     assert resp["payload"]["data"] == {"send_chat_message": {"message": message}}
     await comm.gql_receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
     resp = await comm.gql_receive(assert_id=sub_id, assert_type="data")
-    assert "errors" not in resp["payload"]
     event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
     assert json.loads(event) == {
         "userId": UserId.ALICE,
@@ -129,7 +128,9 @@ async def test_subscribe_unsubscribe(gql_communicator):
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(Query, Mutation, Subscription, strict_ordering=True)
+    comm = gql_communicator(
+        Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+    )
     await comm.gql_connect()
     await comm.gql_init()
 
@@ -240,7 +241,9 @@ async def test_groups(gql_communicator):
             comm: Client, instance of the `WebsocketCommunicator`.
         """
 
-        comm = gql_communicator(Query, Mutation, Subscription, strict_ordering=True)
+        comm = gql_communicator(
+            Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+        )
         await comm.gql_connect()
         await comm.gql_init()
 
@@ -295,7 +298,6 @@ async def test_groups(gql_communicator):
             userId: Expected user ID.
             message: Expected message string.
         """
-        assert "errors" not in resp["payload"]
         event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
         assert json.loads(event) == {
             "userId": user_id,
@@ -353,7 +355,10 @@ async def test_keepalive(gql_communicator):
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql_communicator(
-        Query, Mutation, Subscription, strict_ordering=True, send_keepalive_every=0.05
+        Query,
+        Mutation,
+        Subscription,
+        consumer_attrs={"strict_ordering": True, "send_keepalive_every": 0.05},
     )
     await comm.gql_connect()
     await comm.gql_init()
