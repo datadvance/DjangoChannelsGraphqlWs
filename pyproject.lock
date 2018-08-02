@@ -505,10 +505,10 @@ name = "pylint"
 optional = false
 platform = "*"
 python-versions = ">=3.4.*"
-version = "2.0.0"
+version = "2.0.1"
 
 [package.dependencies]
-astroid = ">=2.0.0"
+astroid = ">=2.0.1"
 isort = ">=4.2.5"
 mccabe = "*"
 
@@ -523,11 +523,11 @@ name = "pylint-django"
 optional = false
 platform = "*"
 python-versions = "*"
-version = "0.11.1"
+version = "2.0"
 
 [package.dependencies]
-pylint = ">=1.8.2"
-pylint-plugin-utils = ">=0.2.1"
+pylint = ">=2.0"
+pylint-plugin-utils = ">=0.4"
 
 [[package]]
 category = "dev"
@@ -763,7 +763,7 @@ version = "4.5.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "c73a4d33d30472a2395c45a39be331e963c8d8dc3537036ceaf863a4deb4e31f"
+content-hash = "4794fa772e0e1f7126997c0ce2e47519c7e8f8b6f583f246d2955e875750ac6d"
 platform = "*"
 python-versions = "^3.7.0"
 
@@ -812,8 +812,8 @@ pre-commit = ["99cb6313a8ea7d88871aa2875a12d3c3a7636edf8ce4634b056328966682c8ce"
 promise = ["0bca4ed933e3d50e3d18fb54fc1432fa84b0564838cd093e824abcd718ab9304", "95506bac89df7a495e0b8c813fd782dd1ae590decb52f95248e316c6659ca49b"]
 py = ["3fd59af7435864e1a243790d322d763925431213b6b8529c6ca71081ace3bbf7", "e31fb2767eb657cbde86c454f02e99cb846d3cd9d61b318525140214fdc0e98e"]
 pyhamcrest = ["6b672c02fdf7470df9674ab82263841ce8333fb143f32f021f6cb26f0e512420", "7a4bdade0ed98c699d728191a058a60a44d2f9c213c51e2dd1e6fb42f2c6128a", "8ffaa0a53da57e89de14ced7185ac746227a8894dbd5a3c718bf05ddbd1d56cd", "bac0bea7358666ce52e3c6c85139632ed89f115e9af52d44b3c36e0bf8cf16a9", "f30e9a310bcc1808de817a92e95169ffd16b60cbc5a016a49c8d0e8ababfae79"]
-pylint = ["248a7b19138b22e6390cba71adc0cb03ac6dd75a25d3544f03ea1728fa20e8f4", "9cd70527ef3b099543eeabeb5c80ff325d86b477aa2b3d49e264e12d12153bc8"]
-pylint-django = ["70a723115a9649d6082f6ef09209ff299ce5b90c19005e351f7eb62889888694", "ff10fbf6e0ab207fbb8ec26f5b6a3f4fa604233b38182ccda038a08ba1b8ba80"]
+pylint = ["2c90a24bee8fae22ac98061c896e61f45c5b73c2e0511a4bf53f99ba56e90434", "454532779425098969b8f54ab0f056000b883909f69d05905ea114df886e3251"]
+pylint-django = ["5c5a20c443b4e70fdc8c47e42cff8ce79c953954e918f8e559f6e1d05a971585", "70f2b5397aa2468373fcf87d64a700b359050e905e56e2dbaf954e6edb04c593"]
 pylint-plugin-utils = ["8ad25a82bcce390d1d6b7c006c123e0cb18051839c9df7b8bdb7823c53fe676e"]
 pylint-quotes = ["84906e2c86035fbfe5ffa198c50d5136b8e319e59ecd0a1a01a9507fffc78540", "f319b6a8692e799363a986504836dad09178cbfcd3bf03b33562693b39e27226"]
 pytest = ["0453c8676c2bee6feb0434748b068d5510273a916295fd61d306c4f22fbfd752", "4b208614ae6d98195430ad6bde03641c78553acee7c83cec2e85d613c0cd383d"]

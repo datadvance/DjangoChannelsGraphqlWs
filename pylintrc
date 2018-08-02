@@ -45,10 +45,7 @@ persistent=yes
 
 # List of plugins (as comma separated values of python modules names) to load,
 # usually to register additional checkers.
-load-plugins=pylint_quotes
-# pylint_django
-# Disabled until new release is here (current version is 0.11.1) because
-# of the bug: https://github.com/PyCQA/pylint-django/issues/173.
+load-plugins=pylint_quotes, pylint_django
 
 # Use multiple processes to speed up Pylint.
 jobs=1

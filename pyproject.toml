@@ -45,30 +45,30 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
+asgiref = "^2.3"
+channels = "^2.1"
+django = "^2.0"
+graphene = "^2.1"
+graphene_django = "^2.0"
+graphql-core = "^2.0"
+namedlist = "^1.7"
 python = "^3.7.0"
-asgiref = "^2.3"              # ASGI in-memory channel layer.
-channels = "^2.1"             # Django Channels for WebSockets, etc.
-django = "^2.0"               # Django web framework.
-graphene = "^2.1"             # GraphQL framework for Python.
-graphene_django = "^2.0"      # Graphene Django integration.
-graphql-core = "^2.0"         # GraphQL base implementation for Python.
-namedlist = "^1.7"            # Like namedtuple, but mutable.
-rx = "^1.6"                   # Reactive Extensions for Python.
+rx = "^1.6"
 
 [tool.poetry.dev-dependencies]
-black = "^18.3-alpha.0"       # The uncompromising code formatter.
-channels-redis = "^2.2"       # Redis channel layer for Django Channels.
-isort = "^4.3"                # A Python utility to sort imports.
-pre-commit = "^1.10"          # Pre-commit hooks management framework.
-pylint = "^2.0"               # A Python source code analyzer.
-pylint_django = "^0.11.1"     # Pylint plugin to support Django.
-pylint_quotes = "^0.1.9"      # Pylint plugin for checking quotes.
-pytest = "^3.6"               # Testing framework.
-pytest-asyncio = "^0.8.0"     # PyTest plugin for asyncio support.
-pytest-cov = "^2.5"           # Test coverage reports.
-pytest-django = "^3.3"        # PyTest plugin to test Django projects.
-pytest-env = "^0.6.2"         # Set environment in the `pytest.ini`.
-pytest-pythonpath = "^0.7.2"  # Set PYTHONPATH from the `pytest.ini`.
+black = "^18.3-alpha.0"
+channels-redis = "^2.2"
+isort = "^4.3"
+pre-commit = "^1.10"
+pylint = "^2.0"
+coverage = "^4.5"
+pylint-django = "^2.0"
+pylint-quotes = "^0.1.9"
+pytest-asyncio = "^0.8.0"
+pytest-cov = "^2.5"
+pytest-django = "^3.3"
+pytest-pythonpath = "^0.7.2"
+pytest-env = "^0.6.2"
 
 [tool.black]
 py36 = true
