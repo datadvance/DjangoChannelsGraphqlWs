@@ -562,7 +562,7 @@ name = "pytest"
 optional = false
 platform = "unix"
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "3.7.0"
+version = "3.7.1"
 
 [package.dependencies]
 atomicwrites = ">=1.0"
@@ -584,7 +584,7 @@ name = "pytest-asyncio"
 optional = false
 platform = "*"
 python-versions = ">= 3.5"
-version = "0.8.0"
+version = "0.9.0"
 
 [package.dependencies]
 pytest = ">=3.0.6"
@@ -774,7 +774,7 @@ version = "4.5.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "4794fa772e0e1f7126997c0ce2e47519c7e8f8b6f583f246d2955e875750ac6d"
+content-hash = "bc660e1e1ecb4878f134d64fb165c5b7c52caeff4d7cf64f0394aa09d74cff1d"
 platform = "*"
 python-versions = "^3.7.0"
 
@@ -827,8 +827,8 @@ pylint = ["0edfec21270725c5aa8e8d8d06ef5666f766e0e748ed2f1ab23624727303b935", "4
 pylint-django = ["5c5a20c443b4e70fdc8c47e42cff8ce79c953954e918f8e559f6e1d05a971585", "70f2b5397aa2468373fcf87d64a700b359050e905e56e2dbaf954e6edb04c593"]
 pylint-plugin-utils = ["8ad25a82bcce390d1d6b7c006c123e0cb18051839c9df7b8bdb7823c53fe676e"]
 pylint-quotes = ["84906e2c86035fbfe5ffa198c50d5136b8e319e59ecd0a1a01a9507fffc78540", "f319b6a8692e799363a986504836dad09178cbfcd3bf03b33562693b39e27226"]
-pytest = ["8214ab8446104a1d0c17fbd218ec6aac743236c6ffbe23abc038e40213c60b88", "e2b2c6e1560b8f9dc8dd600b0923183fbd68ba3d9bdecde04467be6dd296a384"]
-pytest-asyncio = ["286b50773e996c80d894b95afaf45df6952408a67a59979ca9839f94693ec7fd", "f32804bb58a66e13a3eda11f8942a71b1b6a30466b0d2ffe9214787aab0e172e"]
+pytest = ["86a8dbf407e437351cef4dba46736e9c5a6e3c3ac71b2e942209748e76ff2086", "e74466e97ac14582a8188ff4c53e6cc3810315f342f6096899332ae864c1d432"]
+pytest-asyncio = ["a962e8e1b6ec28648c8fe214edab4e16bacdb37b52df26eb9d63050af309b2a9", "fbd92c067c16111174a1286bfb253660f1e564e5146b39eeed1133315cf2c2cf"]
 pytest-cov = ["03aa752cf11db41d281ea1d807d954c4eda35cfa1b21d6971966cc041bbf6e2d", "890fe5565400902b0c78b5357004aab1c814115894f4f21370e2433256a3eeec"]
 pytest-django = ["434abfd2afe61b69a58af41e7339617f3aa33dc9a05e3b77fa5955204a61b865", "a73e355138675db8f535777ddf34bde28580b688be17dc21d0efa65e5c16927c"]
 pytest-env = ["7e94956aef7f2764f3c147d216ce066bf6c42948bb9e293169b1b1c880a580c2"]

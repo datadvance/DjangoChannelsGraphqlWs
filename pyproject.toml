@@ -33,7 +33,7 @@
 
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.1.8"
+version = "0.1.9"
 description = """Django Channels based WebSocket GraphQL server with \
                  Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
@@ -58,17 +58,18 @@ rx = "^1.6"
 [tool.poetry.dev-dependencies]
 black = "^18.3-alpha.0"
 channels-redis = "^2.2"
+coverage = "^4.5"
 isort = "^4.3"
 pre-commit = "^1.10"
 pylint = "^2.0"
-coverage = "^4.5"
 pylint-django = "^2.0"
 pylint-quotes = "^0.1.9"
-pytest-asyncio = "^0.8.0"
+pytest = "^3.7.1"
+pytest-asyncio = "^0.9.0"
 pytest-cov = "^2.5"
 pytest-django = "^3.3"
-pytest-pythonpath = "^0.7.2"
 pytest-env = "^0.6.2"
+pytest-pythonpath = "^0.7.2"
 
 [tool.black]
 py36 = true
