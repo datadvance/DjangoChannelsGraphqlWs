@@ -54,7 +54,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
 
         if not connect_only:
             await self.send_json_to({"type": "connection_init", "payload": ""})
-            resp = await self.receive_json_from(timeout=TIMEOUT)
+            resp = await self.receive_json_from()
             assert resp["type"] == "connection_ack", f"Unexpected response `{resp}`!"
 
     AUTO = object()
@@ -95,7 +95,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
         Returns:
             The `payload` field of the message received or `None`.
         """
-        response = await self.receive_json_from(timeout=TIMEOUT)
+        response = await self.receive_json_from()
         if assert_id is not None:
             assert response["id"] == assert_id, "Response id != expected id!"
         if assert_type is not None:
