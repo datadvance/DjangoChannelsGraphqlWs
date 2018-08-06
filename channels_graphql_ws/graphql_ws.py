@@ -64,16 +64,17 @@ import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
 import channels.layers
+import django.core.serializers
 import django.db
 import graphene
 import graphene.types.objecttype
 import graphene.types.utils
 import graphene.utils.get_unbound_function
 import graphene.utils.props
-import graphene_django.views
 import graphql
 import graphql.error
 import graphql.execution.executors.asyncio
+import msgpack
 from namedlist import namedlist
 import promise
 import rx
@@ -175,6 +176,15 @@ class Subscription(graphene.ObjectType):
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
 
+        NOTE: The `payload` argument will be serialized before sending
+        to the subscription group. Serialization is made by MessagePack
+        and if `payload` contains Django models, then it is serialized
+        by the Django serialization utilities. For details see:
+        Django serialization:
+            https://docs.djangoproject.com/en/dev/topics/serialization/
+        MessagePack:
+            https://github.com/msgpack/msgpack-python
+
         Args:
             group: Name of the subscription group which members must be
                 notified. `None` means that all the subscriptions of
@@ -182,6 +192,26 @@ class Subscription(graphene.ObjectType):
             payload: The payload delivered to the `publish` handler as
                 the `self` argument.
         """
+
+        # Manually serialize the payload with the MessagePack
+        # (https://msgpack.org) like Redis channel layer backend does.
+        # We do this here to allow user to transfer Django models inside
+        # the `payload`.
+
+        def encode_django_model(obj):
+            """MessagePack hook to serialize the Django model."""
+
+            if isinstance(obj, django.db.models.Model):
+                return {
+                    "__djangomodel__": True,
+                    "as_str": django.core.serializers.serialize("json", [obj]),
+                }
+            return obj
+
+        serialized_payload = msgpack.packb(
+            payload, default=encode_django_model, use_bin_type=True
+        )
+
         # Send the message to the Channels group.
         group_send = asgiref.sync.async_to_sync(
             channels.layers.get_channel_layer().group_send
@@ -189,7 +219,11 @@ class Subscription(graphene.ObjectType):
         group = cls._group_name(group)
         group_send(
             group=group,
-            message={"type": "broadcast", "group": group, "payload": payload},
+            message={
+                "type": "broadcast",
+                "group": group,
+                "payload": serialized_payload,
+            },
         )
 
     @classmethod
@@ -536,13 +570,25 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """The broadcast message handler.
 
         Method is called when new `broadcast` message received from the
-        Channels group. The message is typically sent by the method
-        `Subscription.broadcast`. Here we figure out the group message
-        received from and trigger the observable which makes the
-        subscription process the query and notify the client.
+        Channels group. The message is sent by `Subscription.broadcast`.
+        Here we figure out the group message received from and trigger
+        the observable which makes the subscription process the query
+        and notify the client.
         """
         group = message["group"]
-        payload = message["payload"]
+        serialized_payload = message["payload"]
+
+        def decode_django_model(obj):
+            """MessagePack hook to deserialize the Django model."""
+            if "__djangomodel__" in obj:
+                obj = next(
+                    django.core.serializers.deserialize("json", obj["as_str"])
+                ).object
+            return obj
+
+        payload = msgpack.unpackb(
+            serialized_payload, object_hook=decode_django_model, raw=False
+        )
 
         # Offload trigger to the thread (in threadpool) cause it may
         # work slowly and do DB operations.
@@ -582,10 +628,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         try:
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
-        except Exception as exc:  # pylint: disable=broad-except
-            # Send CONNECTION_ERROR message.
-            error_to_dict = graphene_django.views.GraphQLView.format_error
-            await self._send_gql_connection_error(error_to_dict(exc))
         except Exception as e:  # pylint: disable=broad-except
             await self._send_gql_connection_error(self._format_error(e))
             # Close the connection.
@@ -815,7 +857,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             errors: List with exceptions occurred during processing the
                 GraphQL query. (Errors happened in the resolvers.)
         """
-        error_to_dict = graphene_django.views.GraphQLView.format_error
         await self.send_json(
             {
                 "type": "data",
@@ -823,7 +864,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 "payload": {
                     "data": data,
                     **(
-                        {"errors": [error_to_dict(e) for e in errors]} if errors else {}
                         {"errors": [self._format_error(e) for e in errors]}
                         if errors
                         else {}

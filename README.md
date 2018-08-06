@@ -140,6 +140,16 @@ which is used by the [Apollo GraphQL](https://github.com/apollographql).
 Check the [protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
 for details.
 
+### Automatic Django model serialization
+
+The `Subscription.broadcast` uses Channels groups to deliver a message
+to the `Subscription`'s `publish` method. [ASGI specification](https://github.com/django/asgiref/blob/master/specs/asgi.rst#events)
+clearly states what can be sent over a channel, and Django models are
+not in the list. Since it is common to notify clients about Django
+models changes we manually serialize the `payload` using [MessagePack](https://github.com/msgpack/msgpack-python)
+and hack the process to automatically serialize Django models following
+the the Django's guide [Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
+
 ### Execution
 
 - Different requests from different WebSocket client are processed

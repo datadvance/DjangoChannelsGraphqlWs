@@ -410,7 +410,7 @@ version = "4.3.0"
 six = ">=1.0.0,<2.0.0"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "MessagePack (de)serializer."
 name = "msgpack"
 optional = false
@@ -774,7 +774,7 @@ version = "4.5.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "bc660e1e1ecb4878f134d64fb165c5b7c52caeff4d7cf64f0394aa09d74cff1d"
+content-hash = "3127831e910f0851edd2f737b828790dcd0b0eb29d2438e82c3555f0f736ac62"
 platform = "*"
 python-versions = "^3.7.0"
 
