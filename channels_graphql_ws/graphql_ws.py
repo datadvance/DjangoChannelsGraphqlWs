@@ -586,6 +586,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Send CONNECTION_ERROR message.
             error_to_dict = graphene_django.views.GraphQLView.format_error
             await self._send_gql_connection_error(error_to_dict(exc))
+        except Exception as e:  # pylint: disable=broad-except
+            await self._send_gql_connection_error(self._format_error(e))
             # Close the connection.
             # NOTE: We use the 4000 code because there are two reasons:
             # A) We can not use codes greater than 1000 and less than
@@ -822,6 +824,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     "data": data,
                     **(
                         {"errors": [error_to_dict(e) for e in errors]} if errors else {}
+                        {"errors": [self._format_error(e) for e in errors]}
+                        if errors
+                        else {}
                     ),
                 },
             }
@@ -855,3 +860,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _send_gql_connection_keep_alive(self):
         """Send the keepalive (ping) message."""
         await self.send_json({"type": "ka"})
+
+    # ------------------------------------------------------------------------ AUXILIARY
+
+    def _format_error(self, error):
+        """Format exception `error` to send over a network."""
+
+        if isinstance(error, graphql.error.GraphQLError):
+            return graphql.error.format_error(error)
+
+        return {"message": f"{type(error).__name__}: {str(error)}"}
