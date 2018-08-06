@@ -108,7 +108,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
                 "errors" not in response["payload"]
             ), f"Response contains errors! Response: {response}"
 
-        return response["payload"] if "payload" in response else None
+        return response.get("payload", None)
 
     async def gql_execute(self, query, variables=None):
         """Execute query or mutation request.
