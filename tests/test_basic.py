@@ -37,15 +37,17 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_main_usecase(gql_communicator):
+async def test_main_usecase(gql):
     """Test main use-case with the GraphQL over WebSocket."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(
-        Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={"strict_ordering": True},
     )
-    await comm.gql_connect()
-    await comm.gql_init()
+    await comm.gql_connect_and_init()
 
     print("Make simple GraphQL query and check the response.")
     msg_id = await comm.gql_send(
@@ -57,7 +59,7 @@ async def test_main_usecase(gql_communicator):
         },
     )
     resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
-    assert resp["payload"]["data"]["value"] == Query.VALUE
+    assert resp["data"]["value"] == Query.VALUE
     await comm.gql_receive(assert_id=msg_id, assert_type="complete")
 
     print("Subscribe to GraphQL subscription.")
@@ -76,7 +78,7 @@ async def test_main_usecase(gql_communicator):
         },
     )
 
-    await comm.gql_assert_no_response()
+    await comm.gql_assert_no_messages()
 
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
@@ -99,12 +101,12 @@ async def test_main_usecase(gql_communicator):
 
     # Mutation response.
     resp = await comm.gql_receive(assert_id=msg_id, assert_type="data")
-    assert resp["payload"]["data"] == {"send_chat_message": {"message": message}}
+    assert resp["data"] == {"send_chat_message": {"message": message}}
     await comm.gql_receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
     resp = await comm.gql_receive(assert_id=sub_id, assert_type="data")
-    event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
+    event = resp["data"]["on_chat_message_sent"]["event"]
     assert json.loads(event) == {
         "userId": UserId.ALICE,
         "payload": message,
@@ -115,7 +117,7 @@ async def test_main_usecase(gql_communicator):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_unsubscribe(gql_communicator):
+async def test_subscribe_unsubscribe(gql):
     """Test subscribe-unsubscribe behavior with the GraphQL over WebSocket.
 
     0. Subscribe to GraphQL subscription: messages for Alice.
@@ -128,11 +130,13 @@ async def test_subscribe_unsubscribe(gql_communicator):
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(
-        Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={"strict_ordering": True},
     )
-    await comm.gql_connect()
-    await comm.gql_init()
+    await comm.gql_connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await comm.gql_send(
@@ -205,7 +209,7 @@ async def test_subscribe_unsubscribe(gql_communicator):
 
     # Check notifications: there are no notifications! Previously,
     # we have unsubscribed from all subscriptions.
-    await comm.gql_assert_no_response(
+    await comm.gql_assert_no_messages(
         "Notification received in spite of we have unsubscribed from all subscriptions!"
     )
 
@@ -214,7 +218,7 @@ async def test_subscribe_unsubscribe(gql_communicator):
 
 
 @pytest.mark.asyncio
-async def test_groups(gql_communicator):
+async def test_groups(gql):
     """Test notifications and subscriptions behavior depending on the
     different subscription groups.
 
@@ -241,11 +245,13 @@ async def test_groups(gql_communicator):
             comm: Client, instance of the `WebsocketCommunicator`.
         """
 
-        comm = gql_communicator(
-            Query, Mutation, Subscription, consumer_attrs={"strict_ordering": True}
+        comm = gql(
+            query=Query,
+            mutation=Mutation,
+            subscription=Subscription,
+            consumer_attrs={"strict_ordering": True},
         )
-        await comm.gql_connect()
-        await comm.gql_init()
+        await comm.gql_connect_and_init()
 
         sub_id = await comm.gql_send(
             type="start",
@@ -298,7 +304,7 @@ async def test_groups(gql_communicator):
             userId: Expected user ID.
             message: Expected message string.
         """
-        event = resp["payload"]["data"]["on_chat_message_sent"]["event"]
+        event = resp["data"]["on_chat_message_sent"]["event"]
         assert json.loads(event) == {
             "userId": user_id,
             "payload": message,
@@ -324,7 +330,7 @@ async def test_groups(gql_communicator):
     resp = await comm_tom.gql_receive(assert_id=uid_tom, assert_type="data")
     check_resp(resp, UserId[tom_id].value, message)
     # Any other did not receive any notifications.
-    await comm_alice.gql_assert_no_response()
+    await comm_alice.gql_assert_no_messages()
     print("Trigger subscription: send message to Alice.")
     message = "Hi, Alice!"
     await trigger_subscription(comm_tom, alice_id, message)
@@ -332,7 +338,7 @@ async def test_groups(gql_communicator):
     resp = await comm_alice.gql_receive(assert_id=uid_alice, assert_type="data")
     check_resp(resp, UserId[alice_id].value, message)
     # Any other did not receive any notifications.
-    await comm_tom.gql_assert_no_response()
+    await comm_tom.gql_assert_no_messages()
 
     print("Trigger subscription: send message to all groups.")
     message = "test... ping..."
@@ -350,18 +356,17 @@ async def test_groups(gql_communicator):
 
 
 @pytest.mark.asyncio
-async def test_keepalive(gql_communicator):
+async def test_keepalive(gql):
     """Test that server sends keepalive messages."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(
-        Query,
-        Mutation,
-        Subscription,
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
         consumer_attrs={"strict_ordering": True, "send_keepalive_every": 0.05},
     )
-    await comm.gql_connect()
-    await comm.gql_init()
+    await comm.gql_connect_and_init()
 
     await comm.gql_receive(assert_type="ka")
 

@@ -34,7 +34,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_error_cases(gql_communicator):
+async def test_error_cases(gql):
     """Test that server responds correctly when errors happen.
 
     Check that server responds with message of type `data` when there
@@ -45,9 +45,8 @@ async def test_error_cases(gql_communicator):
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(Query)
-    await comm.gql_connect()
-    await comm.gql_init()
+    comm = gql(query=Query)
+    await comm.gql_connect_and_init()
 
     print("Check that query syntax error leads to the `error` response.")
     msg_id = await comm.gql_send(
@@ -56,12 +55,8 @@ async def test_error_cases(gql_communicator):
     resp = await comm.gql_receive(
         assert_id=msg_id, assert_type="error", assert_no_errors=False
     )
-    assert (
-        len(resp["payload"]) == 1
-    ), "Multiple errors received while a single error expected!"
-    assert isinstance(
-        resp["payload"]["errors"][0], str
-    ), "Error must be of string type!"
+    assert len(resp) == 1, "Multiple errors received while a single error expected!"
+    assert isinstance(resp["errors"][0], str), "Error must be of string type!"
 
     print(
         "Check that query syntax error leads to the `data` response "
@@ -79,8 +74,8 @@ async def test_error_cases(gql_communicator):
     resp = await comm.gql_receive(
         assert_id=msg_id, assert_type="data", assert_no_errors=False
     )
-    assert resp["payload"]["data"] is None
-    errors = resp["payload"]["errors"]
+    assert resp["data"] is None
+    errors = resp["errors"]
     assert len(errors) == 1, "Single error expected!"
     assert (
         "message" in errors[0] and "locations" in errors[0]
@@ -92,7 +87,7 @@ async def test_error_cases(gql_communicator):
     msg_id = await comm.gql_send(
         type="start",
         payload={
-            "query": " query op_name { value(issue_error: true) }",
+            "query": "query op_name { value(issue_error: true) }",
             "variables": {},
             "operationName": "op_name",
         },
@@ -100,8 +95,8 @@ async def test_error_cases(gql_communicator):
     resp = await comm.gql_receive(
         assert_id=msg_id, assert_type="data", assert_no_errors=False
     )
-    assert resp["payload"]["data"]["value"] is None
-    errors = resp["payload"]["errors"]
+    assert resp["data"]["value"] is None
+    errors = resp["errors"]
     assert len(errors) == 1, "Single error expected!"
     assert errors[0]["message"] == Query.VALUE
     assert "locations" in errors[0]
@@ -125,8 +120,8 @@ async def test_error_cases(gql_communicator):
     resp = await comm.gql_receive(
         assert_id=msg_id, assert_type="data", assert_no_errors=False
     )
-    assert resp["payload"]["data"] is None
-    errors = resp["payload"]["errors"]
+    assert resp["data"] is None
+    errors = resp["errors"]
     assert len(errors) == 5, f"Five errors expected, but {len(errors)} errors received!"
     assert errors[0]["message"] == errors[3]["message"]
     assert "locations" in errors[2], "The `locations` field expected"
@@ -138,7 +133,7 @@ async def test_error_cases(gql_communicator):
 
 
 @pytest.mark.asyncio
-async def test_connection_error(gql_communicator):
+async def test_connection_error(gql):
     """Test that server responds correctly when connection errors happen.
 
     Check that server responds with message of type `connection_error`
@@ -151,15 +146,13 @@ async def test_connection_error(gql_communicator):
         del self, payload
         raise RuntimeError("Connection rejected!")
 
-    comm = gql_communicator(
-        consumer_attrs={"strict_ordering": True, "on_connect": on_connect}
-    )
-    await comm.gql_connect()
+    comm = gql(consumer_attrs={"strict_ordering": True, "on_connect": on_connect})
+    await comm.gql_connect_and_init(connect_only=True)
 
     print("Try to initialize the connection.")
     await comm.gql_send(type="connection_init", payload="")
     resp = await comm.gql_receive(assert_type="connection_error")
-    assert resp["payload"]["message"] == "Connection rejected!"
+    assert resp["message"] == "RuntimeError: Connection rejected!"
     resp = await comm.receive_output()
     assert resp["type"] == "websocket.close"
     assert resp["code"] == 4000

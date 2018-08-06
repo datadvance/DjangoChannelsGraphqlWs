@@ -38,13 +38,12 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_concurrent_queries(gql_communicator):
+async def test_concurrent_queries(gql):
     """Check a single hanging operation does not block other ones."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(Query, Mutation)
-    await comm.gql_connect()
-    await comm.gql_init()
+    comm = gql(query=Query, mutation=Mutation)
+    await comm.gql_connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
     long_op_id = await comm.gql_send(
@@ -56,7 +55,7 @@ async def test_concurrent_queries(gql_communicator):
         },
     )
 
-    await comm.gql_assert_no_response()
+    await comm.gql_assert_no_messages()
 
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
@@ -69,27 +68,27 @@ async def test_concurrent_queries(gql_communicator):
             },
         )
         resp = await comm.gql_receive(assert_id=fast_op_id, assert_type="data")
-        assert "errors" not in resp["payload"]
-        assert resp["payload"]["data"] == {"fast_op": True}
+        assert "errors" not in resp
+        assert resp["data"] == {"fast_op": True}
         await comm.gql_receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     wakeup.set()
 
     resp = await comm.gql_receive(assert_id=long_op_id, assert_type="data")
-    assert "errors" not in resp["payload"]
-    assert resp["payload"]["data"] == {"long_op": {"is_ok": True}}
+    assert "errors" not in resp
+    assert resp["data"] == {"long_op": {"is_ok": True}}
     await comm.gql_receive(assert_id=long_op_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_assert_no_response(
+    await comm.gql_assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
     await comm.gql_finalize()
 
 
 @pytest.mark.asyncio
-async def test_heavy_load(gql_communicator):
+async def test_heavy_load(gql):
     """Test that server correctly processes many simultaneous requests.
 
     Send many requests simultaneously and make sure all of them have
@@ -97,9 +96,8 @@ async def test_heavy_load(gql_communicator):
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql_communicator(Query)
-    await comm.gql_connect()
-    await comm.gql_init()
+    comm = gql(query=Query)
+    await comm.gql_connect_and_init()
 
     # NOTE: Larger numbers may lead to errors thrown from `select`.
     REQUESTS_NUMBER = 1000
@@ -124,7 +122,7 @@ async def test_heavy_load(gql_communicator):
         # Expect two messages for each one we have sent.
         expected_responses.add((op_id, "data"))
         expected_responses.add((op_id, "complete"))
-        receive_waitlist += [comm.gql_receive(), comm.gql_receive()]
+        receive_waitlist += [comm.receive_json_from(), comm.receive_json_from()]
 
     await asyncio.wait(send_waitlist)
     responses, _ = await asyncio.wait(receive_waitlist)
@@ -136,7 +134,7 @@ async def test_heavy_load(gql_communicator):
     assert not expected_responses, "Not all expected responses received!"
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_assert_no_response(
+    await comm.gql_assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
     await comm.gql_finalize()

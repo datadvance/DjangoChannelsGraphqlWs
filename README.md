@@ -174,6 +174,17 @@ application = channels.routing.ProtocolTypeRouter({
 
 This gives you a Django user `info.context.user` in all the resolvers.
 
+### Testing
+
+To test GraphQL WebSocket API read the [appropriate page in the Channels
+documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
+
+In order to simplify testing we also provide a class
+`channels_graphql_ws.testing.GraphqlWsCommunicator` (subclass of the
+`channels.testing.WebsocketCommunicator`) which has multiple GraphQL-
+related methods. Check its docstrings and also see [tests](/tests) for
+examples.
+
 ## Alternatives
 
 There is a [Tomáš Ehrlich](https://gist.github.com/tricoder42)

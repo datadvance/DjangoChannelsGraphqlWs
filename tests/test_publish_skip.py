@@ -33,7 +33,7 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_publish_skip(gql_communicator):
+async def test_publish_skip(gql):
     """Test it is possible to skip the broadcast from the `publish`.
 
     Here we send the message to the fake chat server and make sure that
@@ -101,7 +101,7 @@ async def test_publish_skip(gql_communicator):
 
     print("Establish & initialize WebSocket GraphQL connections.")
 
-    comm1 = gql_communicator(
+    comm1 = gql(
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
@@ -109,10 +109,9 @@ async def test_publish_skip(gql_communicator):
             "headers": [(b"cookie", b"sessionid=%s" % uuid.uuid4().hex.encode())]
         },
     )
-    await comm1.gql_connect()
-    await comm1.gql_init()
+    await comm1.gql_connect_and_init()
 
-    comm2 = gql_communicator(
+    comm2 = gql(
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
@@ -120,8 +119,7 @@ async def test_publish_skip(gql_communicator):
             "headers": [(b"cookie", b"sessionid=%s" % uuid.uuid4().hex.encode())]
         },
     )
-    await comm2.gql_connect()
-    await comm2.gql_init()
+    await comm2.gql_connect_and_init()
 
     print("Subscribe to receive a new message notifications.")
 
@@ -133,7 +131,7 @@ async def test_publish_skip(gql_communicator):
             "operationName": "op_name",
         },
     )
-    await comm1.gql_assert_no_response("Subscribe responded with a message!")
+    await comm1.gql_assert_no_messages("Subscribe responded with a message!")
 
     sub_op_id = await comm2.gql_send(
         type="start",
@@ -143,7 +141,7 @@ async def test_publish_skip(gql_communicator):
             "operationName": "op_name",
         },
     )
-    await comm2.gql_assert_no_response("Subscribe responded with a message!")
+    await comm2.gql_assert_no_messages("Subscribe responded with a message!")
 
     print("Send a new message to check we have not received notification about it.")
 
@@ -158,15 +156,15 @@ async def test_publish_skip(gql_communicator):
     await comm1.gql_receive(assert_id=mut_op_id, assert_type="data")
     await comm1.gql_receive(assert_id=mut_op_id, assert_type="complete")
 
-    await comm1.gql_assert_no_response("Self-notification happened!")
+    await comm1.gql_assert_no_messages("Self-notification happened!")
 
     resp = await comm2.gql_receive(assert_id=sub_op_id, assert_type="data")
-    assert resp["payload"]["data"]["on_new_message"]["message"] == "Hi!"
+    assert resp["data"]["on_new_message"]["message"] == "Hi!"
 
-    await comm1.gql_assert_no_response(
+    await comm1.gql_assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
-    await comm2.gql_assert_no_response(
+    await comm2.gql_assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
     await comm1.gql_finalize()
