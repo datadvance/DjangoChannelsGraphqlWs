@@ -25,7 +25,7 @@
     - Notification can be suppressed in the resolver. Useful to avoid
       self-notifications.
 - Optional subscription confirmation message. Necessary to avoid race
-  conditions in the client logic.
+  conditions on the client side.
 
 ## Installation
 
