@@ -57,6 +57,7 @@ library `subscription-transport-ws` (which is used by Apollo).
 import asyncio
 import collections
 import concurrent
+import hashlib
 import traceback
 import types
 
@@ -377,14 +378,19 @@ class Subscription(graphene.ObjectType):
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
 
-        name = f"SUBSCRIPTION-{cls.__module__}...{cls.__qualname__}"
-        # Replace `<` and `>` with underscore `_` to handle `<locals>`
-        # which can appear in the `cls.__qualname__`.
-        name = name.replace("<", "_").replace(">", "_")
+        prefix = GraphqlWsConsumer.group_name_prefix
+        suffix = f"{cls.__module__}.{cls.__qualname__}"
         if group is not None:
-            name += "." + group
+            suffix += "-" + group
 
-        return name
+        # Wrap the suffix into MD5 to guarantee that the length of the
+        # group name is limited. Otherwise Channels will complain about
+        # that the group name is wrong (actually is too long).
+        suffix_md5 = hashlib.md5()
+        suffix_md5.update(suffix.encode("utf-8"))
+        suffix_md5 = suffix_md5.hexdigest()
+
+        return f"{prefix}-{suffix_md5}"
 
 
 class SubscriptionOptions(graphene.types.objecttype.ObjectTypeOptions):
@@ -425,6 +431,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # different clients (within different WebSocket connections)
     # are still processed asynchronously. Useful for tests.
     strict_ordering = False
+
+    # When set to `True` the server will send an empty data message in
+    # response to the subscription. This is needed to let client know
+    # when the subscription activates, so he can be sure he doesn't miss
+    # any notifications. Disabled by default, cause this is an extension
+    # to the original protocol and the client must be tuned accordingly.
+    confirm_subscriptions = False
+
+    # A prefix of the Channel group names used for the subscription
+    # notifications. You may change this to avoid name clashes in the
+    # ASGI backend, e.g. in the Redis.
+    group_name_prefix = "GRAPHQL_WS_SUBSCRIPTION"
 
     async def on_connect(self, payload):
         """Called after CONNECTION_INIT message from client.
@@ -467,9 +485,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Task that sends keepalive messages periodically.
         self._keepalive_task = None
 
-        # Request-processing tasks. When `strict_ordering` is `False`
-        # we spawn an asyncio task per request.
-        self._req_tasks = []
+        # Background tasks. When `strict_ordering` is `False` we spawn
+        # an asyncio task per request or incoming broadcast message.
+        self._background_tasks = []
 
         super().__init__(*args, **kwargs)
 
@@ -511,10 +529,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             for group in self._sids_by_group
         ]
 
-        # Cancel all currently running requests.
-        for req_task in self._req_tasks:
-            req_task.cancel()
-        waitlist += self._req_tasks
+        # Cancel all currently running background tasks.
+        for bg_task in self._background_tasks:
+            bg_task.cancel()
+        waitlist += self._background_tasks
 
         # Stop sending keepalive messages (if enabled).
         if self._keepalive_task is not None:
@@ -526,12 +544,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         self._subscriptions.clear()
         self._sids_by_group.clear()
-        self._req_tasks.clear()
+        self._background_tasks.clear()
 
     async def receive_json(self, content):  # pylint: disable=arguments-differ
         """Process WebSocket message received from the client."""
 
         async def process_message():
+            """Process the message. Can be awaited or spawned."""
             # Extract message type based on which we select how to proceed.
             msg_type = content["type"].upper()
 
@@ -562,9 +581,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             await process_message()
         else:
             background_task = asyncio.create_task(process_message())
-            self._req_tasks.append(background_task)
+            self._background_tasks.append(background_task)
             # Schedule automatic removal from the list when finishes.
-            background_task.add_done_callback(self._req_tasks.remove)
+            background_task.add_done_callback(self._background_tasks.remove)
 
     async def broadcast(self, message):
         """The broadcast message handler.
@@ -575,29 +594,43 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         the observable which makes the subscription process the query
         and notify the client.
         """
-        group = message["group"]
-        serialized_payload = message["payload"]
 
-        def decode_django_model(obj):
-            """MessagePack hook to deserialize the Django model."""
-            if "__djangomodel__" in obj:
-                obj = next(
-                    django.core.serializers.deserialize("json", obj["as_str"])
-                ).object
-            return obj
+        async def process_broadcast():
+            """Process the message. Can be awaited or spawned."""
+            group = message["group"]
+            serialized_payload = message["payload"]
 
-        payload = msgpack.unpackb(
-            serialized_payload, object_hook=decode_django_model, raw=False
-        )
+            def decode_django_model(obj):
+                """MessagePack hook to deserialize the Django model."""
+                if "__djangomodel__" in obj:
+                    obj = next(
+                        django.core.serializers.deserialize("json", obj["as_str"])
+                    ).object
+                return obj
 
-        # Offload trigger to the thread (in threadpool) cause it may
-        # work slowly and do DB operations.
-        db_sync_to_async = channels.db.database_sync_to_async
-        triggers = (
-            db_sync_to_async(self._subscriptions[op_id].trigger)
-            for op_id in self._sids_by_group[group]
-        )
-        await asyncio.wait([trigger(payload) for trigger in triggers])
+            payload = msgpack.unpackb(
+                serialized_payload, object_hook=decode_django_model, raw=False
+            )
+
+            # Offload trigger to the thread (in threadpool) cause it may
+            # work slowly and do DB operations.
+            db_sync_to_async = channels.db.database_sync_to_async
+            triggers = (
+                db_sync_to_async(self._subscriptions[op_id].trigger)
+                for op_id in self._sids_by_group[group]
+            )
+            await asyncio.wait([trigger(payload) for trigger in triggers])
+
+        # If strict ordering is required then simply wait until all the
+        # broadcast messages are sent. Otherwise spawn a task so this
+        # consumer will continue receiving messages.
+        if self.strict_ordering:
+            await process_broadcast()
+        else:
+            background_task = asyncio.create_task(process_broadcast())
+            self._background_tasks.append(background_task)
+            # Schedule automatic removal from the list when finishes.
+            background_task.add_done_callback(self._background_tasks.remove)
 
     async def unsubscribe(self, message):
         """The unsubscribe message handler.
@@ -680,7 +713,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Get the message data.
             op_id = operation_id
             query = payload["query"]
-            operation_name = payload.get("operationName")
+            op_name = payload.get("operationName")
             variables = payload.get("variables", {})
 
             # Local alias for convenience.
@@ -749,7 +782,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     return graphql.graphql(
                         self.schema,
                         request_string=query,
-                        operation_name=operation_name,
+                        operation_name=op_name,
                         variable_values=variables,
                         context_value=context,
                         allow_subscriptions=True,
@@ -770,15 +803,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         except Exception:  # pylint: disable=broad-except
             # Something is wrong - send error message.
-            await self._send_gql_error(operation_id, traceback.format_exc())
+            await self._send_gql_error(op_id, traceback.format_exc())
 
         else:
             # Receiving an observer means the subscription has been
             # processed. Otherwise it is just regular query or mutation.
             if isinstance(result, rx.Observable):
-                # Client subscribed so subscribe to the observable
-                # returned from GraphQL and respond with
-                # the confirmation message.
+                # Client subscribed to a subscription so we subscribe to
+                # the observable returned.
 
                 # Subscribe to the observable.
                 # NOTE: Function `on_next` is called from a thread
@@ -789,6 +821,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # for details.)
                 send_gql_data = async_to_sync(self._send_gql_data)
                 result.subscribe(lambda r: send_gql_data(op_id, r.data, r.errors))
+
+                # Respond with the subscription activation message if
+                # enabled in the consumer configuration.
+                if self.confirm_subscriptions:
+                    await self._send_gql_data(op_id, data=None, errors=None)
             else:
                 # Query or mutation received - send a response
                 # immediately.

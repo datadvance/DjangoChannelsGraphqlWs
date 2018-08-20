@@ -218,7 +218,7 @@ async def test_subscribe_unsubscribe(gql):
 
 
 @pytest.mark.asyncio
-async def test_groups(gql):
+async def test_subscription_groups(gql):
     """Test notifications and subscriptions behavior depending on the
     different subscription groups.
 
@@ -249,7 +249,7 @@ async def test_groups(gql):
             query=Query,
             mutation=Mutation,
             subscription=Subscription,
-            consumer_attrs={"strict_ordering": True},
+            consumer_attrs={"strict_ordering": True, "confirm_subscriptions": True},
         )
         await comm.gql_connect_and_init()
 
@@ -267,6 +267,11 @@ async def test_groups(gql):
                 "operationName": "op_name",
             },
         )
+
+        # Receive the subscription confirmation message.
+        resp = await comm.gql_receive(assert_id=sub_id, assert_type="data")
+        assert resp == {"data": None}
+
         return sub_id, comm
 
     async def trigger_subscription(comm, userId, message):
@@ -313,18 +318,13 @@ async def test_groups(gql):
     print("Initialize the connection, create subscriptions.")
     alice_id = "ALICE"
     tom_id = "TOM"
-    # Subscribe to messages for TOM.
-    uid_tom, comm_tom = await create_and_subscribe(tom_id)
     # Subscribe to messages for Alice.
     uid_alice, comm_alice = await create_and_subscribe(alice_id)
+    # Subscribe to messages for TOM.
+    uid_tom, comm_tom = await create_and_subscribe(tom_id)
 
     print("Trigger subscription: send message to Tom.")
     message = "Hi, Tom!"
-    # Note: Strictly speaking, we do not have confidence that `comm_tom`
-    # had enough time to subscribe. So Tom may not be able to receive
-    # a message from Alice. But in this simple test, we performed the
-    # Tom's subscription before the Alice's subscription and
-    # that should be enough.
     await trigger_subscription(comm_alice, tom_id, message)
     # Check Tom's notifications.
     resp = await comm_tom.gql_receive(assert_id=uid_tom, assert_type="data")
