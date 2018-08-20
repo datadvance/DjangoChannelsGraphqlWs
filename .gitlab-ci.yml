@@ -18,7 +18,7 @@ build_and_test:
             pip install --progress-bar off poetry
             poetry install
             poetry build
-            poetry run pytest -o console_output_style=classic
+            poetry run pytest
     tags:
         - python3.7
 

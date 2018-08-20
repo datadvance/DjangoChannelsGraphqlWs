@@ -1,14 +1,31 @@
 # Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
 
+- [Django Channels based WebSocket GraphQL server with Graphene-like subscriptions](#django-channels-based-websocket-graphql-server-with-graphene-like-subscriptions)
+    - [Features](#features)
+    - [Installation](#installation)
+    - [Getting started](#getting-started)
+    - [Details](#details)
+        - [Automatic Django model serialization](#automatic-django-model-serialization)
+        - [Execution](#execution)
+        - [Authentication](#authentication)
+        - [Testing](#testing)
+        - [Subscription activation confirmation](#subscription-activation-confirmation)
+    - [Alternatives](#alternatives)
+    - [Development](#development)
+    - [Contributing](#contributing)
+    - [Acknowledgements](#acknowledgements)
+
 ## Features
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
 - Graphene-like subscriptions.
 - Parallel execution of requests.
 - Customizable notification strategies:
-  - Single subscription can be put to multiple subscription groups.
-  - Notification can be suppressed in the resolver. Useful to avoid
-    self-notifications.
+    - Single subscription can be put to multiple subscription groups.
+    - Notification can be suppressed in the resolver. Useful to avoid
+      self-notifications.
+    - Optional subscription confirmation message. Necessary to avoid race
+      conditions in the client logic.
 
 ## Installation
 
@@ -35,16 +52,18 @@ class MySubscription(channels_graphql_ws.Subscription):
         arg1 = graphene.String()
         arg2 = graphene.String()
 
-    def subscribe(self, info, arg1, arg2):
+    @staticmethod
+    def subscribe(root, info, arg1, arg2):
         """Called when user subscribes."""
 
         # Return the list of subscription group names.
         return ['group42']
 
-    def publish(self, info, arg1, arg2):
+    @staticmethod
+    def publish(payload, info, arg1, arg2):
         """Called to notify the client."""
 
-        # Here `self` contains the `payload` from the `broadcast()`
+        # Here `payload` contains the `payload` from the `broadcast()`
         # invocation (see below). You can return `MySubscription.SKIP`
         # if you wish to suppress the notification to a particular
         # client. For example, this allows to avoid notifications for
@@ -108,7 +127,7 @@ Notify clients when some event happens:
 MySubscription.broadcast(
     # Subscription group to notify clients in.
     group='group42',
-    # Dict delivered to the `publish` method as the `self` argument.
+    # Dict delivered to the `publish` method.
     payload={},
 )
 ```
@@ -194,6 +213,22 @@ In order to simplify testing we also provide a class
 `channels.testing.WebsocketCommunicator`) which has multiple GraphQL-
 related methods. Check its docstrings and also see [tests](/tests) for
 examples.
+
+### Subscription activation confirmation
+
+The original Apollo's protocol does not allow client to know when a
+subscription activates. This inevitable leads to the race conditions on
+the client side. Sometimes it is not that crucial, but there are cases
+when this leads to serious issues. [Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
+in the [`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
+tracker.
+
+To solve this problem, there is the `GraphqlWsConsumer` setting
+`confirm_subscriptions` which when set to `True` will make the consumer
+issue an additional `data` message which confirms the subscription
+activation. Please note, you have to modify the client's code to make it
+consume this message, otherwise it will be mistakenly considered as the
+first subscription notification.
 
 ## Alternatives
 
