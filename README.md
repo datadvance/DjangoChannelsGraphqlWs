@@ -19,13 +19,13 @@
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
 - Graphene-like subscriptions.
-- Parallel execution of requests.
+- Parallel (asynchronous) requests execution.
 - Customizable notification strategies:
     - Single subscription can be put to multiple subscription groups.
     - Notification can be suppressed in the resolver. Useful to avoid
       self-notifications.
-    - Optional subscription confirmation message. Necessary to avoid race
-      conditions in the client logic.
+- Optional subscription confirmation message. Necessary to avoid race
+  conditions in the client logic.
 
 ## Installation
 
