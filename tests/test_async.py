@@ -150,9 +150,10 @@ class LongMutation(graphene.Mutation, name="LongMutationPayload"):
 
     is_ok = graphene.Boolean()
 
-    async def mutate(self, info):
+    @staticmethod
+    async def mutate(root, info):
         """Sleep until `wakeup` event is set."""
-        del info
+        del root, info
         wakeup.wait()
         return LongMutation(True)
 
@@ -168,9 +169,10 @@ class Query(graphene.ObjectType):
 
     fast_op = graphene.Boolean()
 
-    async def resolve_fast_op(self, info):
+    @staticmethod
+    async def resolve_fast_op(root, info):
         """Simple instant resolver."""
-        del info
+        del root, info
         return True
 
 

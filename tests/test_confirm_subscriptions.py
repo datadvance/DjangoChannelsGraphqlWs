@@ -40,19 +40,17 @@ async def test_confirm_subscriptions(gql):
     message.
     """
 
-    # Graphene abuses Python syntax so disable relevant PyLint checks.
-    # pylint: disable=arguments-differ, no-self-use
-    # pylint: disable=unsubscriptable-object,missing-docstring
-
     print("Prepare the test setup: GraphQL backend classes.")
 
     class Trigger(graphene.Mutation):
+        """Trigger the subscription."""
+
         is_ok = graphene.Boolean()
 
-        @classmethod
-        def mutate(cls, instance, info):
+        @staticmethod
+        def mutate(root, info):
             """Trigger the subscription."""
-            del instance, info
+            del root, info
             OnTrigger.broadcast()
             return Trigger(is_ok=True)
 
@@ -61,16 +59,20 @@ async def test_confirm_subscriptions(gql):
 
         is_ok = graphene.Boolean()
 
-        @classmethod
-        def publish(cls, instance, info):
+        @staticmethod
+        def publish(payload, info):
             """Send the subscription notification."""
-            del instance
+            del payload, info
             return OnTrigger(is_ok=True)
 
     class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
         on_trigger = OnTrigger.Field()
 
     class Mutation(graphene.ObjectType):
+        """Root mutation."""
+
         trigger = Trigger.Field()
 
     print("Establish WebSocket GraphQL connections w/o a subscription confirmation.")

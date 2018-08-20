@@ -1,3 +1,5 @@
+# Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
+
 - [Django Channels based WebSocket GraphQL server with Graphene-like subscriptions](#django-channels-based-websocket-graphql-server-with-graphene-like-subscriptions)
     - [Features](#features)
     - [Installation](#installation)
@@ -13,19 +15,17 @@
     - [Contributing](#contributing)
     - [Acknowledgements](#acknowledgements)
 
-# Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
-
 ## Features
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
 - Graphene-like subscriptions.
 - Parallel execution of requests.
 - Customizable notification strategies:
-  - Single subscription can be put to multiple subscription groups.
-  - Notification can be suppressed in the resolver. Useful to avoid
-    self-notifications.
-- Optional subscription confirmation message. Necessary to avoid race
-  conditions in the client logic.
+    - Single subscription can be put to multiple subscription groups.
+    - Notification can be suppressed in the resolver. Useful to avoid
+      self-notifications.
+    - Optional subscription confirmation message. Necessary to avoid race
+      conditions in the client logic.
 
 ## Installation
 
@@ -52,16 +52,18 @@ class MySubscription(channels_graphql_ws.Subscription):
         arg1 = graphene.String()
         arg2 = graphene.String()
 
-    def subscribe(self, info, arg1, arg2):
+    @staticmethod
+    def subscribe(root, info, arg1, arg2):
         """Called when user subscribes."""
 
         # Return the list of subscription group names.
         return ['group42']
 
-    def publish(self, info, arg1, arg2):
+    @staticmethod
+    def publish(payload, info, arg1, arg2):
         """Called to notify the client."""
 
-        # Here `self` contains the `payload` from the `broadcast()`
+        # Here `payload` contains the `payload` from the `broadcast()`
         # invocation (see below). You can return `MySubscription.SKIP`
         # if you wish to suppress the notification to a particular
         # client. For example, this allows to avoid notifications for
@@ -125,7 +127,7 @@ Notify clients when some event happens:
 MySubscription.broadcast(
     # Subscription group to notify clients in.
     group='group42',
-    # Dict delivered to the `publish` method as the `self` argument.
+    # Dict delivered to the `publish` method.
     payload={},
 )
 ```

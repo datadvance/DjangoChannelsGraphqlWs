@@ -88,23 +88,70 @@ class Subscription(graphene.ObjectType):
     works with `GraphqlWsConsumer` which maintains a WebSocket
     connection with the client.
 
-    The subclass specifies the following methods.
-        publish: Called when subscription triggers. Method signature is
-            the same as in other GraphQL "resolver" methods, except that
-            the `self` argument holds the payload specified in the
-            `broadcast` invocation triggered the subscription. Required.
-        subscribe: Method called when client subscribes. Method
-            signature is the same as in other GraphQL "resolver" methods
-            but it must return names of subscription groups to put
-            subscription into. Optional.
-        unsubscribed: Called when user unsubscribes. Method signature is
-            the same as in other GraphQL "resolver" methods. Optional.
+    The subclass specifies the following methods. You can define each of
+    them as a `@classmethod`, as a `@staticmethod`, or even as a regular
+    method (like Graphene typically does). It shall work fine either
+    way. NOTE, if you define the method as a regular method (not a
+    classmethod or a staticmethod) you will receive the first argument
+    (`payload`/`root`) into the `self` argument.
+
+        publish(payload, info, *args, **kwds):
+            This method invoked each time subscription "triggers".
+            Raising an exception here will lead to sending the
+            notification with the error. To suppress the notification
+            return `Subscription.SKIP`.
+            Required.
+
+            Args:
+                payload: The `payload` from the `broadcast` invocation.
+                info: The value of `info.context` is a Channels
+                    websocket context with all the connection
+                    information.
+                args, kwds: Values of the GraphQL subscription inputs.
+            Returns:
+                The same the any Graphene resolver returns. Returning
+                a special object `Subscription.SKIP` indicates that this
+                notification shall not be sent to the client at all.
+
+        subscribe(root, info, *args, **kwds):
+            Called when client subscribes. Define this to do some extra
+            work when client subscribes and to group subscriptions into
+            different subscription groups. Method signature is the same
+            as in other GraphQL "resolver" methods but it may return
+            the subscription groups names to put the subscription into.
+            Optional.
+
+            Args:
+                root: Root resolver object. Typically `None`.
+                info: The value of `info.context` is a Channels
+                    websocket context with all the connection
+                    information.
+                args, kwds: Values of the GraphQL subscription inputs.
+
+            Returns:
+                The list or tuple of subscription group names this
+                subscription instance belongs to. Later the subscription
+                will trigger on publishes to any of that groups. If method
+                returns None (default behavior) then the subscription is
+                only put to the default group (the one which corresponds to
+                the `Subscription` subclass).
+
+        unsubscribed(root, info, *args, **kwds):
+            Called when client unsubscribes. Define this to be notified
+            when client unsubscribes. Optional.
+
+            Args:
+                root: Always `None`.
+                info: The value of `info.context` is a Channels
+                    websocket context with all the connection
+                    information.
+                args, kwds: Values of the GraphQL subscription inputs.
 
     The methods enlisted above receives "standard" set of GraphQL
-    resolver arguments (`self, info, ...`). The `info` field has
-    `context` which can be used to transmit some useful payload between
-    these methods. For example if `subscribe` sets `info.context.zen=42`
-    then `publish` will have access to this value `info.context.zen`.
+    resolver arguments. The `info` field has `context` which can be used
+    to transmit some useful payload between these methods. For example
+    if `subscribe` sets `info.context.zen=42` then `publish` will have
+    access to this value as `info.context.zen`.
 
     Static methods of subscription subclass:
         broadcast: Call this method to notify all subscriptions in the
@@ -115,63 +162,8 @@ class Subscription(graphene.ObjectType):
 
     # ----------------------------------------------------------------------- PUBLIC API
 
-    def publish(self, info, *args, **kwds):
-        """GraphQL resolver for subscription notifications.
-
-        Overwrite this to "resolve" subscription query. This method
-        invoked each time subscription "triggers". Raising an exception
-        here will lead to sending the notification with the error. To
-        suppress the notification return `Subscription.SKIP`.
-
-        Args:
-            self: The value provided as `payload` when `publish` called.
-            info: The value of `info.context` is a Channels websocket
-                context with all the connection information.
-            args, kwds: Values of the GraphQL subscription inputs.
-        Returns:
-            The same the any Graphene resolver returns. Returning
-            a special object `Subscription.SKIP` indicates that this
-            notification shall not be sent to the client at all.
-        """
-        raise NotImplementedError()
-
     # Return this from the `publish` to suppress the notification.
     SKIP = object()
-
-    def subscribe(self, info, *args, **kwds):
-        """Called when client subscribes.
-
-        Overwrite this to do some extra work when client subscribes and
-        to groups subscriptions into different subscription groups.
-
-        Args:
-            self: Typically `None`.
-            info: The value of `info.context` is a Channels websocket
-                context with all the connection information.
-            args, kwds: Values of the GraphQL subscription inputs.
-
-        Returns:
-            The list or tuple of subscription group names this
-            subscription instance belongs to. Later the subscription
-            will trigger on publishes to any of that groups. If method
-            returns None (default behavior) then the subscription is
-            only put to the default group (the one which corresponds to
-            the `Subscription` subclass).
-        """
-        pass
-
-    def unsubscribed(self, info, *args, **kwds):
-        """Called when client unsubscribes.
-
-        Overwrite to be notified when client unsubscribes.
-
-        Args:
-            self: None
-            info: The value of `info.context` is a Channels websocket
-                context with all the connection information.
-            args, kwds: Values of the GraphQL subscription inputs.
-        """
-        pass
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
@@ -190,8 +182,7 @@ class Subscription(graphene.ObjectType):
             group: Name of the subscription group which members must be
                 notified. `None` means that all the subscriptions of
                 type will be triggered.
-            payload: The payload delivered to the `publish` handler as
-                the `self` argument.
+            payload: The payload delivered to the `publish` handler.
         """
 
         # Manually serialize the payload with the MessagePack
@@ -303,15 +294,15 @@ class Subscription(graphene.ObjectType):
                 arguments = {}
 
         # Get `publish`, `subscribe`, and `unsubscribe` handlers.
-        subscribe = subscribe or getattr(cls, "subscribe")
-        publish = publish or getattr(cls, "publish")
-        assert publish is not Subscription.publish, (
-            f"Subscription `{cls.__qualname__}` does not define a "
-            "method `publish`! All subscriptions must define "
-            "`publish` which processes a GraphQL query!"
+        subscribe = subscribe or getattr(cls, "subscribe", None)
+        publish = publish or getattr(cls, "publish", None)
+        assert publish is not None, (
+            f"Subscription `{cls.__qualname__}` does not define a"
+            " method `publish`! All subscriptions must define"
+            " `publish` which processes a GraphQL query!"
         )
 
-        unsubscribed = unsubscribed or getattr(cls, "unsubscribed")
+        unsubscribed = unsubscribed or getattr(cls, "unsubscribed", None)
 
         if _meta.fields:
             _meta.fields.update(fields)
@@ -352,11 +343,13 @@ class Subscription(graphene.ObjectType):
 
         # Invoke the subclass-specified `subscribe` method to get the
         # groups subscription must be attached to.
-        subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
-        subclass_groups = subclass_groups or []
-        assert isinstance(
-            subclass_groups, (list, tuple)
-        ), "Subscribe must return a list or a tuple of group names!"
+        if cls._meta.subscribe is not None:
+            subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
+            assert isinstance(
+                subclass_groups, (list, tuple)
+            ), "Subscribe must return a list or a tuple of group names!"
+        else:
+            subclass_groups = []
 
         groups += [cls._group_name(group) for group in subclass_groups]
 
@@ -365,12 +358,13 @@ class Subscription(graphene.ObjectType):
         # be returned from here, cause that is what GraphQL expects from
         # the subscription "resolver" functions.
         def publish_callback(payload):
-            """Call `publish` with the payload as `self`."""
+            """Call `publish` with the payload."""
             return cls._meta.publish(payload, info, *args, **kwds)
 
         def unsubscribed_callback():
-            """Call `unsubscribed` with `None` as `self`."""
-            return cls._meta.unsubscribed(None, info, *args, **kwds)
+            """Call `unsubscribed` with `None`."""
+            if cls._meta.unsubscribed is not None:
+                cls._meta.unsubscribed(None, info, *args, **kwds)
 
         return register(groups, publish_callback, unsubscribed_callback)
 

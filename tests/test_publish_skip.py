@@ -44,10 +44,6 @@ async def test_publish_skip(gql):
     suppresses the notification.
     """
 
-    # Graphene abuses Python syntax so disable relevant PyLint checks.
-    # pylint: disable=arguments-differ, no-self-use
-    # pylint: disable=unsubscriptable-object,missing-docstring
-
     print("Prepare the test setup: GraphQL backend classes.")
 
     def sessionid_from_headers(headers):
@@ -67,13 +63,19 @@ async def test_publish_skip(gql):
         return sessionid
 
     class SendMessage(graphene.Mutation):
+        """Send message mutation."""
+
         is_ok = graphene.Boolean()
 
         class Arguments:
+            """Mutation arguments."""
+
             message = graphene.String()
 
-        def mutate(self, info, message):
-            # Broadcast the message-author pair.
+        @staticmethod
+        def mutate(root, info, message):
+            """Broadcast the message-author pair."""
+            del root
             OnNewMessage.broadcast(
                 payload={
                     "author_sessionid": sessionid_from_headers(info.context.headers),
@@ -83,20 +85,27 @@ async def test_publish_skip(gql):
             return SendMessage(is_ok=True)
 
     class OnNewMessage(channels_graphql_ws.Subscription):
+        """Triggered by `SendMessage` on every new message."""
 
         message = graphene.String()
 
-        def publish(self, info):
+        @staticmethod
+        def publish(payload, info):
             """Notify all clients except the author of the message."""
-            if self["author_sessionid"] == sessionid_from_headers(info.context.headers):
+            sessionid = sessionid_from_headers(info.context.headers)
+            if payload["author_sessionid"] == sessionid:
                 return OnNewMessage.SKIP
 
-            return OnNewMessage(message=self["message"])
+            return OnNewMessage(message=payload["message"])
 
     class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
         on_new_message = OnNewMessage.Field()
 
     class Mutation(graphene.ObjectType):
+        """Root mutation."""
+
         send_message = SendMessage.Field()
 
     print("Establish & initialize WebSocket GraphQL connections.")

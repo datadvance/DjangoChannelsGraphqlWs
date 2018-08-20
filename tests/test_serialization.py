@@ -40,10 +40,6 @@ async def test_serialization(gql, transactional_db):
 
     del transactional_db
 
-    # Graphene abuses Python syntax so disable relevant PyLint checks.
-    # pylint: disable=arguments-differ, no-self-use
-    # pylint: disable=unsubscriptable-object,missing-docstring
-
     # Get Django user model class without referencing it directly:
     # https://docs.djangoproject.com/en/dev/topics/auth/customizing/#referencing-the-user-model
     User = django.contrib.auth.get_user_model()
@@ -60,8 +56,10 @@ async def test_serialization(gql, transactional_db):
 
         is_ok = graphene.Boolean()
 
-        def mutate(self, info):
-            del info
+        @staticmethod
+        def mutate(root, info):
+            """Send models in the `payload` to the `publish` method."""
+            del root, info
             # Broadcast models inside a dictionary.
             OnModelsReceived.broadcast(
                 payload={
@@ -81,10 +79,12 @@ async def test_serialization(gql, transactional_db):
         user1_typename = graphene.String()
         user2_typename = graphene.String()
 
-        def publish(self, info):
+        @staticmethod
+        def publish(payload, info):
             """Publish models info so test can check it."""
-            user1 = self["user1"]
-            user2 = self["user2"]
+            del info
+            user1 = payload["user1"]
+            user2 = payload["user2"]
             return OnModelsReceived(
                 user1_id=user1.id,
                 user2_id=user2.id,
@@ -95,9 +95,13 @@ async def test_serialization(gql, transactional_db):
             )
 
     class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
         on_models_received = OnModelsReceived.Field()
 
     class Mutation(graphene.ObjectType):
+        """Root mutation."""
+
         send_model = SendModels.Field()
 
     print("Establish & initialize WebSocket GraphQL connections.")
