@@ -345,9 +345,13 @@ class Subscription(graphene.ObjectType):
         # groups subscription must be attached to.
         if cls._meta.subscribe is not None:
             subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
-            assert isinstance(
+            assert subclass_groups is None or isinstance(
                 subclass_groups, (list, tuple)
-            ), "Subscribe must return a list or a tuple of group names!"
+            ), (
+                f"Method `subscribe` returned a value of an incorrect type"
+                f" {type(subclass_groups)}! A list, a tuple, or `None` expected."
+            )
+            subclass_groups = subclass_groups or []
         else:
             subclass_groups = []
 

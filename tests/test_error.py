@@ -23,7 +23,6 @@
 
 """Check different error cases."""
 
-# NOTE: The GraphQL schema is defined at the end of the file.
 # NOTE: In this file we use `strict_ordering=True` to simplify testing.
 
 import textwrap
@@ -31,6 +30,8 @@ import uuid
 
 import graphene
 import pytest
+
+import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -43,6 +44,24 @@ async def test_error_cases(gql):
     when there was an exceptional situation, for example, field `query`
     of `payload` is missing or field `type` has a wrong value.
     """
+
+    print("Setup test GraphQL backend.")
+
+    class Query(graphene.ObjectType):
+        """Root GraphQL query."""
+
+        VALUE = str(uuid.uuid4().hex)
+        value = graphene.String(
+            args={"issue_error": graphene.Boolean(default_value=False)}
+        )
+
+        def resolve_value(self, info, issue_error):
+            """Resolver to return predefined value which can be tested."""
+            del info
+            assert self is None, "Root `self` expected to be `None`!"
+            if issue_error:
+                raise RuntimeError(Query.VALUE)
+            return Query.VALUE
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(query=Query)
@@ -161,19 +180,94 @@ async def test_connection_error(gql):
     await comm.gql_finalize()
 
 
-# ---------------------------------------------------------------------- GRAPHQL BACKEND
+@pytest.mark.asyncio
+async def test_subscribe_return_value(gql):
+    """Assure the return value of the `subscribe` method is checked.
 
+    - Check there is no error when `subscribe` returns nothing, a list
+      or a tuple.
+    - Check there is an `AssertionError` when `subscribe` returns
+      a dict, a string or an empty string.
+    """
 
-class Query(graphene.ObjectType):
-    """Root GraphQL query."""
+    class TestSubscription(channels_graphql_ws.Subscription):
+        """Test subscription with a "special" `subscribe` method.
 
-    VALUE = str(uuid.uuid4().hex)
-    value = graphene.String(args={"issue_error": graphene.Boolean(default_value=False)})
+        The `subscribe` method returns values of different types
+        depending on the subscription parameter `switch`.
+        """
 
-    def resolve_value(self, info, issue_error):
-        """Resolver to return predefined value which can be tested."""
-        del info
-        assert self is None, "Root `self` expected to be `None`!"
-        if issue_error:
-            raise RuntimeError(Query.VALUE)
-        return Query.VALUE
+        # Returning different values (even `None`) from the `subscribe`
+        # method is the main idea of this test. Make PyLint ignore this.
+        # pylint: disable=inconsistent-return-statements
+
+        ok = graphene.Boolean()
+
+        class Arguments:
+            """Argument which controls `subscribe` result value."""
+
+            switch = graphene.String()
+
+        @staticmethod
+        def subscribe(root, info, switch):
+            """This returns nothing which must be OK."""
+            del root, info
+            if switch == "NONE":
+                return None
+            if switch == "LIST":
+                return ["group"]
+            if switch == "TUPLE":
+                return ("group",)
+            if switch == "STR":
+                return "group"
+            if switch == "DICT":
+                return "group"
+            if switch == "EMPTYSTR":
+                return ""
+
+        @staticmethod
+        def publish(payload, info):
+            """We will never get here in this test."""
+            del payload, info
+            assert False
+
+    class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
+        test_subscription = TestSubscription.Field()
+
+    print("Check there is no error when `subscribe` returns nothing, list, or tuple.")
+
+    for result_type in ["NONE", "LIST", "TUPLE"]:
+
+        comm = gql(subscription=Subscription)
+        await comm.gql_connect_and_init()
+        await comm.gql_send(
+            type="start",
+            payload={
+                "query": """subscription { test_subscription (switch: "%s") { ok } }"""
+                % result_type
+            },
+        )
+        await comm.gql_assert_no_messages("Subscribe responded with a message!")
+        await comm.gql_finalize()
+
+    print("Check there is a error when `subscribe` returns string or dict.")
+
+    for result_type in ["STR", "DICT", "EMPTYSTR"]:
+        comm = gql(subscription=Subscription)
+        await comm.gql_connect_and_init()
+        msg_id = await comm.gql_send(
+            type="start",
+            payload={
+                "query": """subscription { test_subscription (switch: "%s") { ok } }"""
+                % result_type
+            },
+        )
+        resp = await comm.gql_receive(
+            assert_id=msg_id, assert_type="data", assert_no_errors=False
+        )
+        assert (
+            "AssertionError" in resp["errors"][0]["message"]
+        ), "There is no error in response to the wrong type of the `subscribe` result!"
+        await comm.gql_finalize()
