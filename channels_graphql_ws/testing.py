@@ -29,13 +29,12 @@ import uuid
 import channels.testing
 
 
-# Increase default `channels.testing.WebsocketCommunicator` timeout to
-# avoid errors on slow machines.
-TIMEOUT = 5
-
-
 class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
     """Auxiliary communicator with extra GraphQL-related methods."""
+
+    # Increase default `channels.testing.WebsocketCommunicator` timeout
+    # to avoid errors on slow machines.
+    TIMEOUT = 5
 
     def __init__(self, *args, **kwds):
         kwds.setdefault("subprotocols", ["graphql-ws"])
@@ -48,7 +47,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
         1. Establish WebSocket connection checking the subprotocol.
         2. Initialize GraphQL connection. Skipped if connect_only=True.
         """
-        connected, subprotocol = await self.connect(timeout=TIMEOUT)
+        connected, subprotocol = await self.connect(timeout=self.TIMEOUT)
         assert connected, "Could not connect to the GraphQL subscriptions WebSocket!"
         assert subprotocol == "graphql-ws", "Wrong subprotocol received!"
 
@@ -57,6 +56,7 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
             resp = await self.receive_json_from()
             assert resp["type"] == "connection_ack", f"Unexpected response `{resp}`!"
 
+    # Default value for `id`, because `None` is also a valid value.
     AUTO = object()
 
     async def gql_send(self, *, id=AUTO, type=None, payload=None):
@@ -135,8 +135,8 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
     async def gql_finalize(self):
         """Disconnect and wait the application to finish gracefully."""
 
-        await self.disconnect(timeout=TIMEOUT)
-        await self.wait(timeout=TIMEOUT)
+        await self.disconnect(timeout=self.TIMEOUT)
+        await self.wait(timeout=self.TIMEOUT)
 
     async def gql_assert_no_messages(self, message=None):
         """Assure no response received."""
@@ -147,6 +147,8 @@ class GraphqlWsCommunicator(channels.testing.WebsocketCommunicator):
             else f"Message received when nothing expected!"
         )
 
-    async def receive_json_from(self, timeout=TIMEOUT):
+    async def receive_json_from(self, timeout=None):
         """Overwrite to tune the `timeout` argument."""
+        if timeout is None:
+            timeout = self.TIMEOUT
         return await super().receive_json_from(timeout)
