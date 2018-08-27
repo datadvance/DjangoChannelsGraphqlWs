@@ -58,6 +58,7 @@ import asyncio
 import collections
 import concurrent
 import hashlib
+import logging
 import traceback
 import types
 
@@ -79,6 +80,10 @@ import msgpack
 from namedlist import namedlist
 import promise
 import rx
+
+
+# Module logger.
+log = logging.getLogger(__name__)
 
 
 class Subscription(graphene.ObjectType):
@@ -437,6 +442,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # to the original protocol and the client must be tuned accordingly.
     confirm_subscriptions = False
 
+    # The message sent to the client when subscription activation
+    # confirmation is enabled.
+    subscription_confirmation_message = {"data": None, "errors": None}
+
     # A prefix of the Channel group names used for the subscription
     # notifications. You may change this to avoid name clashes in the
     # ASGI backend, e.g. in the Redis.
@@ -513,7 +522,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def disconnect(self, code):
         """WebSocket disconnection handler."""
-        del code
+
+        # Print debug or warning message depending on the value of the
+        # connection close code. We consider all reserver codes (<999),
+        # 1000 "Normal Closure", and 1001 "Going Away" as OK.
+        # See: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+        if code <= 1001:
+            log.debug("WebSocket connection closed with code: %s.", code)
+        else:
+            log.warning("WebSocket connection closed with code: %s!", code)
 
         # Remove itself from the Channels groups, clear triggers and
         # stop sending keepalive messages.
@@ -823,7 +840,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # Respond with the subscription activation message if
                 # enabled in the consumer configuration.
                 if self.confirm_subscriptions:
-                    await self._send_gql_data(op_id, data=None, errors=None)
+                    await self._send_gql_data(
+                        op_id,
+                        data=self.subscription_confirmation_message["data"],
+                        errors=self.subscription_confirmation_message["errors"],
+                    )
             else:
                 # Query or mutation received - send a response
                 # immediately.

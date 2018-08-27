@@ -33,7 +33,7 @@
 
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.1.14"
+version = "0.1.15"
 description = """Django Channels based WebSocket GraphQL server with \
                  Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
