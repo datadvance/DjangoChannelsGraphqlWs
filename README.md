@@ -230,6 +230,11 @@ activation. Please note, you have to modify the client's code to make it
 consume this message, otherwise it will be mistakenly considered as the
 first subscription notification.
 
+To customize the confirmation message itself set the `GraphqlWsConsumer`
+setting `subscription_confirmation_message`. It must be a dictionary
+with two keys `"data"` and `"errors"`. By default it is set to
+`{"data": None, "errors": None}`.
+
 ## Alternatives
 
 There is a [Tomáš Ehrlich](https://gist.github.com/tricoder42)
