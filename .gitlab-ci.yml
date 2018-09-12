@@ -7,10 +7,16 @@
 # List of available environment variables:
 # https://docs.gitlab.com/ce/ci/variables/README.html
 
+# CI stages.
+stages:
+    - build
+    - pages
+
 variables:
     PIP_PROXY: http://nexus.macros:8081/repository/pypi-proxy/simple/
 
 build:
+    stage: build
     script:
         - |
             pip config set global.index-url $PIP_PROXY
@@ -22,21 +28,20 @@ build:
     coverage: '/\d+\%\s*$/'
     artifacts:
         paths:
-            - dist
-            - htmlcov
+            - dist/
+            - htmlcov/
         expire_in: 30 days
     tags:
         - python3.7
 
 pages:
+    stage: pages
     script:
         - mkdir -p public
         - cp -rf htmlcov/* public/
-    dependencies:
-        - build
     artifacts:
         paths:
-            - public
+            - public/
         expire_in: 30 days
     only:
         - master
