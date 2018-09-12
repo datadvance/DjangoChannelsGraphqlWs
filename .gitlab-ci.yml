@@ -45,3 +45,5 @@ pages:
         expire_in: 30 days
     only:
         - master
+    tags:
+        - python3.7
