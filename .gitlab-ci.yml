@@ -15,7 +15,7 @@ stages:
 variables:
     PIP_PROXY: http://nexus.macros:8081/repository/pypi-proxy/simple/
 
-build:
+build_&_test:
     stage: build
     script:
         - |
