@@ -10,7 +10,7 @@
 variables:
     PIP_PROXY: http://nexus.macros:8081/repository/pypi-proxy/simple/
 
-build_and_test:
+build:
     script:
         - |
             pip config set global.index-url $PIP_PROXY
@@ -18,10 +18,25 @@ build_and_test:
             pip install --progress-bar off poetry
             poetry install
             poetry build
-            poetry run pytest
+            poetry run pytest --cov-format=term --cov-format=html
     coverage: '/\d+\%\s*$/'
+    artifacts:
+        paths:
+            - dist
+            - htmlcov
+        expire_in: 30 days
     tags:
         - python3.7
 
-
-
+pages:
+    script:
+        - mkdir -p public
+        - cp -rf htmlcov/* public/
+    dependencies:
+        - build
+    artifacts:
+        paths:
+            - public
+        expire_in: 30 days
+    only:
+        - master
