@@ -19,6 +19,7 @@ build_and_test:
             poetry install
             poetry build
             poetry run pytest
+    coverage: '/\d+\%\s*$/'
     tags:
         - python3.7
 
