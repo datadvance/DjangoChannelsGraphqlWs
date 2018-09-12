@@ -24,7 +24,7 @@ build_&_test:
             pip install --progress-bar off poetry
             poetry install
             poetry build
-            poetry run pytest --cov-format=term --cov-format=html
+            poetry run pytest --cov-report=term --cov-report=html
     coverage: '/\d+\%\s*$/'
     artifacts:
         paths:
