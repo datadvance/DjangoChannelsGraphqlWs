@@ -798,8 +798,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         self.schema,
                         request_string=query,
                         operation_name=op_name,
-                        variable_values=variables,
-                        context_value=context,
+                        variables=variables,
+                        context=context,
                         allow_subscriptions=True,
                         executor=graphql.execution.executors.asyncio.AsyncioExecutor(
                             loop

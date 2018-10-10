@@ -30,3 +30,5 @@ subscriptions.
 
 from .graphql_ws import Subscription
 from .graphql_ws import GraphqlWsConsumer
+from .client import GraphqlWsClient, GraphqlWsResponseError
+from .transport import GraphqlWsTransportAiohttp

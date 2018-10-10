@@ -141,7 +141,7 @@ async def test_serialization(gql, transactional_db):
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await comm.gql_receive(assert_id=sub_id)
+    models_info = await comm.gql_receive_assert(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user1_id"] == user1_id
     assert models_info["user2_id"] == user2_id

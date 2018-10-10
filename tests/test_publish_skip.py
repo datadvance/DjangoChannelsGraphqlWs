@@ -162,12 +162,12 @@ async def test_publish_skip(gql):
             "operationName": "op_name",
         },
     )
-    await comm1.gql_receive(assert_id=mut_op_id, assert_type="data")
-    await comm1.gql_receive(assert_id=mut_op_id, assert_type="complete")
+    await comm1.gql_receive_assert(assert_id=mut_op_id, assert_type="data")
+    await comm1.gql_receive_assert(assert_id=mut_op_id, assert_type="complete")
 
     await comm1.gql_assert_no_messages("Self-notification happened!")
 
-    resp = await comm2.gql_receive(assert_id=sub_op_id, assert_type="data")
+    resp = await comm2.gql_receive_assert(assert_id=sub_op_id, assert_type="data")
     assert resp["data"]["on_new_message"]["message"] == "Hi!"
 
     await comm1.gql_assert_no_messages(

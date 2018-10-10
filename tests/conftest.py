@@ -116,7 +116,7 @@ def gql():
             }
         )
 
-        graphql_ws_communicator = channels_graphql_ws.testing.GraphqlWsCommunicator(
+        graphql_ws_communicator = channels_graphql_ws.testing.GraphqlWsClientTesting(
             application=application, path="graphql/", **(communicator_kwds or {})
         )
 

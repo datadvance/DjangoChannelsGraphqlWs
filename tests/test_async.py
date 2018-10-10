@@ -67,18 +67,17 @@ async def test_concurrent_queries(gql):
                 "operationName": "op_name",
             },
         )
-        resp = await comm.gql_receive(assert_id=fast_op_id, assert_type="data")
-        assert "errors" not in resp
+        resp = await comm.gql_receive_assert(assert_id=fast_op_id, assert_type="data")
         assert resp["data"] == {"fast_op": True}
-        await comm.gql_receive(assert_id=fast_op_id, assert_type="complete")
+        await comm.gql_receive_assert(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     wakeup.set()
 
-    resp = await comm.gql_receive(assert_id=long_op_id, assert_type="data")
+    resp = await comm.gql_receive_assert(assert_id=long_op_id, assert_type="data")
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
-    await comm.gql_receive(assert_id=long_op_id, assert_type="complete")
+    await comm.gql_receive_assert(assert_id=long_op_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
     await comm.gql_assert_no_messages(
@@ -122,7 +121,7 @@ async def test_heavy_load(gql):
         # Expect two messages for each one we have sent.
         expected_responses.add((op_id, "data"))
         expected_responses.add((op_id, "complete"))
-        receive_waitlist += [comm.receive_json_from(), comm.receive_json_from()]
+        receive_waitlist += [comm.transport.receive(), comm.transport.receive()]
 
     await asyncio.wait(send_waitlist)
     responses, _ = await asyncio.wait(receive_waitlist)
