@@ -134,13 +134,21 @@ MySubscription.broadcast(
 
 ## Details
 
-The `channels_graphql_ws` module provides two classes:
+The `channels_graphql_ws` module provides the following classes:
 
 - `GraphqlWsConsumer`: Django Channels WebSocket consumer which
     maintains WebSocket connection with the client.
 - `Subscription`: Subclass this to define GraphQL subscription. Very
     similar to defining mutations with Graphene. (The class itself is a
     "creative" copy of the Graphene `Mutation` class.)
+- `GraphqlWsClient`: Client for GraphQL backend. Executes GraphQL
+    queries as strings and receives subscriptions notifications.
+- `GraphqlWsTransport`: Transport class interface used by
+    `GraphqlWsClient` for communications with backend.
+- `GraphqlWsTransportAiohttp`: Transport implementation based on
+    websocket connection and `aiohttp` library.
+- `GraphqlWsResponseError`: Specific error class for GraphQL queries.
+    Contains `errors` returned by backend and the whole `response`.
 
 For details check the [source code](channels_graphql_ws/graphql_ws.py)
 which is thoroughly commented. (The docstrings of the `Subscription`
@@ -203,16 +211,36 @@ application = channels.routing.ProtocolTypeRouter({
 
 This gives you a Django user `info.context.user` in all the resolvers.
 
+### Python based client
+
+Use `GraphqlWsClient` for accessing GraphQL backend withing python code.
+Client needs a transport class instance for work. Transport class must
+be derived from `GraphqlWsTransport` class. `GraphqlWsTransportAiohttp`
+implementation is provided by the library. Here is an example:
+
+```python
+
+transport = channels_graphql_ws.GraphqlWsTransportAiohttp(
+    "ws://backend.endpoint/graphql/", cookies={"sessionid": session_id}
+)
+client = channels_graphql_ws.GraphqlWsClient(transport)
+await client.gql_connect_and_init()
+result = await client.gql_execute("query { users { id login email name } }")
+users = result["data"]
+await client.gql_finalize()
+```
+
+See `GraphqlWsClient` documentation for more details.
+
 ### Testing
 
 To test GraphQL WebSocket API read the [appropriate page in the Channels
 documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
 In order to simplify testing we also provide a class
-`channels_graphql_ws.testing.GraphqlWsCommunicator` (subclass of the
-`channels.testing.WebsocketCommunicator`) which has multiple GraphQL-
-related methods. Check its docstrings and also see [tests](/tests) for
-examples.
+`channels_graphql_ws.testing.GraphqlWsClientTesting` which has multiple
+GraphQL-related methods. Check its docstrings and also see
+[tests](/tests) for examples.
 
 ### Subscription activation confirmation
 

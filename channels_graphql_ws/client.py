@@ -48,6 +48,11 @@ class GraphqlWsClient:
     Implements GraphQL protocol for queries, mutations and
     subscriptions.
 
+    Note that `gql_receive` method retrieves the first response received
+    by backend, when used with subscriptions it may either return
+    subscription data or some query result. The response type must be
+    checked outside client manually.
+
     Args:
         transport: `GraphqlWsTransport` instance used for send to and
             receive messages from the server over websocket.
@@ -130,7 +135,8 @@ class GraphqlWsClient:
         """Receive GraphQL message checking its content.
 
         Args:
-            wait_id: Wait until response with the given id received.
+            wait_id: Wait until response with the given id received, all
+                intermediate responses will be skipped.
         Returns:
             The `payload` field of the message received or `None`.
         """
@@ -138,7 +144,8 @@ class GraphqlWsClient:
         return self._response_payload(response)
 
     async def gql_execute(self, query, variables=None):
-        """Execute query or mutation request.
+        """Execute query or mutation request and wait until reply for
+        the query is received.
 
         Args:
             query: A GraphQL string query. We `dedent` it, so you do not
@@ -155,7 +162,7 @@ class GraphqlWsClient:
         return resp
 
     async def gql_subscribe(self, query, *, variables=None, wait_confirmation=True):
-        """Execute subscription request.
+        """Execute subscription request and wait for confirmation.
 
         Args:
             query: A GraphQL string query. We `dedent` it, so you do not
