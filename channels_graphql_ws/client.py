@@ -21,7 +21,7 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""GraphQL client application."""
+"""GraphQL client."""
 
 
 import asyncio
@@ -45,10 +45,10 @@ class GraphqlWsClient:
     `GraphqlWsTransport`. So it is possible to use this client with
     different network frameworks (e.g. Tornado, AIOHTTP).
 
-    Note that `receive` method retrieves the first response received by
+    NOTE: The `receive` method retrieves the first response received by
     backend, when used with subscriptions it may either return
     subscription data or some query result. The response type must be
-    checked outside client manually.
+    checked outside the client manually.
 
     Args:
         transport: The `GraphqlWsTransport` instance used to send and
@@ -64,20 +64,6 @@ class GraphqlWsClient:
     # Increase default timeout for websocket messages to avoid errors on
     # slow machines.
     TIMEOUT = GraphqlWsTransport.TIMEOUT
-
-    @staticmethod
-    def _is_keep_alive_response(response):
-        """Check if received GraphQL response is keep-alive message."""
-        return response.get("type") == "ka"
-
-    @staticmethod
-    def _response_payload(response):
-        """Retrieve payload from the response or raise error."""
-        payload = response.get("payload", None)
-        if payload is not None and "errors" in payload:
-            message = f"Response contains errors!\n{response}"
-            raise GraphqlWsResponseError(message, payload)
-        return payload
 
     async def connect_and_init(self, connect_only=False):
         """Establish and initialize WebSocket GraphQL connection.
@@ -143,11 +129,10 @@ class GraphqlWsClient:
         return self._response_payload(response)
 
     async def execute(self, query, variables=None):
-        """Execute query or mutation request and wait until reply for
-        the query is received.
+        """Execute query or mutation request and wait for the reply.
 
         Args:
-            query: A GraphQL string query. We `dedent` it, so you do not
+            query: A GraphQL query string. We `dedent` it, so you do not
                 have to.
             variables: Dict of variables (optional).
         Returns:
@@ -161,14 +146,14 @@ class GraphqlWsClient:
         return resp
 
     async def subscribe(self, query, *, variables=None, wait_confirmation=True):
-        """Execute subscription request and wait for confirmation.
+        """Execute subscription request and wait for the confirmation.
 
         Args:
             query: A GraphQL string query. We `dedent` it, so you do not
                 have to.
             variables: Dict of variables (optional).
-            wait_confirmation: If `True` wait until subscription
-                confirmation message received.
+            wait_confirmation: If `True` wait for the subscription
+                confirmation message.
 
         Returns:
             The message identifier.
@@ -196,7 +181,7 @@ class GraphqlWsClient:
         )
 
     async def finalize(self):
-        """Disconnect and wait the application to finish gracefully."""
+        """Disconnect and wait the transport to finish gracefully."""
         await self._transport.shutdown()
 
     async def wait_response(self, response_checker, timeout=None):
@@ -234,6 +219,20 @@ class GraphqlWsClient:
                 pass
             timeout -= time.monotonic() - start
         raise asyncio.TimeoutError
+
+    @staticmethod
+    def _is_keep_alive_response(response):
+        """Check if received GraphQL response is keep-alive message."""
+        return response.get("type") == "ka"
+
+    @staticmethod
+    def _response_payload(response):
+        """Retrieve payload from the response or raise error."""
+        payload = response.get("payload", None)
+        if payload is not None and "errors" in payload:
+            message = f"Response contains errors!\n{response}"
+            raise GraphqlWsResponseError(message, payload)
+        return payload
 
 
 class GraphqlWsResponseError(Exception):

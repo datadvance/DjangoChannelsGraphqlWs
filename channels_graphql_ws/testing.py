@@ -40,13 +40,13 @@ class GraphqlWsTransportAiohttpTesting(GraphqlWsTransportAiohttp):
 
     async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
         """Check that there is no messages left."""
-        # `interval` has precedence over `timeout`.
+        # The `interval` has precedence over the `timeout`.
         start = time.monotonic()
         while time.monotonic() < start + timeout:
-            if self._output_queue.empty():
+            if self._incoming_messages.empty():
                 return True
             await asyncio.sleep(interval)
-        return self._output_queue.empty()
+        return self._incoming_messages.empty()
 
 
 class GraphqlWsTransportChannelsTesting(
