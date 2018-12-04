@@ -45,8 +45,8 @@ class GraphqlWsClient:
     `GraphqlWsTransport`. So it is possible to use this client with
     different network frameworks (e.g. Tornado, AIOHTTP).
 
-    Note that `gql_receive` method retrieves the first response received
-    by backend, when used with subscriptions it may either return
+    Note that `receive` method retrieves the first response received by
+    backend, when used with subscriptions it may either return
     subscription data or some query result. The response type must be
     checked outside client manually.
 
@@ -79,7 +79,7 @@ class GraphqlWsClient:
             raise GraphqlWsResponseError(message, payload)
         return payload
 
-    async def gql_connect_and_init(self, connect_only=False):
+    async def connect_and_init(self, connect_only=False):
         """Establish and initialize WebSocket GraphQL connection.
 
         1. Establish WebSocket connection.
@@ -95,7 +95,7 @@ class GraphqlWsClient:
     # Default value for `id`, because `None` is also a valid value.
     AUTO = object()
 
-    async def gql_send(self, *, id=AUTO, type=None, payload=None):
+    async def send(self, *, id=AUTO, type=None, payload=None):
         """Send GraphQL message.
 
         If any argument is `None` it is excluded from the message.
@@ -130,7 +130,7 @@ class GraphqlWsClient:
             if wait_id is None or response["id"] == wait_id:
                 return response
 
-    async def gql_receive(self, *, wait_id=None):
+    async def receive(self, *, wait_id=None):
         """Receive GraphQL message checking its content.
 
         Args:
@@ -142,7 +142,7 @@ class GraphqlWsClient:
         response = await self._next_response(wait_id=wait_id)
         return self._response_payload(response)
 
-    async def gql_execute(self, query, variables=None):
+    async def execute(self, query, variables=None):
         """Execute query or mutation request and wait until reply for
         the query is received.
 
@@ -154,13 +154,13 @@ class GraphqlWsClient:
             Dictionary with the GraphQL response.
         """
 
-        id = await self.gql_start(query, variables=variables)
-        resp = await self.gql_receive(wait_id=id)
+        id = await self.start(query, variables=variables)
+        resp = await self.receive(wait_id=id)
         # Consume 'complete' message.
-        await self.gql_receive(wait_id=id)
+        await self.receive(wait_id=id)
         return resp
 
-    async def gql_subscribe(self, query, *, variables=None, wait_confirmation=True):
+    async def subscribe(self, query, *, variables=None, wait_confirmation=True):
         """Execute subscription request and wait for confirmation.
 
         Args:
@@ -173,12 +173,12 @@ class GraphqlWsClient:
         Returns:
             The message identifier.
         """
-        id = await self.gql_start(query, variables=variables)
+        id = await self.start(query, variables=variables)
         if wait_confirmation:
-            await self.gql_receive(wait_id=id)
+            await self.receive(wait_id=id)
         return id
 
-    async def gql_start(self, query, *, variables=None):
+    async def start(self, query, *, variables=None):
         """Start GraphQL request. Responses must be checked explicitly.
 
         Args:
@@ -190,16 +190,16 @@ class GraphqlWsClient:
             The message identifier.
         """
 
-        return await self.gql_send(
+        return await self.send(
             type="start",
             payload={"query": textwrap.dedent(query), "variables": variables or {}},
         )
 
-    async def gql_finalize(self):
+    async def finalize(self):
         """Disconnect and wait the application to finish gracefully."""
         await self._transport.shutdown()
 
-    async def gql_wait_response(self, response_checker, timeout=None):
+    async def wait_response(self, response_checker, timeout=None):
         """Wait for particular response from GraphQL backend and skip
         all intermediate responses.
 
@@ -214,7 +214,7 @@ class GraphqlWsClient:
             timeout: Seconds to wait until response is received.
 
         Returns:
-            Response payload, same as `gql_receive`.
+            Response payload, same as `receive`.
 
         Raises:
             `asyncio.TimeoutError` when timeout is reached.
@@ -225,11 +225,11 @@ class GraphqlWsClient:
         while timeout > 0:
             start = time.monotonic()
             try:
-                response = await self.gql_receive()
+                response = await self.receive()
                 if response_checker(response):
                     return response
             except asyncio.TimeoutError:
-                # Ignore `gql_receive` calls timeout until wait timeout
+                # Ignore `receive` calls timeout until wait timeout
                 # is reached.
                 pass
             timeout -= time.monotonic() - start

@@ -40,7 +40,7 @@ class GraphqlWsTransportAiohttpTesting(GraphqlWsTransportAiohttp):
 
     async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
         """Check that there is no messages left."""
-        # `interval` has precedence over `timeout`
+        # `interval` has precedence over `timeout`.
         start = time.monotonic()
         while time.monotonic() < start + timeout:
             if self._output_queue.empty():
@@ -112,7 +112,7 @@ class GraphqlWsClientTesting(GraphqlWsClient):
         """Get access to the transport for tests."""
         return self._transport
 
-    async def gql_receive_assert(self, wait_id=None, assert_id=None, assert_type=None):
+    async def receive_assert(self, wait_id=None, assert_id=None, assert_type=None):
         """Check type and id of the next data response."""
         response = await self._next_response(wait_id=wait_id)
 
@@ -126,7 +126,7 @@ class GraphqlWsClientTesting(GraphqlWsClient):
 
         return self._response_payload(response)
 
-    async def gql_assert_no_messages(self, message=None):
+    async def assert_no_messages(self, message=None):
         """Assure no data response received."""
 
         while True:

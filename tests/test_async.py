@@ -43,10 +43,10 @@ async def test_concurrent_queries(gql):
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(query=Query, mutation=Mutation)
-    await comm.gql_connect_and_init()
+    await comm.connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
-    long_op_id = await comm.gql_send(
+    long_op_id = await comm.send(
         type="start",
         payload={
             "query": "mutation op_name { long_op { is_ok } }",
@@ -55,11 +55,11 @@ async def test_concurrent_queries(gql):
         },
     )
 
-    await comm.gql_assert_no_messages()
+    await comm.assert_no_messages()
 
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
-        fast_op_id = await comm.gql_send(
+        fast_op_id = await comm.send(
             type="start",
             payload={
                 "query": "query op_name { fast_op }",
@@ -67,23 +67,21 @@ async def test_concurrent_queries(gql):
                 "operationName": "op_name",
             },
         )
-        resp = await comm.gql_receive_assert(assert_id=fast_op_id, assert_type="data")
+        resp = await comm.receive_assert(assert_id=fast_op_id, assert_type="data")
         assert resp["data"] == {"fast_op": True}
-        await comm.gql_receive_assert(assert_id=fast_op_id, assert_type="complete")
+        await comm.receive_assert(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     wakeup.set()
 
-    resp = await comm.gql_receive_assert(assert_id=long_op_id, assert_type="data")
+    resp = await comm.receive_assert(assert_id=long_op_id, assert_type="data")
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
-    await comm.gql_receive_assert(assert_id=long_op_id, assert_type="complete")
+    await comm.receive_assert(assert_id=long_op_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_assert_no_messages(
-        "Unexpected message received at the end of the test!"
-    )
-    await comm.gql_finalize()
+    await comm.assert_no_messages("Unexpected message received at the end of the test!")
+    await comm.finalize()
 
 
 @pytest.mark.asyncio
@@ -96,7 +94,7 @@ async def test_heavy_load(gql):
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(query=Query)
-    await comm.gql_connect_and_init()
+    await comm.connect_and_init()
 
     # NOTE: Larger numbers may lead to errors thrown from `select`.
     REQUESTS_NUMBER = 1000
@@ -108,7 +106,7 @@ async def test_heavy_load(gql):
     for _ in range(REQUESTS_NUMBER):
         op_id = str(uuid.uuid4().hex)
         send_waitlist += [
-            comm.gql_send(
+            comm.send(
                 id=op_id,
                 type="start",
                 payload={
@@ -133,10 +131,8 @@ async def test_heavy_load(gql):
     assert not expected_responses, "Not all expected responses received!"
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_assert_no_messages(
-        "Unexpected message received at the end of the test!"
-    )
-    await comm.gql_finalize()
+    await comm.assert_no_messages("Unexpected message received at the end of the test!")
+    await comm.finalize()
 
 
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP

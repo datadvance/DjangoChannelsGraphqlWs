@@ -224,10 +224,10 @@ transport = channels_graphql_ws.GraphqlWsTransportAiohttp(
     "ws://backend.endpoint/graphql/", cookies={"sessionid": session_id}
 )
 client = channels_graphql_ws.GraphqlWsClient(transport)
-await client.gql_connect_and_init()
-result = await client.gql_execute("query { users { id login email name } }")
+await client.connect_and_init()
+result = await client.execute("query { users { id login email name } }")
 users = result["data"]
-await client.gql_finalize()
+await client.finalize()
 ```
 
 See `GraphqlWsClient` documentation for more details.

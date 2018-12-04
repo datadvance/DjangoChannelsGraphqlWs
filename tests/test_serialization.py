@@ -111,11 +111,11 @@ async def test_serialization(gql, transactional_db):
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
-    await comm.gql_connect_and_init()
+    await comm.connect_and_init()
 
     print("Subscribe to receive subscription notifications.")
 
-    sub_id = await comm.gql_send(
+    sub_id = await comm.send(
         type="start",
         payload={
             "query": textwrap.dedent(
@@ -137,11 +137,11 @@ async def test_serialization(gql, transactional_db):
 
     print("Invoke mutation which sends Django model to the subscription.")
 
-    await comm.gql_execute("mutation { send_model { is_ok } }")
+    await comm.execute("mutation { send_model { is_ok } }")
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await comm.gql_receive_assert(assert_id=sub_id)
+    models_info = await comm.receive_assert(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user1_id"] == user1_id
     assert models_info["user2_id"] == user2_id
@@ -150,4 +150,4 @@ async def test_serialization(gql, transactional_db):
     assert models_info["user1_typename"] == str(User)
     assert models_info["user2_typename"] == str(User)
 
-    await comm.gql_finalize()
+    await comm.finalize()
