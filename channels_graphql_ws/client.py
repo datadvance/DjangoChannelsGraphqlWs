@@ -32,21 +32,18 @@ import uuid
 from .transport import GraphqlWsTransport
 
 
-class GraphqlWsResponseError(Exception):
-    """Errors data from the GraphQL response."""
-
-    def __init__(self, message, response):
-        super().__init__(self, message)
-        assert "errors" in response, "Response must contain errors!"
-        self.response = response
-        self.errors = response["errors"]
-
-
 class GraphqlWsClient:
-    """Client for GraphqlWs server.
+    """A client for the GraphQL WebSocket server.
 
-    Implements GraphQL protocol for queries, mutations and
-    subscriptions.
+    The client implements a WebSocket-based GraphQL protocol. It is the
+    same protocol as the server implemented by the `GraphqlWsConsumer`
+    class. See its docstring for details and for the protocol
+    description.
+
+    This class implements only the protocol itself. The implementation
+    of the message delivery extracted into the separate interface
+    `GraphqlWsTransport`. So it is possible to use this client with
+    different network frameworks (e.g. Tornado, AIOHTTP).
 
     Note that `gql_receive` method retrieves the first response received
     by backend, when used with subscriptions it may either return
@@ -54,12 +51,14 @@ class GraphqlWsClient:
     checked outside client manually.
 
     Args:
-        transport: `GraphqlWsTransport` instance used for send to and
-            receive messages from the server over websocket.
+        transport: The `GraphqlWsTransport` instance used to send and
+            receive messages over the WebSocket connection.
     """
 
     def __init__(self, transport):
-        assert isinstance(transport, GraphqlWsTransport)
+        assert isinstance(
+            transport, GraphqlWsTransport
+        ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
 
     # Increase default timeout for websocket messages to avoid errors on
@@ -235,3 +234,13 @@ class GraphqlWsClient:
                 pass
             timeout -= time.monotonic() - start
         raise asyncio.TimeoutError
+
+
+class GraphqlWsResponseError(Exception):
+    """Errors data from the GraphQL response."""
+
+    def __init__(self, message, response):
+        super().__init__(self, message)
+        assert "errors" in response, "Response must contain errors!"
+        self.response = response
+        self.errors = response["errors"]
