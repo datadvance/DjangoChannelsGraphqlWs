@@ -85,6 +85,9 @@ import rx
 # Module logger.
 log = logging.getLogger(__name__)
 
+# WebSocket subprotocol used for the GraphQL.
+GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
+
 
 class Subscription(graphene.ObjectType):
     """Subscription type definition.
@@ -473,9 +476,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # https://github.com/syrusakbary/promise/issues/57#issuecomment-406778476
     promise.promise.async_instance.disable_trampoline()
 
-    # Subscription WebSocket subprotocol.
-    _GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
-
     # Structure that holds subscription information.
     _SubInf = namedlist("_SubInf", ["groups", "op_id", "trigger", "unsubscribed"])
 
@@ -509,16 +509,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # starting with Python 3.7 it is a bytes. This can be a proper
         # change or just a bug in the Channels to be fixed. So let's
         # accept both variants until it becomes clear.
-        assert self._GRAPHQL_WS_SUBPROTOCOL in (
+        assert GRAPHQL_WS_SUBPROTOCOL in (
             (sp.decode() if isinstance(sp, bytes) else sp)
             for sp in self.scope["subprotocols"]
         ), (
             f"WebSocket client does not request for the subprotocol "
-            f"{self._GRAPHQL_WS_SUBPROTOCOL}!"
+            f"{GRAPHQL_WS_SUBPROTOCOL}!"
         )
 
         # Accept connection with the GraphQL-specific subprotocol.
-        await self.accept(subprotocol=self._GRAPHQL_WS_SUBPROTOCOL)
+        await self.accept(subprotocol=GRAPHQL_WS_SUBPROTOCOL)
 
     async def disconnect(self, code):
         """WebSocket disconnection handler."""
@@ -798,8 +798,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         self.schema,
                         request_string=query,
                         operation_name=op_name,
-                        variable_values=variables,
-                        context_value=context,
+                        variables=variables,
+                        context=context,
                         allow_subscriptions=True,
                         executor=graphql.execution.executors.asyncio.AsyncioExecutor(
                             loop

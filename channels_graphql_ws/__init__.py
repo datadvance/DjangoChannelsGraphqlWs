@@ -28,5 +28,6 @@ Django Channels based WebSocket GraphQL server with Graphene-like
 subscriptions.
 """
 
-from .graphql_ws import Subscription
-from .graphql_ws import GraphqlWsConsumer
+from .client import GraphqlWsClient, GraphqlWsResponseError
+from .graphql_ws import GraphqlWsConsumer, Subscription
+from .transport import GraphqlWsTransportAiohttp

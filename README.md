@@ -26,6 +26,10 @@
       self-notifications.
 - Optional subscription confirmation message. Necessary to avoid race
   conditions on the client side.
+- Clients for the GraphQL WebSocket server:
+    - AIOHTTP-based client.
+    - Client for unit test based on the Django Channels testing
+      communicator.
 
 ## Installation
 
@@ -134,17 +138,21 @@ MySubscription.broadcast(
 
 ## Details
 
-The `channels_graphql_ws` module provides two classes:
+The `channels_graphql_ws` module provides the following key classes:
 
 - `GraphqlWsConsumer`: Django Channels WebSocket consumer which
     maintains WebSocket connection with the client.
 - `Subscription`: Subclass this to define GraphQL subscription. Very
     similar to defining mutations with Graphene. (The class itself is a
     "creative" copy of the Graphene `Mutation` class.)
+- `GraphqlWsClient`: A client for the GraphQL backend. Executes strings
+    with queries and receives subscription notifications.
+- `GraphqlWsTransport`: WebSocket transport interface for the client.
+- `GraphqlWsTransportAiohttp`: WebSocket transport implemented on the
+    [AIOHTTP](https://github.com/aio-libs/aiohttp) library.
 
-For details check the [source code](channels_graphql_ws/graphql_ws.py)
-which is thoroughly commented. (The docstrings of the `Subscription`
-class in especially useful.)
+For details check the [source code](channels_graphql_ws/) which is
+thoroughly commented. The docstrings of classes are especially useful.
 
 Since the WebSocket handling is based on the Django Channels and
 subscriptions are implemented in the Graphene-like style it is
@@ -203,16 +211,38 @@ application = channels.routing.ProtocolTypeRouter({
 
 This gives you a Django user `info.context.user` in all the resolvers.
 
+### The client
+
+There is the `GraphqlWsClient` which implements GraphQL client working
+over the WebSockets. The client needs a transport instance which
+communicates with the server. Transport is an implementation of the
+`GraphqlWsTransport` interface (class must be derived from it). There is
+the `GraphqlWsTransportAiohttp` which implements the transport on the
+[AIOHTTP](https://github.com/aio-libs/aiohttp) library. Here is an
+example:
+
+```python
+transport = channels_graphql_ws.GraphqlWsTransportAiohttp(
+    "ws://backend.endpoint/graphql/", cookies={"sessionid": session_id}
+)
+client = channels_graphql_ws.GraphqlWsClient(transport)
+await client.connect_and_init()
+result = await client.execute("query { users { id login email name } }")
+users = result["data"]
+await client.finalize()
+```
+
+See the `GraphqlWsClient` class docstring for the details.
+
 ### Testing
 
 To test GraphQL WebSocket API read the [appropriate page in the Channels
 documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
-In order to simplify testing we also provide a class
-`channels_graphql_ws.testing.GraphqlWsCommunicator` (subclass of the
-`channels.testing.WebsocketCommunicator`) which has multiple GraphQL-
-related methods. Check its docstrings and also see [tests](/tests) for
-examples.
+In order to simplify unit testing there is a `GraphqlWsTransport`
+implementation based on the Django Channels testing communicator:
+`channels_graphql_ws.testing.GraphqlWsTransportChannels`. Check its
+docstring and take a look at the [tests](/tests) to see how to use it.
 
 ### Subscription activation confirmation
 

@@ -118,7 +118,7 @@ async def test_publish_skip(gql):
             "headers": [(b"cookie", b"sessionid=%s" % uuid.uuid4().hex.encode())]
         },
     )
-    await comm1.gql_connect_and_init()
+    await comm1.connect_and_init()
 
     comm2 = gql(
         mutation=Mutation,
@@ -128,11 +128,11 @@ async def test_publish_skip(gql):
             "headers": [(b"cookie", b"sessionid=%s" % uuid.uuid4().hex.encode())]
         },
     )
-    await comm2.gql_connect_and_init()
+    await comm2.connect_and_init()
 
     print("Subscribe to receive a new message notifications.")
 
-    await comm1.gql_send(
+    await comm1.send(
         type="start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
@@ -140,9 +140,9 @@ async def test_publish_skip(gql):
             "operationName": "op_name",
         },
     )
-    await comm1.gql_assert_no_messages("Subscribe responded with a message!")
+    await comm1.assert_no_messages("Subscribe responded with a message!")
 
-    sub_op_id = await comm2.gql_send(
+    sub_op_id = await comm2.send(
         type="start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
@@ -150,11 +150,11 @@ async def test_publish_skip(gql):
             "operationName": "op_name",
         },
     )
-    await comm2.gql_assert_no_messages("Subscribe responded with a message!")
+    await comm2.assert_no_messages("Subscribe responded with a message!")
 
     print("Send a new message to check we have not received notification about it.")
 
-    mut_op_id = await comm1.gql_send(
+    mut_op_id = await comm1.send(
         type="start",
         payload={
             "query": """mutation op_name { send_message(message: "Hi!") { is_ok } }""",
@@ -162,19 +162,19 @@ async def test_publish_skip(gql):
             "operationName": "op_name",
         },
     )
-    await comm1.gql_receive(assert_id=mut_op_id, assert_type="data")
-    await comm1.gql_receive(assert_id=mut_op_id, assert_type="complete")
+    await comm1.receive(assert_id=mut_op_id, assert_type="data")
+    await comm1.receive(assert_id=mut_op_id, assert_type="complete")
 
-    await comm1.gql_assert_no_messages("Self-notification happened!")
+    await comm1.assert_no_messages("Self-notification happened!")
 
-    resp = await comm2.gql_receive(assert_id=sub_op_id, assert_type="data")
+    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
     assert resp["data"]["on_new_message"]["message"] == "Hi!"
 
-    await comm1.gql_assert_no_messages(
+    await comm1.assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
-    await comm2.gql_assert_no_messages(
+    await comm2.assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
-    await comm1.gql_finalize()
-    await comm2.gql_finalize()
+    await comm1.finalize()
+    await comm2.finalize()

@@ -65,24 +65,23 @@ async def test_error_cases(gql):
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(query=Query)
-    await comm.gql_connect_and_init()
+    await comm.connect_and_init()
 
     print("Check that query syntax error leads to the `error` response.")
-    msg_id = await comm.gql_send(
+    msg_id = await comm.send(
         type="wrong_type__(ツ)_/¯", payload={"variables": {}, "operationName": ""}
     )
-    resp = await comm.gql_receive(
-        assert_id=msg_id, assert_type="error", assert_no_errors=False
-    )
-    assert len(resp) == 1, "Multiple errors received while a single error expected!"
-    assert isinstance(resp["errors"][0], str), "Error must be of string type!"
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+        await comm.receive(assert_id=msg_id, assert_type="error")
+        assert len(error.errors) == 1, "Multiple errors received instead of one!"
+        assert isinstance(error.errors[0], str), "Error must be of string type!"
 
     print(
         "Check that query syntax error leads to the `data` response "
         "with `errors` array."
     )
 
-    msg_id = await comm.gql_send(
+    msg_id = await comm.send(
         type="start",
         payload={
             "query": "This produces a syntax error!",
@@ -90,20 +89,18 @@ async def test_error_cases(gql):
             "operationName": "",
         },
     )
-    resp = await comm.gql_receive(
-        assert_id=msg_id, assert_type="data", assert_no_errors=False
-    )
-    assert resp["data"] is None
-    errors = resp["errors"]
-    assert len(errors) == 1, "Single error expected!"
-    assert (
-        "message" in errors[0] and "locations" in errors[0]
-    ), "Response missing mandatory fields!"
-    assert errors[0]["locations"] == [{"line": 1, "column": 1}]
-    await comm.gql_receive(assert_id=msg_id, assert_type="complete")
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+        await comm.receive(assert_id=msg_id, assert_type="data")
+        assert error.response["data"] is None
+        assert len(error.errors) == 1, "Single error expected!"
+        assert (
+            "message" in error.errors[0] and "locations" in error.errors[0]
+        ), "Response missing mandatory fields!"
+        assert error.errors[0]["locations"] == [{"line": 1, "column": 1}]
+    await comm.receive(assert_id=msg_id, assert_type="complete")
 
     print("Check that syntax error leads to the `data` response with `errors` array.")
-    msg_id = await comm.gql_send(
+    msg_id = await comm.send(
         type="start",
         payload={
             "query": "query op_name { value(issue_error: true) }",
@@ -111,18 +108,16 @@ async def test_error_cases(gql):
             "operationName": "op_name",
         },
     )
-    resp = await comm.gql_receive(
-        assert_id=msg_id, assert_type="data", assert_no_errors=False
-    )
-    assert resp["data"]["value"] is None
-    errors = resp["errors"]
-    assert len(errors) == 1, "Single error expected!"
-    assert errors[0]["message"] == Query.VALUE
-    assert "locations" in errors[0]
-    await comm.gql_receive(assert_id=msg_id, assert_type="complete")
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+        await comm.receive(assert_id=msg_id, assert_type="data")
+        assert error.response["data"]["value"] is None
+        assert len(error.errors) == 1, "Single error expected!"
+        assert error.errors[0]["message"] == Query.VALUE
+        assert "locations" in error.errors[0]
+    await comm.receive(assert_id=msg_id, assert_type="complete")
 
     print("Check multiple errors in the `data` message.")
-    msg_id = await comm.gql_send(
+    msg_id = await comm.send(
         type="start",
         payload={
             "query": textwrap.dedent(
@@ -136,19 +131,19 @@ async def test_error_cases(gql):
             "operationName": "",
         },
     )
-    resp = await comm.gql_receive(
-        assert_id=msg_id, assert_type="data", assert_no_errors=False
-    )
-    assert resp["data"] is None
-    errors = resp["errors"]
-    assert len(errors) == 5, f"Five errors expected, but {len(errors)} errors received!"
-    assert errors[0]["message"] == errors[3]["message"]
-    assert "locations" in errors[2], "The `locations` field expected"
-    assert "locations" in errors[4], "The `locations` field expected"
-    await comm.gql_receive(assert_id=msg_id, assert_type="complete")
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+        await comm.receive(assert_id=msg_id, assert_type="data")
+        assert error.response["data"] is None
+        assert (
+            len(error.errors) == 5
+        ), f"Five errors expected, but {len(error.errors)} errors received!"
+        assert error.errors[0]["message"] == error.errors[3]["message"]
+        assert "locations" in error.errors[2], "The `locations` field expected"
+        assert "locations" in error.errors[4], "The `locations` field expected"
+    await comm.receive(assert_id=msg_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_finalize()
+    await comm.finalize()
 
 
 @pytest.mark.asyncio
@@ -166,18 +161,18 @@ async def test_connection_error(gql):
         raise RuntimeError("Connection rejected!")
 
     comm = gql(consumer_attrs={"strict_ordering": True, "on_connect": on_connect})
-    await comm.gql_connect_and_init(connect_only=True)
+    await comm.connect_and_init(connect_only=True)
 
     print("Try to initialize the connection.")
-    await comm.gql_send(type="connection_init", payload="")
-    resp = await comm.gql_receive(assert_type="connection_error")
+    await comm.send(type="connection_init", payload="")
+    resp = await comm.receive(assert_type="connection_error")
     assert resp["message"] == "RuntimeError: Connection rejected!"
-    resp = await comm.receive_output()
+    resp = await comm.transport.receive_output()
     assert resp["type"] == "websocket.close"
     assert resp["code"] == 4000
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.gql_finalize()
+    await comm.finalize()
 
 
 @pytest.mark.asyncio
@@ -241,33 +236,33 @@ async def test_subscribe_return_value(gql):
     for result_type in ["NONE", "LIST", "TUPLE"]:
 
         comm = gql(subscription=Subscription)
-        await comm.gql_connect_and_init()
-        await comm.gql_send(
+        await comm.connect_and_init()
+        await comm.send(
             type="start",
             payload={
                 "query": """subscription { test_subscription (switch: "%s") { ok } }"""
                 % result_type
             },
         )
-        await comm.gql_assert_no_messages("Subscribe responded with a message!")
-        await comm.gql_finalize()
+        await comm.assert_no_messages("Subscribe responded with a message!")
+        await comm.finalize()
 
     print("Check there is a error when `subscribe` returns string or dict.")
 
     for result_type in ["STR", "DICT", "EMPTYSTR"]:
         comm = gql(subscription=Subscription)
-        await comm.gql_connect_and_init()
-        msg_id = await comm.gql_send(
+        await comm.connect_and_init()
+        msg_id = await comm.send(
             type="start",
             payload={
                 "query": """subscription { test_subscription (switch: "%s") { ok } }"""
                 % result_type
             },
         )
-        resp = await comm.gql_receive(
-            assert_id=msg_id, assert_type="data", assert_no_errors=False
-        )
-        assert (
-            "AssertionError" in resp["errors"][0]["message"]
-        ), "There is no error in response to the wrong type of the `subscribe` result!"
-        await comm.gql_finalize()
+        with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+            await comm.receive(assert_id=msg_id, assert_type="data")
+            assert "AssertionError" in error.errors[0]["message"], (
+                "There is no error in response"
+                " to the wrong type of the `subscribe` result!"
+            )
+        await comm.finalize()
