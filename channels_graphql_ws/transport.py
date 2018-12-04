@@ -26,6 +26,7 @@
 
 import asyncio
 import json
+import time
 
 import aiohttp
 
@@ -48,6 +49,10 @@ class GraphqlWsTransport:
 
     async def receive(self, timeout=TIMEOUT):
         """Receive server response."""
+        raise NotImplementedError()
+
+    async def receive_nothing(self, timeout=TIMEOUT, interval=0.01):
+        """Check that there is no messages left."""
         raise NotImplementedError()
 
     async def shutdown(self, timeout=TIMEOUT):
@@ -127,6 +132,16 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
             if self._message_processor.done():
                 self._message_processor.result()
             raise e
+
+    async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
+        """Check that there is no messages left."""
+        # The `interval` has precedence over the `timeout`.
+        start = time.monotonic()
+        while time.monotonic() < start + timeout:
+            if self._incoming_messages.empty():
+                return True
+            await asyncio.sleep(interval)
+        return self._incoming_messages.empty()
 
     async def shutdown(self, timeout=GraphqlWsTransport.TIMEOUT):
         """Close the connection gracefully."""

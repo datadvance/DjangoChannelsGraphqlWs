@@ -39,7 +39,7 @@ def gql():
     The fixture provides a method to setup GraphQL testing backend for
     the given GraphQL schema (query, mutation, and subscription). In
     particular: it sets up an instance of `GraphqlWsConsumer` and an
-    instance of `GraphqlWsClientTesting`. The former one is returned
+    instance of `GraphqlWsClient`. The former one is returned
     from the function.
 
     Syntax:
@@ -61,8 +61,8 @@ def gql():
             `channels.testing.WebsocketCommunicator`. Optional.
 
     Returns:
-        An instance of the `GraphqlWsClientTesting` class which has many
-        useful GraphQL-related methods, see the `GraphqlWsClientTesting`
+        An instance of the `GraphqlWsClient` class which has many
+        useful GraphQL-related methods, see the `GraphqlWsClient`
         class docstrings for details.
 
     Use like this:
@@ -116,9 +116,12 @@ def gql():
             }
         )
 
-        graphql_ws_communicator = channels_graphql_ws.testing.GraphqlWsClientTesting(
+        transport = channels_graphql_ws.testing.GraphqlWsTransportChannels(
             application=application, path="graphql/", **(communicator_kwds or {})
         )
+        graphql_ws_communicator = channels_graphql_ws.GraphqlWsClient(transport)
+        # Expose transport for the tests.
+        graphql_ws_communicator.transport = transport
 
         return graphql_ws_communicator
 

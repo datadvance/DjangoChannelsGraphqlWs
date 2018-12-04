@@ -67,17 +67,17 @@ async def test_concurrent_queries(gql):
                 "operationName": "op_name",
             },
         )
-        resp = await comm.receive_assert(assert_id=fast_op_id, assert_type="data")
+        resp = await comm.receive(assert_id=fast_op_id, assert_type="data")
         assert resp["data"] == {"fast_op": True}
-        await comm.receive_assert(assert_id=fast_op_id, assert_type="complete")
+        await comm.receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     wakeup.set()
 
-    resp = await comm.receive_assert(assert_id=long_op_id, assert_type="data")
+    resp = await comm.receive(assert_id=long_op_id, assert_type="data")
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
-    await comm.receive_assert(assert_id=long_op_id, assert_type="complete")
+    await comm.receive(assert_id=long_op_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
     await comm.assert_no_messages("Unexpected message received at the end of the test!")

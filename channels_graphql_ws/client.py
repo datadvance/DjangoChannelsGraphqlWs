@@ -104,29 +104,51 @@ class GraphqlWsClient:
         await self._transport.send(message)
         return id
 
-    async def _next_response(self, wait_id=None):
-        """Fetch next data response, optionally wait for the response
-        with the given id.
-        """
-
-        while True:
-            response = await self._transport.receive()
-            if self._is_keep_alive_response(response):
-                continue
-            if wait_id is None or response["id"] == wait_id:
-                return response
-
-    async def receive(self, *, wait_id=None):
+    async def receive(self, *, wait_id=None, assert_id=None, assert_type=None):
         """Receive GraphQL message checking its content.
 
         Args:
             wait_id: Wait until response with the given id received, all
                 intermediate responses will be skipped.
+            assert_id: Raise error if response id does not match value.
+            assert_type: Raise error if response type does not match
+                value.
         Returns:
             The `payload` field of the message received or `None`.
         """
-        response = await self._next_response(wait_id=wait_id)
-        return self._response_payload(response)
+        while True:
+            response = await self._transport.receive()
+            if self._is_keep_alive_response(response):
+                continue
+            if wait_id is None or response["id"] == wait_id:
+                break
+
+        if assert_type is not None:
+            assert response["type"] == assert_type, (
+                f"Type `{assert_type}` expected, but `{response['type']}` received!"
+                f" Response: {response}."
+            )
+        if assert_id is not None:
+            assert response["id"] == assert_id, "Response id != expected id!"
+
+        payload = response.get("payload", None)
+        if payload is not None and "errors" in payload:
+            message = f"Response contains errors!\n{response}"
+            raise GraphqlWsResponseError(message, payload)
+        return payload
+
+    async def assert_no_messages(self, message=None):
+        """Ensure no data response received."""
+
+        while True:
+            if await self._transport.receive_nothing():
+                return
+            response = await self._transport.receive()
+            assert self._is_keep_alive_response(response), (
+                f"{message}\n{response}"
+                if message is not None
+                else f"Message received when nothing expected!\n{response}"
+            )
 
     async def execute(self, query, variables=None):
         """Execute query or mutation request and wait for the reply.
@@ -224,15 +246,6 @@ class GraphqlWsClient:
     def _is_keep_alive_response(response):
         """Check if received GraphQL response is keep-alive message."""
         return response.get("type") == "ka"
-
-    @staticmethod
-    def _response_payload(response):
-        """Retrieve payload from the response or raise error."""
-        payload = response.get("payload", None)
-        if payload is not None and "errors" in payload:
-            message = f"Response contains errors!\n{response}"
-            raise GraphqlWsResponseError(message, payload)
-        return payload
 
 
 class GraphqlWsResponseError(Exception):

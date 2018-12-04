@@ -56,7 +56,7 @@ async def test_confirmation_enabled(gql):
         },
     )
 
-    resp = await comm.receive_assert(assert_id=sub_op_id, assert_type="data")
+    resp = await comm.receive(assert_id=sub_op_id, assert_type="data")
     assert resp == {"data": None}
 
     print("Trigger the subscription.")
@@ -68,12 +68,12 @@ async def test_confirmation_enabled(gql):
             "operationName": "op_name",
         },
     )
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="data")
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="complete")
+    await comm.receive(assert_id=mut_op_id, assert_type="data")
+    await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await comm.receive_assert(assert_id=sub_op_id, assert_type="data")
+    resp = await comm.receive(assert_id=sub_op_id, assert_type="data")
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await comm.assert_no_messages("Unexpected message received at the end of the test!")
@@ -114,12 +114,12 @@ async def test_confirmation_disabled(gql):
             "operationName": "op_name",
         },
     )
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="data")
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="complete")
+    await comm.receive(assert_id=mut_op_id, assert_type="data")
+    await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await comm.receive_assert(assert_id=sub_op_id, assert_type="data")
+    resp = await comm.receive(assert_id=sub_op_id, assert_type="data")
     assert resp == {"data": {"on_trigger": {"is_ok": True}}}
 
     await comm.assert_no_messages("Unexpected message received at the end of the test!")
@@ -160,7 +160,7 @@ async def test_custom_confirmation_message(gql):
     )
 
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
-        await comm.receive_assert(assert_id=sub_op_id, assert_type="data")
+        await comm.receive(assert_id=sub_op_id, assert_type="data")
         expected_errors = [
             {"message": f"{type(expected_error).__name__}: {expected_error}"}
         ]
@@ -179,12 +179,12 @@ async def test_custom_confirmation_message(gql):
             "operationName": "op_name",
         },
     )
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="data")
-    await comm.receive_assert(assert_id=mut_op_id, assert_type="complete")
+    await comm.receive(assert_id=mut_op_id, assert_type="data")
+    await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await comm.receive_assert(assert_id=sub_op_id, assert_type="data")
+    resp = await comm.receive(assert_id=sub_op_id, assert_type="data")
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await comm.assert_no_messages("Unexpected message received at the end of the test!")

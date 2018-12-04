@@ -26,30 +26,12 @@
 Transport class for the tests must implement `receive_nothing` method.
 """
 
-import asyncio
-import time
-
 import channels.testing
 
-from .client import GraphqlWsClient
-from .transport import GraphqlWsTransport, GraphqlWsTransportAiohttp
+from .transport import GraphqlWsTransport
 
 
-class GraphqlWsTransportAiohttpTesting(GraphqlWsTransportAiohttp):
-    """Aiohttp websockets transport for testing client."""
-
-    async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
-        """Check that there is no messages left."""
-        # The `interval` has precedence over the `timeout`.
-        start = time.monotonic()
-        while time.monotonic() < start + timeout:
-            if self._incoming_messages.empty():
-                return True
-            await asyncio.sleep(interval)
-        return self._incoming_messages.empty()
-
-
-class GraphqlWsTransportChannelsTesting(
+class GraphqlWsTransportChannels(
     GraphqlWsTransport, channels.testing.WebsocketCommunicator
 ):
     """Testing client transport which uses channels protocol instead of
@@ -89,52 +71,3 @@ class GraphqlWsTransportChannelsTesting(
         """Disconnect from the server."""
         await self.disconnect(timeout=timeout)
         await self.wait(timeout=timeout)
-
-
-class GraphqlWsClientTesting(GraphqlWsClient):
-    """GraphQL client with additional methods for tests.
-
-    By default uses `GraphqlWsTransportChannelsTesting` as transport.
-    Different transport may be passed via keyword argument `transport`.
-    """
-
-    def __init__(self, *args, **kwds):
-        transport = kwds.get("transport")
-        if transport is None:
-            transport = GraphqlWsTransportChannelsTesting(*args, **kwds)
-        super().__init__(transport)
-
-        self._assert_type = None
-        self._assert_id = None
-
-    @property
-    def transport(self):
-        """Get access to the transport for tests."""
-        return self._transport
-
-    async def receive_assert(self, wait_id=None, assert_id=None, assert_type=None):
-        """Check type and id of the next data response."""
-        response = await self._next_response(wait_id=wait_id)
-
-        if assert_type is not None:
-            assert response["type"] == assert_type, (
-                f"Type `{assert_type}` expected, but `{response['type']}` received!"
-                f" Response: {response}."
-            )
-        if assert_id is not None:
-            assert response["id"] == assert_id, "Response id != expected id!"
-
-        return self._response_payload(response)
-
-    async def assert_no_messages(self, message=None):
-        """Assure no data response received."""
-
-        while True:
-            if await self._transport.receive_nothing():
-                return
-            response = await self._transport.receive()
-            assert self._is_keep_alive_response(response), (
-                f"{message}\n{response}"
-                if message is not None
-                else f"Message received when nothing expected!\n{response}"
-            )

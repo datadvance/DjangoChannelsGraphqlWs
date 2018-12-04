@@ -237,10 +237,10 @@ See `GraphqlWsClient` documentation for more details.
 To test GraphQL WebSocket API read the [appropriate page in the Channels
 documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
-In order to simplify testing we also provide a class
-`channels_graphql_ws.testing.GraphqlWsClientTesting` which has multiple
-GraphQL-related methods. Check its docstrings and also see
-[tests](/tests) for examples.
+In order to simplify testing we also provide a `GraphqlWsTransport`
+implementation `channels_graphql_ws.testing.GraphqlWsTransportChannels`
+which uses channels as messages passing layer instead of real websocket
+connection. Check its docstrings and also see [tests](/tests) examples.
 
 ### Subscription activation confirmation
 
