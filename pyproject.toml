@@ -33,7 +33,7 @@
 
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.1.16"
+version = "0.1.17"
 description = """Django Channels based WebSocket GraphQL server with \
                  Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
@@ -45,33 +45,34 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-aiohttp = "^3.4"
-asgiref = "^2.3"
-channels = "^2.1"
-django = "^2.0"
-graphene = "^2.1"
-graphene_django = "^2.0"
-graphql-core = "^2.0"
-msgpack = "^0.5.6"
-namedlist = "^1.7"
 python = "^3.7.0"
-rx = "^1.6"
+aiohttp = "*"
+asgiref = "*"
+channels = "*"
+django = "*"
+graphene = "*"
+graphene_django = "*"
+graphql-core = "*"
+msgpack = "*"
+namedlist = "*"
+rx = "*"
 
 [tool.poetry.dev-dependencies]
-black = "^18.3-alpha.0"
-channels-redis = "^2.2"
-coverage = "^4.5"
-isort = "^4.3"
-pre-commit = "^1.10"
-pylint = "^2.0"
-pylint-django = "^2.0"
-pylint-quotes = "^0.1.9"
-pytest = "^3.7.1"
-pytest-asyncio = "^0.9.0"
-pytest-cov = "^2.5"
-pytest-django = "^3.3"
-pytest-env = "^0.6.2"
-pytest-pythonpath = "^0.7.2"
+# Black is still in beta, so allow prereleases.
+black = { version = "*", allows-prereleases = true }
+channels-redis = "*"
+coverage = "*"
+isort = "*"
+pre-commit = "*"
+pylint = "*"
+pylint-django = "*"
+pylint-quotes = "*"
+pytest = "*"
+pytest-asyncio = "*"
+pytest-cov = "*"
+pytest-django = "*"
+pytest-env = "*"
+pytest-pythonpath = "*"
 
 [tool.black]
 py36 = true
