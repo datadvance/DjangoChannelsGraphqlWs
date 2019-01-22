@@ -177,14 +177,101 @@ class Subscription(graphene.ObjectType):
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
 
+        NOTE: This method can be used in the asynchronous context,
+        because it can implicitly return coroutine object!
+        Simply await the returned object to notify subscriptions.
+
+        If there is a running event loop in the current OS thread then
+        this method returns the coroutine object by calling a
+        `broadcast_async()` coroutine function. Otherwise it simply
+        executes the `broadcast_sync()` method.
+
         NOTE: The `payload` argument will be serialized before sending
-        to the subscription group. Serialization is made by MessagePack
-        and if `payload` contains Django models, then it is serialized
-        by the Django serialization utilities. For details see:
-        Django serialization:
-            https://docs.djangoproject.com/en/dev/topics/serialization/
-        MessagePack:
-            https://github.com/msgpack/msgpack-python
+        to the subscription group.
+
+        Args:
+            group: Name of the subscription group which members must be
+                notified. `None` means that all the subscriptions of
+                type will be triggered.
+            payload: The payload delivered to the `publish` handler.
+
+        Returns:
+            coroutine: Coroutine object returned by calling the
+                `broadcast_async()` if there is a running event loop in
+                the current thread. Await this to notify subscriptions.
+            None: If there is not a running event loop in the
+                current thread.
+        """
+
+        try:
+            event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            if event_loop.is_running():
+                return cls.broadcast_async(group=group, payload=payload)
+
+        return cls.broadcast_sync(group=group, payload=payload)
+
+    @classmethod
+    async def broadcast_async(cls, *, group=None, payload=None):
+        """Notifies all subscriptions in the group.
+
+        NOTE: For broadcasting from the synchronous context use the
+        `broadcast_sync()` method instead.
+        You can also call the `broadcast()` function that either
+        returns the coroutine object of this `broadcast_async()`
+        coroutine function or executes the `broadcast_sync()` method
+        directly.
+
+        NOTE: The `payload` argument will be serialized with MessagePack
+        before sending to the subscription group. Also we offload
+        potentially long operation with the database to some working
+        thread. Channels help us with this by implementing
+        `channels.db.database_sync_to_async`.
+
+        Args:
+            group: Name of the subscription group which members must be
+                notified. `None` means that all the subscriptions of
+                type will be triggered.
+            payload: The payload delivered to the `publish` handler.
+        """
+
+        # Offload to the thread cause it do DB operations and may work
+        # slowly.
+        db_sync_to_async = channels.db.database_sync_to_async
+
+        # Manually serialize the payload with the MessagePack
+        # (https://msgpack.org) like Redis channel layer backend does.
+        # We do this here to allow user to transfer Django models inside
+        # the `payload`.
+        serialized_payload = await db_sync_to_async(cls._serialize)(payload)
+
+        # Send the message to the Channels group.
+        group = cls._group_name(group)
+        group_send = channels.layers.get_channel_layer().group_send
+        await group_send(
+            group=group,
+            message={
+                "type": "broadcast",
+                "group": group,
+                "payload": serialized_payload,
+            },
+        )
+
+    @classmethod
+    def broadcast_sync(cls, *, group=None, payload=None):
+        """Notifies all subscriptions in the group.
+
+        NOTE: For broadcasting from the OS thread with a running event
+        loop use the `broadcast_async()` method instead.
+        You can also call the `broadcast()` function that either
+        returns the coroutine object of this `broadcast_async()`
+        coroutine function or executes the `broadcast_sync()` method
+        directly.
+
+        NOTE: The `payload` argument will be serialized with MessagePack
+        before sending to the subscription group.
 
         Args:
             group: Name of the subscription group which members must be
@@ -197,26 +284,13 @@ class Subscription(graphene.ObjectType):
         # (https://msgpack.org) like Redis channel layer backend does.
         # We do this here to allow user to transfer Django models inside
         # the `payload`.
-
-        def encode_django_model(obj):
-            """MessagePack hook to serialize the Django model."""
-
-            if isinstance(obj, django.db.models.Model):
-                return {
-                    "__djangomodel__": True,
-                    "as_str": django.core.serializers.serialize("json", [obj]),
-                }
-            return obj
-
-        serialized_payload = msgpack.packb(
-            payload, default=encode_django_model, use_bin_type=True
-        )
+        serialized_payload = cls._serialize(payload)
 
         # Send the message to the Channels group.
+        group = cls._group_name(group)
         group_send = asgiref.sync.async_to_sync(
             channels.layers.get_channel_layer().group_send
         )
-        group = cls._group_name(group)
         group_send(
             group=group,
             message={
@@ -397,6 +471,31 @@ class Subscription(graphene.ObjectType):
         suffix_md5 = suffix_md5.hexdigest()
 
         return f"{prefix}-{suffix_md5}"
+
+    @staticmethod
+    def _serialize(data):
+        """Serializes the data with the MessagePack like Redis channel
+        layer backend does.
+
+        If `data` contains Django models, then it is serialized
+        by the Django serialization utilities. For details see:
+        Django serialization:
+            https://docs.djangoproject.com/en/dev/topics/serialization/
+        MessagePack:
+            https://github.com/msgpack/msgpack-python
+        """
+
+        def encode_django_model(obj):
+            """MessagePack hook to serialize the Django model."""
+
+            if isinstance(obj, django.db.models.Model):
+                return {
+                    "__djangomodel__": True,
+                    "as_str": django.core.serializers.serialize("json", [obj]),
+                }
+            return obj
+
+        return msgpack.packb(data, default=encode_django_model, use_bin_type=True)
 
 
 class SubscriptionOptions(graphene.types.objecttype.ObjectTypeOptions):
