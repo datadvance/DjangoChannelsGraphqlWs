@@ -58,6 +58,7 @@ import asyncio
 import collections
 import concurrent
 import hashlib
+import inspect
 import logging
 import traceback
 import types
@@ -163,7 +164,8 @@ class Subscription(graphene.ObjectType):
 
     Static methods of subscription subclass:
         broadcast: Call this method to notify all subscriptions in the
-            group.
+            group. NOTE: If call is in an asynchronous context then await
+            the result of call.
         unsubscribe: Call this method to stop all subscriptions in the
             group.
     """
@@ -209,6 +211,15 @@ class Subscription(graphene.ObjectType):
             pass
         else:
             if event_loop.is_running():
+                assert cls._from_coroutine(), (
+                    "You cannot await coroutine object in synchronous"
+                    " function where there is the running event loop."
+                    " Call and await `broadcast()` or `broadcast_async()`"
+                    " from coroutine function. Or call `broadcast()` or"
+                    " `broadcast_sync()` function in a synchronous context"
+                    " from the OS thread where there is no the running"
+                    " event loop."
+                )
                 return cls.broadcast_async(group=group, payload=payload)
 
         return cls.broadcast_sync(group=group, payload=payload)
@@ -217,7 +228,7 @@ class Subscription(graphene.ObjectType):
     async def broadcast_async(cls, *, group=None, payload=None):
         """Notifies all subscriptions in the group.
 
-        NOTE: For broadcasting from the synchronous context use the
+        NOTE: For broadcasting in the synchronous context use the
         `broadcast_sync()` method instead.
         You can also call the `broadcast()` function that either
         returns the coroutine object of this `broadcast_async()`
@@ -496,6 +507,28 @@ class Subscription(graphene.ObjectType):
             return obj
 
         return msgpack.packb(data, default=encode_django_model, use_bin_type=True)
+
+    @staticmethod
+    def _from_coroutine() -> bool:
+        """Determines whether the current function is called from
+        a synchronous function or from a coroutine function
+        (native coroutine or generator-based coroutine or
+        asynchronous generator function).
+
+        NOTE: That it's only recommended to use for debugging,
+        not as part of your production code's functionality.
+        """
+
+        frame = inspect.currentframe()
+        try:
+            coroutine_function_flags = (
+                inspect.CO_COROUTINE
+                | inspect.CO_ASYNC_GENERATOR
+                | inspect.CO_ITERABLE_COROUTINE
+            )
+            return bool(frame.f_back.f_back.f_code.co_flags & coroutine_function_flags)
+        finally:
+            del frame
 
 
 class SubscriptionOptions(graphene.types.objecttype.ObjectTypeOptions):
