@@ -125,10 +125,24 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-Notify clients when some event happens:
+Notify clients when some event happens using the `broadcast()`
+or `broadcast_sync()` method from the OS thread where
+there is no running event loop:
 
 ```python
 MySubscription.broadcast(
+    # Subscription group to notify clients in.
+    group='group42',
+    # Dict delivered to the `publish` method.
+    payload={},
+)
+```
+
+Notify clients in an coroutine function using the `broadcast()`
+or `broadcast_async()` method:
+
+```python
+await MySubscription.broadcast(
     # Subscription group to notify clients in.
     group='group42',
     # Dict delivered to the `publish` method.

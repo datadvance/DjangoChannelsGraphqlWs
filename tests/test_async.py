@@ -26,6 +26,7 @@
 # NOTE: The GraphQL schema is defined at the end of the file.
 
 import asyncio
+import textwrap
 import threading
 import uuid
 
@@ -135,6 +136,67 @@ async def test_heavy_load(gql):
     await comm.finalize()
 
 
+@pytest.mark.asyncio
+async def test_broadcast(gql):
+    """Test that the `broadcast()` call works correctly from
+    the thread which has running event loop.
+
+    Test simply checks that there is no problem in sending
+    notification messages via the `OnMessageSent` subscription
+    in the asynchronous `mutate()` method of the `SendMessage`
+    mutation.
+    """
+
+    print("Establish & initialize WebSocket GraphQL connection.")
+    comm = gql(mutation=Mutation, subscription=Subscription)
+    await comm.connect_and_init()
+
+    print("Subscribe to GraphQL subscription.")
+    sub_id = await comm.send(
+        type="start",
+        payload={
+            "query": "subscription on_message_sent { on_message_sent { message } }",
+            "variables": {},
+            "operationName": "on_message_sent",
+        },
+    )
+
+    await comm.assert_no_messages()
+
+    print("Trigger the subscription by mutation to receive notification.")
+    message = f"Hi! {str(uuid.uuid4().hex)}"
+    msg_id = await comm.send(
+        type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                mutation send_message($message: String!) {
+                    send_message(message: $message) {
+                        success
+                    }
+                }
+                """
+            ),
+            "variables": {"message": message},
+            "operationName": "send_message",
+        },
+    )
+
+    # Mutation response.
+    resp = await comm.receive(assert_id=msg_id, assert_type="data")
+    assert resp["data"] == {"send_message": {"success": True}}
+    await comm.receive(assert_id=msg_id, assert_type="complete")
+
+    # Subscription notification.
+    resp = await comm.receive(assert_id=sub_id, assert_type="data")
+    data = resp["data"]["on_message_sent"]
+    assert data["message"] == message, "Subscription notification contains wrong data!"
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.assert_no_messages("Unexpected message received at the end of the test!")
+    await comm.finalize()
+
+
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP
 
 wakeup = threading.Event()
@@ -153,10 +215,49 @@ class LongMutation(graphene.Mutation, name="LongMutationPayload"):
         return LongMutation(True)
 
 
+class SendMessage(graphene.Mutation, name="SendMessagePayload"):
+    """Test mutation that simply sends message by `OnMessageSent`
+    subscription."""
+
+    class Arguments:
+        """That is how mutation arguments are defined."""
+
+        message = graphene.String(description="Some text notification.", required=True)
+
+    success = graphene.Boolean()
+
+    @staticmethod
+    async def mutate(root, info, message):
+        """Send notification and complete the mutation with
+        `success` status."""
+        del root, info
+
+        await OnMessageSent.broadcast(payload={"message": message})
+
+        return SendMessage(success=True)
+
+
+class OnMessageSent(channels_graphql_ws.Subscription):
+    """Test GraphQL simple subscription.
+
+    Subscribe to receive messages.
+    """
+
+    message = graphene.String(description="Some text notification.", required=True)
+
+    @staticmethod
+    def publish(payload, info):
+        """Publish query result to all subscribers."""
+        del info
+
+        return OnMessageSent(message=payload["message"])
+
+
 class Mutation(graphene.ObjectType):
     """GraphQL mutations."""
 
     long_op = LongMutation.Field()
+    send_message = SendMessage.Field()
 
 
 class Query(graphene.ObjectType):
@@ -171,10 +272,18 @@ class Query(graphene.ObjectType):
         return True
 
 
+class Subscription(graphene.ObjectType):
+    """GraphQL subscriptions."""
+
+    on_message_sent = OnMessageSent.Field()
+
+
 class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
-    schema = graphene.Schema(query=Query, mutation=Mutation, auto_camelcase=False)
+    schema = graphene.Schema(
+        query=Query, mutation=Mutation, subscription=Subscription, auto_camelcase=False
+    )
 
 
 application = channels.routing.ProtocolTypeRouter(
