@@ -92,7 +92,7 @@ class Subscription(graphene.ObjectType):
 graphql_schema = graphene.Schema(
     query=Query,
     mutation=Mutation,
-    subscription=Subscription,
+    subscription=MySubscription,
 )
 ```
 
