@@ -659,7 +659,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # connection close code. We consider all reserver codes (<999),
         # 1000 "Normal Closure", and 1001 "Going Away" as OK.
         # See: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-        if code <= 1001:
+        if not code:
+            log.warning("WebSocket connection closed without a code")
+        elif code <= 1001:
             log.debug("WebSocket connection closed with code: %s.", code)
         else:
             log.warning("WebSocket connection closed with code: %s!", code)
