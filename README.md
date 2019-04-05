@@ -26,6 +26,8 @@
     - Single subscription can be put to multiple subscription groups.
     - Notification can be suppressed in the resolver. Useful to avoid
       self-notifications.
+    - Notification may be skipped in case client sends more data than
+      server can forward to client.
 - Optional subscription confirmation message. Necessary to avoid race
   conditions on the client side.
 - Clients for the GraphQL WebSocket server:

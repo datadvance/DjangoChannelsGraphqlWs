@@ -26,8 +26,10 @@
 # NOTE: The GraphQL schema is defined at the end of the file.
 
 import asyncio
+from datetime import datetime
 import textwrap
 import threading
+import time
 import uuid
 
 import channels
@@ -148,7 +150,11 @@ async def test_broadcast(gql):
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(mutation=Mutation, subscription=Subscription)
+
+    # Test subscription notifications order, even with disabled ordering
+    # notifications must be send in the order they were broadcasted.
+    settings = {"strict_ordering": False}
+    comm = gql(mutation=Mutation, subscription=Subscription, consumer_attrs=settings)
     await comm.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
@@ -191,6 +197,39 @@ async def test_broadcast(gql):
     resp = await comm.receive(assert_id=sub_id, assert_type="data")
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
+
+    print("Trigger sequence of timestamps with delayed publish.")
+    count = 10
+    msg_id = await comm.send(
+        type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                mutation send_timestamps($count: Int!) {
+                    send_timestamps(count: $count) {
+                        success
+                    }
+                }
+                """
+            ),
+            "variables": {"count": count},
+            "operationName": "send_timestamps",
+        },
+    )
+
+    # Mutation response.
+    resp = await comm.receive(assert_id=msg_id, assert_type="data")
+    assert resp["data"] == {"send_timestamps": {"success": True}}
+    await comm.receive(assert_id=msg_id, assert_type="complete")
+
+    timestamps = []
+    for _ in range(count):
+        resp = await comm.receive(assert_id=sub_id, assert_type="data")
+        data = resp["data"]["on_message_sent"]
+        timestamps.append(data["message"])
+    assert timestamps == sorted(
+        timestamps
+    ), "Server does not preserve messages order for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
     await comm.assert_no_messages("Unexpected message received at the end of the test!")
@@ -237,6 +276,37 @@ class SendMessage(graphene.Mutation, name="SendMessagePayload"):
         return SendMessage(success=True)
 
 
+class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):
+    """Send monotonic timestamps by `OnMessageSent` subscription.
+
+    Broadcast messages contains timestamp and publish delay, while
+    timestamps are increasing delays otherwise are decreasing by 0.1s
+    from the first to the last timestamp. Delay is executed by the
+    publish callback on server, and if server does not preserve messages
+    order client will get timestamps in the wrong order.
+    """
+
+    class Arguments:
+        """That is how mutation arguments are defined."""
+
+        count = graphene.Int(description="Number of timestamps to send.", required=True)
+
+    success = graphene.Boolean()
+
+    @staticmethod
+    async def mutate(root, info, count):
+        """Send increaseing timestamps with decreasing delays."""
+
+        del root, info
+
+        for idx in range(count):
+            now = datetime.fromtimestamp(time.monotonic())
+            payload = dict(message=now.isoformat(), delay=(count - idx) / 10)
+            await OnMessageSent.broadcast(payload=payload)
+
+        return SendTimestamps(success=True)
+
+
 class OnMessageSent(channels_graphql_ws.Subscription):
     """Test GraphQL simple subscription.
 
@@ -247,9 +317,10 @@ class OnMessageSent(channels_graphql_ws.Subscription):
 
     @staticmethod
     def publish(payload, info):
-        """Publish query result to all subscribers."""
+        """Publish query result to all subscribers may be with delay."""
         del info
 
+        time.sleep(payload.get("delay") or 0)
         return OnMessageSent(message=payload["message"])
 
 
@@ -258,6 +329,7 @@ class Mutation(graphene.ObjectType):
 
     long_op = LongMutation.Field()
     send_message = SendMessage.Field()
+    send_timestamps = SendTimestamps.Field()
 
 
 class Query(graphene.ObjectType):

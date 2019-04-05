@@ -581,6 +581,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # confirmation is enabled.
     subscription_confirmation_message = {"data": None, "errors": None}
 
+    # Log warning when single subscription have more than limit messages
+    # waiting for send.
+    subscription_messages_queue_limit = 1024
+
+    # Drop oldest messages for subscription when limit is exceeded.
+    subscription_messages_skip_when_queue_limit_exceeded = False
+
     # A prefix of the Channel group names used for the subscription
     # notifications. You may change this to avoid name clashes in the
     # ASGI backend, e.g. in the Redis.
@@ -595,7 +602,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Args:
             payload: Payload from CONNECTION_INIT message.
         """
-        pass
 
     # ------------------------------------------------------------------- IMPLEMENTATION
 
@@ -609,7 +615,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     promise.promise.async_instance.disable_trampoline()
 
     # Structure that holds subscription information.
-    _SubInf = namedlist("_SubInf", ["groups", "op_id", "trigger", "unsubscribed"])
+    _SubInf = namedlist(
+        "_SubInf", ["groups", "op_id", "trigger", "unsubscribed", "messages"]
+    )
 
     def __init__(self, *args, **kwargs):
         assert self.schema is not None, (
@@ -744,10 +752,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         and notify the client.
         """
 
-        async def process_broadcast():
-            """Process the message. Can be awaited or spawned."""
-            group = message["group"]
-            serialized_payload = message["payload"]
+        def trigger_subscription(subscription):
+            """Process the first message in the subscription queue."""
+            assert subscription.messages, "Call this function when message is ready!"
 
             def decode_django_model(obj):
                 """MessagePack hook to deserialize the Django model."""
@@ -758,17 +765,56 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 return obj
 
             payload = msgpack.unpackb(
-                serialized_payload, object_hook=decode_django_model, raw=False
+                subscription.messages[0], object_hook=decode_django_model, raw=False
             )
+            subscription.trigger(payload)
 
-            # Offload trigger to the thread (in threadpool) cause it may
-            # work slowly and do DB operations.
-            db_sync_to_async = channels.db.database_sync_to_async
-            triggers = (
-                db_sync_to_async(self._subscriptions[op_id].trigger)
+        async def process_broadcast():
+            """Process the message. Can be awaited or spawned."""
+            group = message["group"]
+            serialized_payload = message["payload"]
+
+            async def subscription_notify(subscription, serialized_payload):
+                """Send message to the subscription or put it in queue.
+
+                `_SubInf.messages` is used as a queue and
+                synchronization object for `subscription_notify` tasks.
+                You may fire as many tasks in event loop as you like but
+                only one will actually send payloads to the client. The
+                other tasks puts payload in the subscription queue and
+                quits.
+                """
+                subscription.messages.append(serialized_payload)
+                queue_size = len(subscription.messages)
+                # Another task is working and will send this payload.
+                if queue_size > 1:
+                    if queue_size > self.subscription_messages_queue_limit + 1:
+                        log.warning("Subscription messages queue limit exceeded!")
+                        if self.subscription_messages_skip_when_queue_limit_exceeded:
+                            # The first messages is proceeded by another
+                            # task, the second one is the oldest message
+                            # in queue.
+                            subscription.messages.pop(1)
+                    return
+
+                while subscription.messages:
+                    # Offload trigger to the thread (in threadpool)
+                    # cause it may work slowly and do DB operations.
+                    sync_to_async = channels.db.database_sync_to_async
+                    await sync_to_async(trigger_subscription)(subscription)
+                    # Payload that was send is always the first one, if
+                    # other payloads were received while processing
+                    # subscription trigger it will be in `messages`.
+                    subscription.messages.pop(0)
+
+                # At this point all payloads are proceeded and the next
+                # task will send its own payload.
+
+            tasks = [
+                subscription_notify(self._subscriptions[op_id], serialized_payload)
                 for op_id in self._sids_by_group[group]
-            )
-            await asyncio.wait([trigger(payload) for trigger in triggers])
+            ]
+            await asyncio.wait(tasks)
 
         # If strict ordering is required then simply wait until all the
         # broadcast messages are sent. Otherwise spawn a task so this
@@ -852,6 +898,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         This message holds query, mutation or subscription request.
         """
 
+        async def subscription_add_async(subscription):
+            """Add new subscription object and register in groups."""
+
+            self._subscriptions[subscription.op_id] = subscription
+            tasks = []
+            for group in subscription.groups:
+                self._sids_by_group.setdefault(group, []).append(subscription.op_id)
+                tasks.append(self.channel_layer.group_add(group, self.channel_name))
+            await asyncio.wait(tasks)
+
         try:
             if operation_id in self._subscriptions:
                 raise graphql.error.GraphQLError(
@@ -865,11 +921,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             op_name = payload.get("operationName")
             variables = payload.get("variables", {})
 
-            # Local alias for convenience.
-            async_to_sync = asgiref.sync.async_to_sync
-
             # The subject we will trigger on the `broadcast` message.
             broadcasts = rx.subjects.Subject()
+
+            # Subscription object is created in the worker thread but
+            # must be added in the main event loop, which is done by
+            # `async_to_sync`.
+            subscription_add = asgiref.sync.async_to_sync(subscription_add_async)
 
             # This function is called by subscription to associate a
             # callback (which publishes notifications) with the groups.
@@ -883,13 +941,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     op_id=op_id,
                     trigger=trigger,
                     unsubscribed=unsubscribed_callback,
+                    messages=[],
                 )
-                self._subscriptions[op_id] = subinf
-                for group in groups:
-                    self._sids_by_group.setdefault(group, []).append(op_id)
-                    async_to_sync(self.channel_layer.group_add)(
-                        group, self.channel_name
-                    )
+                subscription_add(subinf)
 
                 # Enqueue the `publish` method execution.
                 stream = broadcasts.map(publish_callback)
@@ -968,7 +1022,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # runs given a coroutine in the current eventloop.
                 # (See the implementation of `async_to_sync`
                 # for details.)
-                send_gql_data = async_to_sync(self._send_gql_data)
+                send_gql_data = asgiref.sync.async_to_sync(self._send_gql_data)
                 result.subscribe(lambda r: send_gql_data(op_id, r.data, r.errors))
 
                 # Respond with the subscription activation message if
@@ -1007,6 +1061,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # subscription from the registry.
         waitlist = []
         subinf = self._subscriptions.pop(operation_id)
+        subinf.messages.clear()
         for group in subinf.groups:
             waitlist.append(self.channel_layer.group_discard(group, self.channel_name))
             # Remove operation if from groups it belongs to. And remove
