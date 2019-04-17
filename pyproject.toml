@@ -54,7 +54,6 @@ graphene = "*"
 graphene_django = "*"
 graphql-core = "*"
 msgpack = "*"
-namedlist = "*"
 rx = "*"
 
 [tool.poetry.dev-dependencies]
