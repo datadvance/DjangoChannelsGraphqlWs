@@ -57,11 +57,14 @@ library `subscription-transport-ws` (which is used by Apollo).
 import asyncio
 import collections
 import concurrent
+import dataclasses
+import functools
 import hashlib
 import inspect
 import logging
 import traceback
 import types
+import typing
 
 import asgiref.sync
 import channels.db
@@ -78,7 +81,6 @@ import graphql
 import graphql.error
 import graphql.execution.executors.asyncio
 import msgpack
-from namedlist import namedlist
 import promise
 import rx
 
@@ -256,7 +258,9 @@ class Subscription(graphene.ObjectType):
         # (https://msgpack.org) like Redis channel layer backend does.
         # We do this here to allow user to transfer Django models inside
         # the `payload`.
-        serialized_payload = await db_sync_to_async(cls._serialize)(payload)
+        serialized_payload = await db_sync_to_async(
+            lambda: Serializer.serialize(payload)
+        )()
 
         # Send the message to the Channels group.
         group = cls._group_name(group)
@@ -295,7 +299,7 @@ class Subscription(graphene.ObjectType):
         # (https://msgpack.org) like Redis channel layer backend does.
         # We do this here to allow user to transfer Django models inside
         # the `payload`.
-        serialized_payload = cls._serialize(payload)
+        serialized_payload = Serializer.serialize(payload)
 
         # Send the message to the Channels group.
         group = cls._group_name(group)
@@ -484,31 +488,6 @@ class Subscription(graphene.ObjectType):
         return f"{prefix}-{suffix_md5}"
 
     @staticmethod
-    def _serialize(data):
-        """Serializes the data with the MessagePack like Redis channel
-        layer backend does.
-
-        If `data` contains Django models, then it is serialized
-        by the Django serialization utilities. For details see:
-        Django serialization:
-            https://docs.djangoproject.com/en/dev/topics/serialization/
-        MessagePack:
-            https://github.com/msgpack/msgpack-python
-        """
-
-        def encode_django_model(obj):
-            """MessagePack hook to serialize the Django model."""
-
-            if isinstance(obj, django.db.models.Model):
-                return {
-                    "__djangomodel__": True,
-                    "as_str": django.core.serializers.serialize("json", [obj]),
-                }
-            return obj
-
-        return msgpack.packb(data, default=encode_django_model, use_bin_type=True)
-
-    @staticmethod
     def _from_coroutine() -> bool:
         """Determines whether the current function is called from
         a synchronous function or from a coroutine function
@@ -581,12 +560,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # confirmation is enabled.
     subscription_confirmation_message = {"data": None, "errors": None}
 
-    # Log warning when single subscription have more than limit messages
-    # waiting for send.
-    subscription_messages_queue_limit = 1024
+    # The maximum number of threads designated for GraphQL requests
+    # processing. `None` means that default value is used. According to
+    # the Python documentation it is "the number of processors on the
+    # machine, multiplied by 5". See the `ThreadPoolExecutor` docs for
+    # details:
+    # https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
+    max_worker_threads = None
 
-    # Drop oldest messages for subscription when limit is exceeded.
-    subscription_messages_skip_when_queue_limit_exceeded = False
+    # The size of the subscription notification queue. If there are more
+    # notifications (for a single subscription) than the given number,
+    # then an oldest notification is dropped and a warning is logged.
+    subscription_notification_queue_limit = 1024
 
     # A prefix of the Channel group names used for the subscription
     # notifications. You may change this to avoid name clashes in the
@@ -596,7 +581,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def on_connect(self, payload):
         """Called after CONNECTION_INIT message from client.
 
-        Overwrite to raise an Exception to tell the server
+        Overwrite and raise an Exception to tell the server
         to reject the connection when it's necessary.
 
         Args:
@@ -606,7 +591,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # ------------------------------------------------------------------- IMPLEMENTATION
 
     # Threadpool used to process requests.
-    _workers = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="GraphqlWs.")
+    _workers = concurrent.futures.ThreadPoolExecutor(
+        thread_name_prefix="GraphqlWs.", max_workers=max_worker_threads
+    )
 
     # Disable promise's "trampoline" (whatever it means), cause when it
     # is enabled (which is by default) the promise is not thread-safe.
@@ -615,9 +602,22 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     promise.promise.async_instance.disable_trampoline()
 
     # Structure that holds subscription information.
-    _SubInf = namedlist(
-        "_SubInf", ["groups", "op_id", "trigger", "unsubscribed", "messages"]
-    )
+    @dataclasses.dataclass
+    class _SubInf:
+        """Subscription information structure."""
+
+        # Subscription identifier - protocol operation identifier.
+        sid: int
+        # Subscription groups the subscription belongs to.
+        groups: typing.List[typing.AnyStr]
+        # The subscription notification queue. Required to preserve the
+        # order of notifications within a single subscription.
+        notification_queue: asyncio.Queue
+        # A task which listens to the notification queue and notifies
+        # clients. Task triggers subscription `publish` resolvers.
+        notifier_task: asyncio.Task
+        # The callback to invoke when client unsubscribes.
+        unsubscribed: typing.Callable[[], None]
 
     def __init__(self, *args, **kwargs):
         assert self.schema is not None, (
@@ -635,6 +635,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Background tasks. When `strict_ordering` is `False` we spawn
         # an asyncio task per request or incoming broadcast message.
         self._background_tasks = []
+
+        # Remmember current eventloop so we can check it further in
+        # `_assert_thread` method.
+        self._eventloop = asyncio.get_running_loop()
 
         super().__init__(*args, **kwargs)
 
@@ -661,7 +665,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         await self.accept(subprotocol=GRAPHQL_WS_SUBPROTOCOL)
 
     async def disconnect(self, code):
-        """WebSocket disconnection handler."""
+        """WebSocket disconnection handler.
+
+        Remove itself from the Channels groups, clear triggers and stop
+        sending keepalive messages.
+        """
 
         # Print debug or warning message depending on the value of the
         # connection close code. We consider all reserver codes (<999),
@@ -673,9 +681,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             log.debug("WebSocket connection closed with code: %s.", code)
         else:
             log.warning("WebSocket connection closed with code: %s!", code)
-
-        # Remove itself from the Channels groups, clear triggers and
-        # stop sending keepalive messages.
 
         # The list of awaitables to simultaneously wait at the end.
         waitlist = []
@@ -706,41 +711,47 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def receive_json(self, content):  # pylint: disable=arguments-differ
         """Process WebSocket message received from the client."""
 
-        async def process_message():
-            """Process the message. Can be awaited or spawned."""
-            # Extract message type based on which we select how to proceed.
-            msg_type = content["type"].upper()
-
-            if msg_type == "CONNECTION_INIT":
-                await self._on_gql_connection_init(payload=content["payload"])
-
-            elif msg_type == "CONNECTION_TERMINATE":
-                await self._on_gql_connection_terminate()
-
-            elif msg_type == "START":
-                await self._on_gql_start(
-                    operation_id=content["id"], payload=content["payload"]
-                )
-
-            elif msg_type == "STOP":
-                await self._on_gql_stop(operation_id=content["id"])
-
-            else:
-                await self._send_gql_error(
-                    content["id"], f"Message of unknown type '{msg_type}' received!"
-                )
-
         # If strict ordering is required then simply wait until the
         # message processing is finished. Otherwise spawn a task so
         # Channels may continue calling `receive_json` while requests
         # (i.e. GraphQL documents) are being processed.
         if self.strict_ordering:
-            await process_message()
+            await self._process_protocol_message(content)
         else:
-            background_task = asyncio.create_task(process_message())
-            self._background_tasks.append(background_task)
-            # Schedule automatic removal from the list when finishes.
-            background_task.add_done_callback(self._background_tasks.remove)
+            self._spawn_background_task(self._process_protocol_message(content))
+
+    async def _process_protocol_message(self, content):
+        """Process the protocol message..
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task by the `receive_json` method (message handler).
+        """
+
+        # Assert we run in a proper thread.
+        self._assert_thread()
+
+        # Extract message type based on which we select how to proceed.
+        msg_type = content["type"].upper()
+
+        if msg_type == "CONNECTION_INIT":
+            await self._on_gql_connection_init(payload=content["payload"])
+
+        elif msg_type == "CONNECTION_TERMINATE":
+            await self._on_gql_connection_terminate()
+
+        elif msg_type == "START":
+            await self._on_gql_start(
+                operation_id=content["id"], payload=content["payload"]
+            )
+
+        elif msg_type == "STOP":
+            await self._on_gql_stop(operation_id=content["id"])
+
+        else:
+            await self._send_gql_error(
+                content["id"], f"Message of unknown type '{msg_type}' received!"
+            )
 
     async def broadcast(self, message):
         """The broadcast message handler.
@@ -750,82 +761,55 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Here we figure out the group message received from and trigger
         the observable which makes the subscription process the query
         and notify the client.
+
+        NOTE: There is an issue in the `channels_redis` implementation
+        which lead to the possibility to receive broadcast messages in
+        wrong order: https://github.com/django/channels_redis/issues/151
+        Currently we recommend to monkey-patch the `channels_redis` to
+        avoid this.
         """
-
-        def trigger_subscription(subscription):
-            """Process the first message in the subscription queue."""
-            assert subscription.messages, "Call this function when message is ready!"
-
-            def decode_django_model(obj):
-                """MessagePack hook to deserialize the Django model."""
-                if "__djangomodel__" in obj:
-                    obj = next(
-                        django.core.serializers.deserialize("json", obj["as_str"])
-                    ).object
-                return obj
-
-            payload = msgpack.unpackb(
-                subscription.messages[0], object_hook=decode_django_model, raw=False
-            )
-            subscription.trigger(payload)
-
-        async def process_broadcast():
-            """Process the message. Can be awaited or spawned."""
-            group = message["group"]
-            serialized_payload = message["payload"]
-
-            async def subscription_notify(subscription, serialized_payload):
-                """Send message to the subscription or put it in queue.
-
-                `_SubInf.messages` is used as a queue and
-                synchronization object for `subscription_notify` tasks.
-                You may fire as many tasks in event loop as you like but
-                only one will actually send payloads to the client. The
-                other tasks puts payload in the subscription queue and
-                quits.
-                """
-                subscription.messages.append(serialized_payload)
-                queue_size = len(subscription.messages)
-                # Another task is working and will send this payload.
-                if queue_size > 1:
-                    if queue_size > self.subscription_messages_queue_limit + 1:
-                        log.warning("Subscription messages queue limit exceeded!")
-                        if self.subscription_messages_skip_when_queue_limit_exceeded:
-                            # The first messages is proceeded by another
-                            # task, the second one is the oldest message
-                            # in queue.
-                            subscription.messages.pop(1)
-                    return
-
-                while subscription.messages:
-                    # Offload trigger to the thread (in threadpool)
-                    # cause it may work slowly and do DB operations.
-                    sync_to_async = channels.db.database_sync_to_async
-                    await sync_to_async(trigger_subscription)(subscription)
-                    # Payload that was send is always the first one, if
-                    # other payloads were received while processing
-                    # subscription trigger it will be in `messages`.
-                    subscription.messages.pop(0)
-
-                # At this point all payloads are proceeded and the next
-                # task will send its own payload.
-
-            tasks = [
-                subscription_notify(self._subscriptions[op_id], serialized_payload)
-                for op_id in self._sids_by_group[group]
-            ]
-            await asyncio.wait(tasks)
 
         # If strict ordering is required then simply wait until all the
         # broadcast messages are sent. Otherwise spawn a task so this
         # consumer will continue receiving messages.
         if self.strict_ordering:
-            await process_broadcast()
+            await self._process_broadcast(message)
         else:
-            background_task = asyncio.create_task(process_broadcast())
-            self._background_tasks.append(background_task)
-            # Schedule automatic removal from the list when finishes.
-            background_task.add_done_callback(self._background_tasks.remove)
+            self._spawn_background_task(self._process_broadcast(message))
+
+    async def _process_broadcast(self, message):
+        """Process the broadcast message.
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task by the `broadcast` method (message handler).
+        """
+
+        # Assert we run in a proper thread. In particular, we can access
+        # the `_subscriptions` and `_sids_by_group` without any locks.
+        self._assert_thread()
+
+        group = message["group"]
+        payload = message["payload"]
+
+        # Put the payload to the notification queues of subscriptions
+        # belonging to the subscription group. Drop the oldest payloads
+        # if the `notification_queue` is full.
+        for sid in self._sids_by_group[group]:
+            subinf = self._subscriptions[sid]
+            while True:
+                try:
+                    subinf.notification_queue.put_nowait(payload)
+                    break
+                except asyncio.QueueFull:
+                    # The queue is full - issue a warning and throw away
+                    # the oldest item from the queue.
+                    log.warning(
+                        "Subscription notification dropped!"
+                        " Subscription operation id: %s.",
+                        sid,
+                    )
+                    subinf.notification_queue.get_nowait()
 
     async def unsubscribe(self, message):
         """The unsubscribe message handler.
@@ -837,6 +821,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         group.
         """
         group = message["group"]
+
+        # Assert we run in a proper thread. In particular, we can access
+        # the `_subscriptions` and `_sids_by_group` without any locks.
+        self._assert_thread()
 
         # Unsubscribe all active subscriptions current client has in
         # the subscription group `group`.
@@ -851,7 +839,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         Start sending keepalive messages if `send_keepalive_every` set.
         Respond with either CONNECTION_ACK or CONNECTION_ERROR message.
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task. See the `receive_json` handler.
         """
+
+        # Assert we run in a proper thread.
+        self._assert_thread()
 
         try:
             # Notify subclass a new client is connected.
@@ -887,7 +882,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 await self._send_gql_connection_keep_alive()
 
     async def _on_gql_connection_terminate(self):
-        """Process the CONNECTION_TERMINATE message."""
+        """Process the CONNECTION_TERMINATE message.
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task. See the `receive_json` handler.
+        """
+
+        # Assert we run in a proper thread.
+        self._assert_thread()
 
         # Close the connection.
         await self.close(code=1000)
@@ -895,18 +898,17 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _on_gql_start(self, operation_id, payload):
         """Process the START message.
 
-        This message holds query, mutation or subscription request.
+        Handle the message which holds query, mutation or subscription
+        request.
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task. See the `receive_json` handler.
         """
 
-        async def subscription_add_async(subscription):
-            """Add new subscription object and register in groups."""
-
-            self._subscriptions[subscription.op_id] = subscription
-            tasks = []
-            for group in subscription.groups:
-                self._sids_by_group.setdefault(group, []).append(subscription.op_id)
-                tasks.append(self.channel_layer.group_add(group, self.channel_name))
-            await asyncio.wait(tasks)
+        # Assert we run in a proper thread. In particular, we can access
+        # the `_subscriptions` and `_sids_by_group` without any locks.
+        self._assert_thread()
 
         try:
             if operation_id in self._subscriptions:
@@ -916,97 +918,53 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 )
 
             # Get the message data.
-            op_id = operation_id
             query = payload["query"]
             op_name = payload.get("operationName")
             variables = payload.get("variables", {})
-
-            # The subject we will trigger on the `broadcast` message.
-            broadcasts = rx.subjects.Subject()
-
-            # Subscription object is created in the worker thread but
-            # must be added in the main event loop, which is done by
-            # `async_to_sync`.
-            subscription_add = asgiref.sync.async_to_sync(subscription_add_async)
-
-            # This function is called by subscription to associate a
-            # callback (which publishes notifications) with the groups.
-            def register(groups, publish_callback, unsubscribed_callback):
-                """Associate publish callback with the groups."""
-                # Put subscription information into the registry and
-                # start listening to the subscription groups.
-                trigger = broadcasts.on_next
-                subinf = self._SubInf(
-                    groups=groups,
-                    op_id=op_id,
-                    trigger=trigger,
-                    unsubscribed=unsubscribed_callback,
-                    messages=[],
-                )
-                subscription_add(subinf)
-
-                # Enqueue the `publish` method execution.
-                stream = broadcasts.map(publish_callback)
-                # Do not notify clients when `publish` returns `SKIP` by
-                # filtering out such items from the stream.
-                stream = stream.filter(
-                    lambda publish_returned: publish_returned is not Subscription.SKIP
-                )
-                return stream
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels. The
             # subscriptions groups must be set by the subscription using
             # the `register` function.
             context = types.SimpleNamespace(**self.scope)
-            context.register = register
+
+            # The `register` will be called from the worker thread
+            # (spawned for a GraphQL processing) when a client
+            # subscribes. So we "synchronize" it with `async_to_sync`.
+            # NOTE: It is important to invoke `async_to_sync` in the
+            # thread with the eventloop which serves this consumer. This
+            # assures that IO operations is performed within a single
+            # eventloop.
+            context.register = asgiref.sync.async_to_sync(
+                functools.partial(self._register_subscription, operation_id)
+            )
 
             # Process the request with Graphene/GraphQL.
-            # NOTE: We offload the GraphQL processing to the worker
-            # thread (with `channels.db.database_sync_to_async`) because
+
+            # Offload the GraphQL processing to the worker thread cause
             # according to our experiments even GraphQL document parsing
             # may take a while (and depends approx. linearly on the size
             # of the selection set). Moreover it is highly probable that
             # resolvers will invoke blocking DB operations so it is
             # better to offload the whole thing to a worker thread.
-            def thread_func():
-                """Execute schema in a worker thread."""
-
-                # Create an eventloop if this worker thread does not
-                # have one yet. Eventually each worker will have its own
-                # eventloop so the `AsyncioExecutor` will use it.
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                try:
-                    return graphql.graphql(
-                        self.schema,
-                        request_string=query,
-                        operation_name=op_name,
-                        variables=variables,
-                        context=context,
-                        allow_subscriptions=True,
-                        executor=graphql.execution.executors.asyncio.AsyncioExecutor(
-                            loop
-                        ),
-                    )
-                finally:
-                    # Resolvers can open the connections to the database
-                    # so close them. Django Channels does the same in
-                    # the `channels.db.database_sync_to_async`.
-                    django.db.close_old_connections()
-
-            result = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(self._workers, thread_func),
-                timeout=None,
+            # NOTE: The `lambda` is required to force `AsyncioExecutor`
+            # take an eventloop from the worker thread, not the current
+            # one.
+            result = await self._run_in_worker(
+                lambda: graphql.graphql(
+                    self.schema,
+                    request_string=query,
+                    operation_name=op_name,
+                    variables=variables,
+                    context=context,
+                    allow_subscriptions=True,
+                    executor=graphql.execution.executors.asyncio.AsyncioExecutor(),
+                )
             )
 
         except Exception:  # pylint: disable=broad-except
             # Something is wrong - send error message.
-            await self._send_gql_error(op_id, traceback.format_exc())
+            await self._send_gql_error(operation_id, traceback.format_exc())
 
         else:
             # Receiving an observer means the subscription has been
@@ -1016,40 +974,138 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # the observable returned.
 
                 # Subscribe to the observable.
-                # NOTE: Function `on_next` is called from a thread
-                # where trigger runs, so it is necessary to wrap our
-                # async method into `async_to_sync`, which carefully
-                # runs given a coroutine in the current eventloop.
-                # (See the implementation of `async_to_sync`
-                # for details.)
+                # NOTE: The function `on_next` is called from a
+                # threadpool which processes all GraphQL requests. So we
+                # wrap `_send_gql_data` into `async_to_sync` here, so
+                # eventually `_send_gql_data` will be invoked from the
+                # current eventloop.
                 send_gql_data = asgiref.sync.async_to_sync(self._send_gql_data)
-                result.subscribe(lambda r: send_gql_data(op_id, r.data, r.errors))
+                result.subscribe(
+                    lambda r: send_gql_data(operation_id, r.data, r.errors)
+                )
 
                 # Respond with the subscription activation message if
                 # enabled in the consumer configuration.
                 if self.confirm_subscriptions:
                     await self._send_gql_data(
-                        op_id,
+                        operation_id,
                         data=self.subscription_confirmation_message["data"],
                         errors=self.subscription_confirmation_message["errors"],
                     )
             else:
-                # Query or mutation received - send a response
-                # immediately.
+                # Respond to a query or mutation immediately.
 
-                # We respond with a message of type `data`.
                 # If Graphene complains that the request is invalid
                 # (e.g. query contains syntax error), then the `data`
-                # argument is None and the 'errors' argument contains
+                # argument is `None` and the 'errors' argument contains
                 # all errors that occurred before or during execution.
-                # `result` is instance of ExecutionResult
-                # Respond with data.
-                await self._send_gql_data(op_id, result.data, result.errors)
+                # The `result` is an instance of the `ExecutionResult`.
+                await self._send_gql_data(operation_id, result.data, result.errors)
                 # Tell the client that the request processing is over.
-                await self._send_gql_complete(op_id)
+                await self._send_gql_complete(operation_id)
+
+    async def _register_subscription(
+        self, operation_id, groups, publish_callback, unsubscribed_callback
+    ):
+        """Register a new subscription when client subscribes.
+
+        This function is called (by the subscription implementation -
+        "resolver" function `_subscribe`) when a client subscribes to
+        register necessary callbacks.
+
+        Args:
+            operation_id: If of the protocol operation.
+            groups: A list of subscription group names to put the
+                subscription into.
+            publish_callback: Called to process the notification (invoke
+                GraphQL resolvers). The callback will be associated with
+                a Channels groups used to deliver messages to the
+                subscription groups current subscription belongs to.
+            unsubscribed_callback: Called to notify when a client
+                unsubscribes.
+        """
+
+        # NOTE: It is important to invoke `group_add` from an
+        # eventloop which serves the current consumer. Besides
+        # this is a "proper" way of doing async things, it is
+        # also crucial for at least one Channels layer
+        # implementation - for the `channels_rabbitmq`. See:
+        # https://github.com/CJWorkbench/channels_rabbitmq/issues/3
+        # Moreover this allows us to access the `_subscriptions` and
+        # `_sids_by_group` without any locks.
+        self._assert_thread()
+
+        # The subject we will trigger on the `broadcast` message.
+        broadcasts = rx.subjects.Subject()
+
+        # The subscription notification queue.
+        notification_queue = asyncio.Queue(
+            maxsize=self.subscription_notification_queue_limit
+        )
+
+        # Start an endless task which listens the `notification_queue`
+        # and invokes subscription "resolver" on new notifications.
+        async def notifier():
+            """Watch the notification queue and notify clients."""
+
+            # Assert we run in a proper thread.
+            self._assert_thread()
+            while True:
+                payload = await notification_queue.get()
+                # Run a subscription's `publish` method (invoked by the
+                # `broadcasts.on_next` function) within the threadpool
+                # used for processing other GraphQL resolver functions.
+                # NOTE: `lambda` is important to run the deserialization
+                # in the worker thread as well.
+                await self._run_in_worker(
+                    lambda: broadcasts.on_next(Serializer.deserialize(payload))
+                )
+                # Message processed. This allows `Queue.join` to work.
+                notification_queue.task_done()
+
+        # Enqueue the `publish` method execution. But do not notify
+        # clients when `publish` returns `SKIP` by filtering out such
+        # items from the stream.
+        stream = broadcasts.map(publish_callback)
+
+        #
+        stream = stream.filter(
+            lambda publish_returned: publish_returned is not Subscription.SKIP
+        )
+
+        # Start listening to the subscription groups - subscribe to
+        # the Channels groups.
+        waitlist = []
+        for group in groups:
+            self._sids_by_group.setdefault(group, []).append(operation_id)
+            waitlist.append(self.channel_layer.group_add(group, self.channel_name))
+        await asyncio.wait(waitlist)
+
+        # Put subscription information into the registry.
+        self._subscriptions[operation_id] = self._SubInf(
+            groups=groups,
+            sid=operation_id,
+            unsubscribed=unsubscribed_callback,
+            notification_queue=notification_queue,
+            notifier_task=self._spawn_background_task(notifier()),
+        )
+
+        return stream
 
     async def _on_gql_stop(self, operation_id):
-        """Process the STOP message."""
+        """Process the STOP message.
+
+        Handle an unsubscribe request.
+
+        NOTE: Depending on the value of the `strict_ordering` setting
+        this method is either awaited directly or offloaded to an async
+        task. See the `receive_json` handler.
+        """
+
+        # Assert we run in a proper thread. In particular, we can access
+        # the `_subscriptions` and `_sids_by_group` without any locks.
+        self._assert_thread()
+
         # Currently only subscriptions can be stopped. But we see but
         # some clients (e.g. GraphiQL) send the stop message even for
         # queries and mutations. We also see that the Apollo server
@@ -1057,29 +1113,32 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         if not operation_id in self._subscriptions:
             return
 
-        # Unsubscribe: stop listening corresponding groups and
-        # subscription from the registry.
+        # Unsubscribe:
+        # - Throw away the subscription from the registry.
+        # - Cancel the task which watches over the notification queue.
+        # - Stop listening corresponding groups.
         waitlist = []
         subinf = self._subscriptions.pop(operation_id)
-        subinf.messages.clear()
+        subinf.notifier_task.cancel()
+        waitlist.append(subinf.notifier_task)
         for group in subinf.groups:
             waitlist.append(self.channel_layer.group_discard(group, self.channel_name))
-            # Remove operation if from groups it belongs to. And remove
-            # group from `_sids_by_group` if there is not subscriptions
-            # in it.
+            # Remove the subscription from groups it belongs to. Remove
+            # the group itself from the `_sids_by_group` if there are no
+            # subscriptions left in it.
             assert self._sids_by_group[group].count(operation_id) == 1, (
                 f"Registry is inconsistent: group `{group}` has "
                 f"`{self._sids_by_group[group].count(operation_id)}` "
                 "occurrences of operation_id=`{operation_id}`!"
             )
-
             self._sids_by_group[group].remove(operation_id)
             if not self._sids_by_group[group]:
                 del self._sids_by_group[group]
         await asyncio.wait(waitlist)
 
-        # Call subscription class `unsubscribed` handler.
-        subinf.unsubscribed()
+        # Call the subscription class `unsubscribed` handler in a worker
+        # thread, cause it may invoke long-running synchronous tasks.
+        await self._run_in_worker(subinf.unsubscribed)
 
         # Send the unsubscription confirmation message.
         await self._send_gql_complete(operation_id)
@@ -1088,10 +1147,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def _send_gql_connection_ack(self):
         """Sent in reply to the `connection_init` request."""
+        self._assert_thread()
         await self.send_json({"type": "connection_ack"})
 
     async def _send_gql_connection_error(self, error):
         """Connection error sent in reply to the `connection_init`."""
+        self._assert_thread()
         await self.send_json({"type": "connection_error", "payload": error})
 
     async def _send_gql_data(self, operation_id, data, errors):
@@ -1102,6 +1163,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             errors: List with exceptions occurred during processing the
                 GraphQL query. (Errors happened in the resolvers.)
         """
+        self._assert_thread()
         await self.send_json(
             {
                 "type": "data",
@@ -1130,6 +1192,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             operation_id: Id of the operation that failed on the server.
             error: String with the information about the error.
         """
+        self._assert_thread()
         await self.send_json(
             {"type": "error", "id": operation_id, "payload": {"errors": [error]}}
         )
@@ -1140,18 +1203,136 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Args:
             operation_id: If of the corresponding operation.
         """
+        self._assert_thread()
         await self.send_json({"type": "complete", "id": operation_id})
 
     async def _send_gql_connection_keep_alive(self):
         """Send the keepalive (ping) message."""
+        self._assert_thread()
         await self.send_json({"type": "ka"})
 
     # ------------------------------------------------------------------------ AUXILIARY
 
-    def _format_error(self, error):
+    @staticmethod
+    def _format_error(error):
         """Format exception `error` to send over a network."""
 
         if isinstance(error, graphql.error.GraphQLError):
             return graphql.error.format_error(error)
 
         return {"message": f"{type(error).__name__}: {str(error)}"}
+
+    async def _run_in_worker(self, func):
+        """Run a function in a thread with an event loop.
+
+        Run the `func` in a thread within a thread pool and wait for it
+        to finish. Each such thread has initialized event loop which is
+        NOT running. So the `func` can use it, for example by running
+        `asyncio.get_event_loop().run_until_complete(...)`. We also
+        cleanup Django database connections when `func` finishes.
+
+        Args:
+            func: The function to run in a thread.
+
+        Returns:
+            The result of the `func` invocation.
+        """
+
+        # Assert we run in a proper thread.
+        self._assert_thread()
+
+        def thread_func():
+            """Wrap the `func` to initialize evenloop and to cleanup."""
+
+            # Create an eventloop if this worker thread does not have
+            # one yet. Eventually each worker will have its own
+            # eventloop for `func` can use it.
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Run a given function in a thread.
+            try:
+                return func()
+            finally:
+                # The `func` can open the connections to the database
+                # so let's close them. Django Channels does the same in
+                # the `channels.db.database_sync_to_async`.
+                django.db.close_old_connections()
+
+        return await asyncio.get_running_loop().run_in_executor(
+            self._workers, thread_func
+        )
+
+    def _assert_thread(self):
+        """Assert that function is invoked from a thread where eventloop
+        serving current consumer is running."""
+
+        assert asyncio.get_running_loop() == self._eventloop, (
+            "Function is called from an inappropriate thread! This"
+            " function must be called from the thread where the"
+            " eventloop serving the consumer is running."
+        )
+
+    def _spawn_background_task(self, awaitable):
+        """Spawn background task.
+
+        Tasks are cancelled and awaited when a client disconnects.
+        Args:
+            awaitable: An awaitable to run in a task.
+        Returns:
+            A started `asyncio.Task` instance.
+        """
+        background_task = asyncio.create_task(awaitable)
+        self._background_tasks.append(background_task)
+        # Schedule automatic removal from the list when finishes.
+        background_task.add_done_callback(self._background_tasks.remove)
+
+        return background_task
+
+
+class Serializer:
+    """Serialize/deserialize Python collection with Django models.
+
+    Serialize/deserialize the data with the MessagePack like Redis
+    Channels layer backend does.
+
+    If `data` contains Django models, then it is serialized by the
+    Django serialization utilities. For details see:
+        Django serialization:
+            https://docs.djangoproject.com/en/dev/topics/serialization/
+        MessagePack:
+            https://github.com/msgpack/msgpack-python
+    """
+
+    @staticmethod
+    def serialize(data):
+        """Serialize the `data`."""
+
+        def encode_django_model(obj):
+            """MessagePack hook to serialize the Django model."""
+
+            if isinstance(obj, django.db.models.Model):
+                return {
+                    "__djangomodel__": True,
+                    "as_str": django.core.serializers.serialize("json", [obj]),
+                }
+            return obj
+
+        return msgpack.packb(data, default=encode_django_model, use_bin_type=True)
+
+    @staticmethod
+    def deserialize(data):
+        """Deserialize the `data`."""
+
+        def decode_django_model(obj):
+            """MessagePack hook to deserialize the Django model."""
+            if "__djangomodel__" in obj:
+                obj = next(
+                    django.core.serializers.deserialize("json", obj["as_str"])
+                ).object
+            return obj
+
+        return msgpack.unpackb(data, object_hook=decode_django_model, raw=False)
