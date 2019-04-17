@@ -104,7 +104,9 @@ class GraphqlWsClient:
         await self._transport.send(message)
         return id
 
-    async def receive(self, *, wait_id=None, assert_id=None, assert_type=None):
+    async def receive(
+        self, *, wait_id=None, assert_id=None, assert_type=None, raw_response=False
+    ):
         """Receive GraphQL message checking its content.
 
         Args:
@@ -113,8 +115,11 @@ class GraphqlWsClient:
             assert_id: Raise error if response id does not match value.
             assert_type: Raise error if response type does not match
                 value.
+	        raw_response: Whether return the entire response or the only
+	            payload.
         Returns:
-            The `payload` field of the message received or `None`.
+            The `payload` field of the message received or `None` or
+                the entire response if the raw_response flag is True.
         """
         while True:
             response = await self._transport.receive()
@@ -135,7 +140,9 @@ class GraphqlWsClient:
         if payload is not None and "errors" in payload:
             message = f"Response contains errors!\n{response}"
             raise GraphqlWsResponseError(message, payload)
-        return payload
+        if not raw_response:
+            return payload
+        return response
 
     async def assert_no_messages(self, message=None):
         """Ensure no data response received."""

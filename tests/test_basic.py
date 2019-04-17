@@ -30,10 +30,9 @@ import json
 import textwrap
 import uuid
 
+import channels_graphql_ws
 import graphene
 import pytest
-
-import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -409,7 +408,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
 
         userId = UserId()
 
-    def subscribe(self, info, userId):
+    def subscribe(self, info, userId=None):
         """Specify subscription groups when client subscribes."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
