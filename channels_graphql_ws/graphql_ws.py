@@ -618,7 +618,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # clients. Task triggers subscription `publish` resolvers.
         notifier_task: asyncio.Task
         # The callback to invoke when client unsubscribes.
-        unsubscribed: typing.Callable[[], None]
+        unsubscribed_callback: typing.Callable[[], None]
 
     def __init__(self, *args, **kwargs):
         assert self.schema is not None, (
@@ -1132,7 +1132,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._subscriptions[operation_id] = self._SubInf(
             groups=groups,
             sid=operation_id,
-            unsubscribed=unsubscribed_callback,
+            unsubscribed_callback=unsubscribed_callback,
             notification_queue=notification_queue,
             notifier_task=self._spawn_background_task(notifier()),
         )
@@ -1187,7 +1187,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Call the subscription class `unsubscribed` handler in a worker
         # thread, cause it may invoke long-running synchronous tasks.
-        await self._run_in_worker(subinf.unsubscribed)
+        await self._run_in_worker(subinf.unsubscribed_callback)
 
         # Send the unsubscription confirmation message.
         await self._send_gql_complete(operation_id)
