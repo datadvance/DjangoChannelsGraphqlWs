@@ -32,9 +32,10 @@ import textwrap
 import threading
 import uuid
 
-import channels_graphql_ws
 import graphene
 import pytest
+
+import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -244,7 +245,7 @@ async def test_subscribe_unsubscribe_thread_safety(
 
     print("Prepare tasks for the stress test.")
     # Must be a multiple of three.
-    number_of_tasks = 21
+    number_of_tasks = 18
     # Wait timeout for tasks.
     wait_timeout = 120
     # Generate operations ids for subscriptions. In the future, we will
