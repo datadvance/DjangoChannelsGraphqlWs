@@ -21,15 +21,29 @@
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
 - Graphene-like subscriptions.
-- Parallel (asynchronous) requests execution.
+- All GraphQL requests are processed concurrently (in parallel).
+- Subscription notifications delivered in the order they were issued.
+- Optional subscription activation message can be sent to a client.
+  Sometimes this is necessary to avoid race conditions on the client
+  side. Consider the case when client subscribes to some subscription
+  and immediately invokes a mutations which triggers this subscription.
+  In such case the subscription notification can be lost, cause these
+  subscription and mutation requests are processed concurrently. To
+  avoid this client shall wait for the subscription activation before
+  sending such mutation request.
 - Customizable notification strategies:
-    - Single subscription can be put to multiple subscription groups.
-    - Notification can be suppressed in the resolver. Useful to avoid
+    - A subscription can be put to one or many subscription groups. This
+      allows to granularly notify only selected clients, or, looking
+      from the client's perspective - to subscribe to some selected
+      source of events. For example, imaginary subscription
+      "OnNewMessage" may accept argument "user" so subscription will
+      only trigger on new messages from the selected user.
+    - Notification can be suppressed in the subscription resolver method
+      `publish`. For example, this is useful to avoid sending
       self-notifications.
-    - Notification may be skipped in case client sends more data than
-      server can forward to client.
-- Optional subscription confirmation message. Necessary to avoid race
-  conditions on the client side.
+- All GraphQL "resolvers" run in a threadpool so they never block the
+  server itself and may communicate with database or perform other
+  blocking tasks.
 - Clients for the GraphQL WebSocket server:
     - AIOHTTP-based client.
     - Client for unit test based on the Django Channels testing
@@ -200,15 +214,18 @@ the the Django's guide [Serializing Django objects](https://docs.djangoproject.c
 - Different requests from different WebSocket client are processed
   asynchronously.
 - By default different requests (WebSocket messages) from a single
-  client are processed concurrently in different worker threads. So
-  there is no guarantee that requests will be processed in the same
-  the client sent these requests. Actually, with HTTP we have this
-  behavior for decades.
+  client are processed concurrently in different worker threads. (It is
+  possible to change the maximum number of worker threads with the
+  `max_worker_threads` setting.) So there is no guarantee that requests
+  will be processed in the same the client sent these requests.
+  Actually, with HTTP we have this behavior for decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
   execution - in other words, the server will not start processing
   another request from the client before it finishes the current one.
   See comments in the class `GraphqlWsConsumer`.
+- All subscription notifications are delivered in the order they were
+  issued.
 
 ### Authentication
 
@@ -265,7 +282,7 @@ docstring and take a look at the [tests](/tests) to see how to use it.
 ### Subscription activation confirmation
 
 The original Apollo's protocol does not allow client to know when a
-subscription activates. This inevitable leads to the race conditions on
+subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
 when this leads to serious issues. [Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
 in the [`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
