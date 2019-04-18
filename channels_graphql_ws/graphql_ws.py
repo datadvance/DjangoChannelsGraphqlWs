@@ -259,9 +259,7 @@ class Subscription(graphene.ObjectType):
         # (https://msgpack.org) like Redis channel layer backend does.
         # We do this here to allow user to transfer Django models inside
         # the `payload`.
-        serialized_payload = await db_sync_to_async(
-            lambda: Serializer.serialize(payload)
-        )()
+        serialized_payload = await db_sync_to_async(Serializer.serialize)(payload)
 
         # Send the message to the Channels group.
         group = cls._group_name(group)
