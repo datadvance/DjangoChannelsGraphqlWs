@@ -107,11 +107,16 @@ class Subscription(graphene.ObjectType):
     classmethod or a staticmethod) you will receive the first argument
     (`payload`/`root`) into the `self` argument.
 
-        publish(payload, info, *args, **kwds):
+        [async] publish(payload, info, *args, **kwds):
             This method invoked each time subscription "triggers".
             Raising an exception here will lead to sending the
             notification with the error. To suppress the notification
             return `Subscription.SKIP`.
+
+            Can be implemented both as a synchronous or as a coroutine
+            function. In both cases a method runs in a worker thread
+            from the GraphQL-processing threadpool.
+
             Required.
 
             Args:
@@ -125,12 +130,17 @@ class Subscription(graphene.ObjectType):
                 a special object `Subscription.SKIP` indicates that this
                 notification shall not be sent to the client at all.
 
-        subscribe(root, info, *args, **kwds):
+        [async] subscribe(root, info, *args, **kwds):
             Called when client subscribes. Define this to do some extra
             work when client subscribes and to group subscriptions into
             different subscription groups. Method signature is the same
             as in other GraphQL "resolver" methods but it may return
             the subscription groups names to put the subscription into.
+
+            Can be implemented both as a synchronous or as a coroutine
+            function. In both cases a method runs in a worker thread
+            from the GraphQL-processing threadpool.
+
             Optional.
 
             Args:
@@ -148,9 +158,13 @@ class Subscription(graphene.ObjectType):
                 only put to the default group (the one which corresponds to
                 the `Subscription` subclass).
 
-        unsubscribed(root, info, *args, **kwds):
+        [async] unsubscribed(root, info, *args, **kwds):
             Called when client unsubscribes. Define this to be notified
-            when client unsubscribes. Optional.
+            when client unsubscribes.
+
+            Can be implemented both as a synchronous or as a coroutine
+            function. In both cases a method runs in a worker thread
+            from the GraphQL-processing threadpool.
 
             Args:
                 root: Always `None`.
@@ -167,10 +181,11 @@ class Subscription(graphene.ObjectType):
 
     Static methods of subscription subclass:
         broadcast: Call this method to notify all subscriptions in the
-            group. NOTE: If call is in an asynchronous context then await
-            the result of call.
+            group.
         unsubscribe: Call this method to stop all subscriptions in the
             group.
+    NOTE: If you call any of these methods from the asynchronous context
+    then `await` the result of the call.
     """
 
     # ----------------------------------------------------------------------- PUBLIC API
@@ -471,9 +486,17 @@ class Subscription(graphene.ObjectType):
             return result
 
         def unsubscribed_callback():
-            """Call `unsubscribed` with `None`."""
-            if cls._meta.unsubscribed is not None:
-                cls._meta.unsubscribed(None, info, *args, **kwds)
+            """Call `unsubscribed` notification."""
+            if cls._meta.unsubscribed is None:
+                return None
+            result = cls._meta.unsubscribed(None, info, *args, **kwds)
+            # Properly handle `async def unsubscribed`.
+            if asyncio.iscoroutinefunction(cls._meta.unsubscribed):
+                result = asyncio.get_event_loop().run_until_complete(result)
+            # There is not particular purpose of returning result of the
+            # callback. We do it just for uniformity with `publish` and
+            # `subscribe`.
+            return result
 
         return register(groups, publish_callback, unsubscribed_callback)
 
