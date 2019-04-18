@@ -443,6 +443,11 @@ class Subscription(graphene.ObjectType):
         # groups subscription must be attached to.
         if cls._meta.subscribe is not None:
             subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
+            # Properly handle `async def subscribe`.
+            if asyncio.iscoroutinefunction(cls._meta.subscribe):
+                subclass_groups = asyncio.get_event_loop().run_until_complete(
+                    subclass_groups
+                )
             assert subclass_groups is None or isinstance(
                 subclass_groups, (list, tuple)
             ), (
@@ -461,7 +466,11 @@ class Subscription(graphene.ObjectType):
         # the subscription "resolver" functions.
         def publish_callback(payload):
             """Call `publish` with the payload."""
-            return cls._meta.publish(payload, info, *args, **kwds)
+            result = cls._meta.publish(payload, info, *args, **kwds)
+            # Properly handle `async def publish`.
+            if asyncio.iscoroutinefunction(cls._meta.publish):
+                result = asyncio.get_event_loop().run_until_complete(result)
+            return result
 
         def unsubscribed_callback():
             """Call `unsubscribed` with `None`."""

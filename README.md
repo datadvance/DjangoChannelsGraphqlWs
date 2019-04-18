@@ -44,6 +44,11 @@
 - All GraphQL "resolvers" run in a threadpool so they never block the
   server itself and may communicate with database or perform other
   blocking tasks.
+- Resolvers (including subscription's `subscribe` & `publish`) can be
+  represented both as synchronous or asynchronous (`async def`) methods.
+- Subscription notifications can be sent from both synchronous and
+  asynchronous contexts. Just call `MySubscription.broadcast()` or
+  `await MySubscription.broadcast()` depending on the context.
 - Clients for the GraphQL WebSocket server:
     - AIOHTTP-based client.
     - Client for unit test based on the Django Channels testing
