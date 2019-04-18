@@ -880,6 +880,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Assert we run in a proper thread.
         self._assert_thread()
 
+        group = message["group"]
+
+        assert (
+            group in self._sids_by_group
+        ), "Request to unsubscribe from nonexistent group received!"
+
         # Send messages which look like user unsubscribes from all
         # subscriptions in the subscription group. This saves us from
         # thinking about rase condition between subscription and
@@ -887,7 +893,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         await asyncio.wait(
             [
                 self.receive_json({"type": "stop", "id": sid})
-                for sid in self._sids_by_group[message["group"]]
+                for sid in self._sids_by_group[group]
             ]
         )
 
@@ -1170,7 +1176,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # some clients (e.g. GraphiQL) send the stop message even for
         # queries and mutations. We also see that the Apollo server
         # ignores such messages, so we ignore them as well.
-        if not operation_id in self._subscriptions:
+        if operation_id not in self._subscriptions:
             return
 
         # Unsubscribe:
