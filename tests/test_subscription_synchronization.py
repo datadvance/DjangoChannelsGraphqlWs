@@ -28,14 +28,14 @@
 
 import asyncio
 import concurrent.futures
+import itertools
 import textwrap
-import threading
+import time
 import uuid
 
+import channels_graphql_ws
 import graphene
 import pytest
-
-import channels_graphql_ws
 
 
 @pytest.mark.asyncio
@@ -151,24 +151,21 @@ async def test_subscribe_twice_unsubscribe(gql):
     await comm_new.finalize()
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-@pytest.mark.asyncio
-async def test_subscribe_unsubscribe_thread_safety(
-    gql, confirm_subscriptions, strict_ordering
-):
+async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
 
-    During subscribe-unsubscribe messages processed from different
-    threads possible situation when we need to change shared data
-    (dict with operation identifier, dict with subscription groups,
-    channel_layers data, etc.).
+    During subscribe-unsubscribe messages possible situation when
+    we need to change shared data (dict with operation identifier,
+    dict with subscription groups, channel_layers data, etc.).
     We need to be sure that the unsubscribe does not destroy
     groups and operation identifiers which we add from another thread.
 
     So test:
-    1) Send subscribe message and many unsubscribe messages from threads
+    1) Send subscribe message and many unsubscribe messages
     concurrently.
     2) Check that all requests have been successfully processed.
     """
@@ -187,7 +184,7 @@ async def test_subscribe_unsubscribe_thread_safety(
 
     # Flag for communication between threads. If the flag is set, then
     # we have successfully unsubscribed from all subscriptions.
-    flag = threading.Event()
+    flag = asyncio.Event()
 
     async def subscribe_unsubscribe(comm, user_id, op_id: str):
         """Subscribe to GraphQL subscription. And spam server with the
@@ -234,42 +231,38 @@ async def test_subscribe_unsubscribe_thread_safety(
                         "This should be a successful subscription message, not '%s'",
                         resp,
                     )
-
             except asyncio.TimeoutError:
                 continue
+            except Exception:  # pylint: disable=broad-except
+                break
+            if flag.is_set():
+                break
             if not op_ids:
                 # Let's say to other tasks in other threads -
                 # that's enough, enough spam.
+                print("Ok, all subscriptions are stopped!")
                 flag.set()
                 break
 
     print("Prepare tasks for the stress test.")
-    # Must be a multiple of three.
     number_of_tasks = 18
     # Wait timeout for tasks.
-    wait_timeout = 120
+    wait_timeout = 60
     # Generate operations ids for subscriptions. In the future, we will
     # unsubscribe from all these subscriptions.
-    op_ids = set(str(i) for i in range(number_of_tasks))
+    op_ids = set()
     # List to collect tasks. We immediately add a handler to receive
     # successful messages.
     awaitables = [receiver(op_ids)]
 
-    def grouper(iterable, n):
-        "Collect data into fixed-length chunks or blocks"
-        # grouper('ABCDEF', 3) --> ABC DEF
-        args = [iter(iterable)] * n
-        return zip(*args)
-
-    loop = asyncio.get_event_loop()
-    pool = concurrent.futures.ThreadPoolExecutor()
-    for id_1, id_2, id_3 in grouper(op_ids, 3):
-        awaitable = subscribe_unsubscribe(comm, "ALICE", id_1)
-        awaitables.append(loop.run_in_executor(pool, asyncio.run, awaitable))
-        awaitable = subscribe_unsubscribe(comm, "TOM", id_2)
-        awaitables.append(loop.run_in_executor(pool, asyncio.run, awaitable))
-        awaitable = subscribe_unsubscribe(comm, None, id_3)
-        awaitables.append(loop.run_in_executor(pool, asyncio.run, awaitable))
+    op_id = 0
+    for user_id in itertools.cycle(["ALICE", "TOM", None]):
+        op_id += 1
+        op_ids.add(str(op_id))
+        awaitables.append(subscribe_unsubscribe(comm, user_id, str(op_id)))
+        if number_of_tasks == op_id:
+            print("Tasks with the following ids prepared:", op_ids)
+            break
 
     print("Let's run all the tasks concurrently.")
     _, pending = await asyncio.wait(awaitables, timeout=wait_timeout)
@@ -284,6 +277,8 @@ async def test_subscribe_unsubscribe_thread_safety(
             "Time limit has been reached!"
             " Subscribe-unsubscribe tasks can not be completed!"
         )
+
+    assert not op_ids, "Not all subscriptions have been stopped!"
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
@@ -310,6 +305,205 @@ async def test_subscribe_unsubscribe_thread_safety(
     # Mutation response.
     await comm.receive(assert_id=msg_id, assert_type="data")
     await comm.receive(assert_id=msg_id, assert_type="complete")
+
+    # Check notifications: there are no notifications. We unsubscribed
+    # from all subscriptions and received all messages.
+    await comm.assert_no_messages()
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.finalize()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("confirm_subscriptions", [True])
+@pytest.mark.parametrize("strict_ordering", [False, True])
+async def test_subscribe_unsubscribe_order_messages(
+    gql, confirm_subscriptions, strict_ordering
+):
+    """Test subscribe-unsubscribe behavior with the GraphQL over
+    WebSocket.
+
+    We are subscribing and must be sure that at any time after that,
+    the subscription stop will be processed correctly.
+    We must receive a notification of a successful subscription
+    before the message about the successful unsubscribe.
+
+    So test:
+    1) Send subscribe message and many unsubscribe 'stop' messages.
+    2) Check the order of the confirmation message and the
+    'complete' message.
+    """
+
+    print("Establish & initialize two WebSocket GraphQL connections.")
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={
+            "confirm_subscriptions": confirm_subscriptions,
+            "strict_ordering": strict_ordering,
+        },
+    )
+    await comm.connect_and_init()
+
+    async def subscribe_unsubscribe(user_id="TOM"):
+        """Subscribe to GraphQL subscription. And spam server with the
+        'stop' messages.
+        """
+        sub_id = await comm.send(
+            type="start",
+            payload={
+                "query": textwrap.dedent(
+                    """
+                    subscription op_name($userId: UserId) {
+                        on_chat_message_sent(userId: $userId) { event }
+                    }
+                    """
+                ),
+                "variables": {"userId": user_id},
+                "operationName": "op_name",
+            },
+        )
+
+        # Spam with stop messages.
+        for _ in range(50):
+            await comm.send(id=sub_id, type="stop")
+            await asyncio.sleep(0.001)
+
+        resp = await comm.receive(raw_response=True)
+        assert sub_id == resp["id"]
+        assert (
+            resp["type"] == "data" and resp["payload"]["data"] is None
+        ), "First we expect to get a confirmation message!"
+
+        resp = await comm.receive(raw_response=True)
+        assert sub_id == resp["id"]
+        assert resp["type"] == "complete", (
+            "Here we expect to receive a message about the completion"
+            " of the unsubscribe!"
+        )
+
+    lock = asyncio.Lock()
+    loop = asyncio.get_event_loop()
+    time_border = 20
+    start_time = loop.time()
+
+    print("Start subscribe-unsubscribe iterations.")
+    while True:
+        # Stop the test if time is up.
+        if loop.time() - start_time >= time_border:
+            break
+        # Start iteration with spam messages.
+        async with lock:
+            await subscribe_unsubscribe()
+
+    # Check notifications: there are no notifications. We unsubscribed
+    # from all subscriptions and received all messages.
+    await comm.assert_no_messages()
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.finalize()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sync", [True, False])
+@pytest.mark.parametrize("strict_ordering", [False, True])
+async def test_subscribe_unsubscribe_all_order_messages(
+    gql, strict_ordering, sync, confirm_subscriptions=True
+):
+    """Test subscribe-unsubscribe behavior with the GraphQL over
+    WebSocket.
+
+    We are subscribing and must be sure that at any time after that,
+    the subscription stop will be processed correctly.
+    We must receive a notification of a successful subscription
+    before the message about the successful unsubscribe.
+
+    So test:
+    1) Send subscribe message and many unsubscribe messages with
+    sync or async 'unsubscribe' method.
+    2) Check the order of the confirmation message and the
+    'complete' message.
+    """
+
+    print("Establish & initialize two WebSocket GraphQL connections.")
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={
+            "confirm_subscriptions": confirm_subscriptions,
+            "strict_ordering": strict_ordering,
+        },
+    )
+    await comm.connect_and_init()
+
+    loop = asyncio.get_event_loop()
+    pool = concurrent.futures.ThreadPoolExecutor()
+
+    async def subscribe_unsubscribe(user_id="TOM"):
+        """Subscribe to GraphQL subscription. And spam server with the
+        'stop' messages using sync 'unsubscribe' method.
+        """
+
+        # Just subscribe.
+        sub_id = await comm.send(
+            type="start",
+            payload={
+                "query": textwrap.dedent(
+                    """
+                    subscription op_name($userId: UserId) {
+                        on_chat_message_sent(userId: $userId) { event }
+                    }
+                    """
+                ),
+                "variables": {"userId": user_id},
+                "operationName": "op_name",
+            },
+        )
+
+        # Spam with stop messages (unsubscribe all behavior).
+        if sync:
+
+            def unsubscribe_all():
+                """Stop subscription by sync 'unsubscribe' classmethod."""
+                for _ in range(50):
+                    OnChatMessageSent.unsubscribe()
+                    time.sleep(0.01)
+
+            await loop.run_in_executor(pool, unsubscribe_all)
+        else:
+            for _ in range(50):
+                await OnChatMessageSent.unsubscribe()
+                await asyncio.sleep(0.01)
+
+        resp = await comm.receive(raw_response=True)
+        assert sub_id == resp["id"]
+        print(resp)
+        assert (
+            resp["type"] == "data" and resp["payload"]["data"] is None
+        ), "First we expect to get a confirmation message!"
+
+        resp = await comm.receive(raw_response=True)
+        assert sub_id == resp["id"]
+        print(resp)
+        assert resp["type"] == "complete", (
+            "Here we expect to receive a message about the completion"
+            " of the unsubscribe!"
+        )
+
+    lock = asyncio.Lock()
+    time_border = 20
+    start_time = loop.time()
+
+    print("Start subscribe-unsubscribe iterations.")
+    while True:
+        # Stop the test if time is up.
+        if loop.time() - start_time >= time_border:
+            break
+        # Start iteration with spam messages.
+        async with lock:
+            await subscribe_unsubscribe()
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
