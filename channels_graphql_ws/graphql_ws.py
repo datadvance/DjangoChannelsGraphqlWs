@@ -197,30 +197,17 @@ class Subscription(graphene.ObjectType):
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
 
-        NOTE: This method can be used in the asynchronous context,
-        because it can implicitly return coroutine object!
-        Simply await the returned object to notify subscriptions.
-
-        If there is a running event loop in the current OS thread then
-        this method returns the coroutine object by calling a
-        `broadcast_async()` coroutine function. Otherwise it simply
-        executes the `broadcast_sync()` method.
-
-        NOTE: The `payload` argument will be serialized before sending
-        to the subscription group.
+        This method can be called from both synchronous and asynchronous
+        contexts. If you call it from the asynchronous context then you
+        have to `await`.
 
         Args:
             group: Name of the subscription group which members must be
                 notified. `None` means that all the subscriptions of
                 type will be triggered.
             payload: The payload delivered to the `publish` handler.
-
-        Returns:
-            coroutine: Coroutine object returned by calling the
-                `broadcast_async()` if there is a running event loop in
-                the current thread. Await this to notify subscriptions.
-            None: If there is not a running event loop in the
-                current thread.
+                NOTE: The `payload` is serialized before sending
+                to the subscription group.
         """
 
         try:
@@ -230,13 +217,11 @@ class Subscription(graphene.ObjectType):
         else:
             if event_loop.is_running():
                 assert cls._from_coroutine(), (
-                    "You cannot await coroutine object in synchronous"
-                    " function where there is the running event loop."
-                    " Call and await `broadcast()` or `broadcast_async()`"
-                    " from coroutine function. Or call `broadcast()` or"
-                    " `broadcast_sync()` function in a synchronous context"
-                    " from the OS thread where there is no the running"
-                    " event loop."
+                    "The eventloop is running so this call is going to return"
+                    " a coroutine object, but the function is called from"
+                    " a synchronous context, so you cannot simply 'await' the result!"
+                    " This may indicate a wrong usage. To force some particular"
+                    " behavior directly call 'broadcast_sync' or 'broadcast_async'."
                 )
                 return cls.broadcast_async(group=group, payload=payload)
 
@@ -244,36 +229,14 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     async def broadcast_async(cls, *, group=None, payload=None):
-        """Notifies all subscriptions in the group.
-
-        NOTE: For broadcasting in the synchronous context use the
-        `broadcast_sync()` method instead.
-        You can also call the `broadcast()` function that either
-        returns the coroutine object of this `broadcast_async()`
-        coroutine function or executes the `broadcast_sync()` method
-        directly.
-
-        NOTE: The `payload` argument will be serialized with MessagePack
-        before sending to the subscription group. Also we offload
-        potentially long operation with the database to some working
-        thread. Channels help us with this by implementing
-        `channels.db.database_sync_to_async`.
-
-        Args:
-            group: Name of the subscription group which members must be
-                notified. `None` means that all the subscriptions of
-                type will be triggered.
-            payload: The payload delivered to the `publish` handler.
-        """
+        """Asynchronous implementation of the `broadcast` method."""
 
         # Offload to the thread cause it do DB operations and may work
         # slowly.
         db_sync_to_async = channels.db.database_sync_to_async
 
-        # Manually serialize the payload with the MessagePack
-        # (https://msgpack.org) like Redis channel layer backend does.
-        # We do this here to allow user to transfer Django models inside
-        # the `payload`.
+        # Manually serialize the `payload` to allow transfer of Django
+        # models inside the `payload`.
         serialized_payload = await db_sync_to_async(Serializer.serialize)(payload)
 
         # Send the message to the Channels group.
@@ -290,29 +253,10 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     def broadcast_sync(cls, *, group=None, payload=None):
-        """Notifies all subscriptions in the group.
+        """Synchronous implementation of the `broadcast` method."""
 
-        NOTE: For broadcasting from the OS thread with a running event
-        loop use the `broadcast_async()` method instead.
-        You can also call the `broadcast()` function that either
-        returns the coroutine object of this `broadcast_async()`
-        coroutine function or executes the `broadcast_sync()` method
-        directly.
-
-        NOTE: The `payload` argument will be serialized with MessagePack
-        before sending to the subscription group.
-
-        Args:
-            group: Name of the subscription group which members must be
-                notified. `None` means that all the subscriptions of
-                type will be triggered.
-            payload: The payload delivered to the `publish` handler.
-        """
-
-        # Manually serialize the payload with the MessagePack
-        # (https://msgpack.org) like Redis channel layer backend does.
-        # We do this here to allow user to transfer Django models inside
-        # the `payload`.
+        # Manually serialize the `payload` to allow transfer of Django
+        # models inside the `payload`.
         serialized_payload = Serializer.serialize(payload)
 
         # Send the message to the Channels group.
@@ -520,13 +464,12 @@ class Subscription(graphene.ObjectType):
 
     @staticmethod
     def _from_coroutine() -> bool:
-        """Determines whether the current function is called from
-        a synchronous function or from a coroutine function
-        (native coroutine or generator-based coroutine or
-        asynchronous generator function).
+        """Determine whether the current function is called from a
+        coroutine function (native coroutine, generator-based coroutine,
+        or asynchronous generator function).
 
-        NOTE: That it's only recommended to use for debugging,
-        not as part of your production code's functionality.
+        NOTE: That it's only recommended to use for debugging, not as
+        part of your production code's functionality.
         """
 
         frame = inspect.currentframe()
@@ -764,6 +707,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # subscription confirmation after unsubscription confirmation.
         """
 
+        # Disable this check cause the current version of PyLint
+        # improperly complains when we assign a coroutine object to
+        # a local variable `task` below.
+        # pylint: disable=assignment-from-no-return
+
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -771,14 +719,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         msg_type = content["type"].upper()
 
         if msg_type == "CONNECTION_INIT":
-
-            async def task():
-                await self._on_gql_connection_init(payload=content["payload"])
+            task = self._on_gql_connection_init(payload=content["payload"])
 
         elif msg_type == "CONNECTION_TERMINATE":
-
-            async def task():
-                await self._on_gql_connection_terminate()
+            task = self._on_gql_connection_terminate()
 
         elif msg_type == "START":
             op_id = content["id"]
@@ -794,7 +738,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             self._operation_locks[op_id] = op_lock
             await op_lock.acquire()
 
-            async def task():
+            async def on_start():
                 try:
                     await self._on_gql_start(
                         operation_id=op_id, payload=content["payload"]
@@ -802,29 +746,31 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 finally:
                     op_lock.release()
 
+            task = on_start()
+
         elif msg_type == "STOP":
             op_id = content["id"]
 
-            async def task():
+            async def on_stop():
                 # Will until START message processing finishes, if any.
                 async with self._operation_locks.setdefault(op_id, asyncio.Lock()):
                     await self._on_gql_stop(operation_id=op_id)
 
-        else:
+            task = on_stop()
 
-            async def task():
-                await self._send_gql_error(
-                    content["id"], f"Message of unknown type '{msg_type}' received!"
-                )
+        else:
+            task = self._send_gql_error(
+                content["id"], f"Message of unknown type '{msg_type}' received!"
+            )
 
         # If strict ordering is required then simply wait until the
         # message processing is finished. Otherwise spawn a task so
         # Channels may continue calling `receive_json` while requests
         # (i.e. GraphQL documents) are being processed.
         if self.strict_ordering:
-            await task()
+            await task
         else:
-            self._spawn_background_task(task())
+            self._spawn_background_task(task)
 
     async def broadcast(self, message):
         """The broadcast message handler.
@@ -906,10 +852,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # the `_subscriptions` and `_sids_by_group` without any locks.
         self._assert_thread()
 
-        # Unsubscribe all active subscriptions current client has in
-        # the subscription group `group`.
+        # Send messages which look like user unsubscribes from all
+        # subscriptions in the subscription group. This saves us from
+        # thinking about rase condition between subscription and
+        # unsubscription.
         await asyncio.wait(
-            [self._on_gql_stop(sid) for sid in self._sids_by_group[group]]
+            [
+                self.receive_json({"type": "stop", "id": sid})
+                for sid in self._sids_by_group[group]
+            ]
         )
 
     # ---------------------------------------------------------- GRAPHQL PROTOCOL EVENTS
