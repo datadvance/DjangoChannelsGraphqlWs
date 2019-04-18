@@ -316,7 +316,12 @@ class OnMessageSent(channels_graphql_ws.Subscription):
     message = graphene.String(description="Some text notification.", required=True)
 
     @staticmethod
-    def publish(payload, info):
+    async def subscribe(payload, info):
+        """This method is needed to assure `async` variant works OK."""
+        del payload, info
+
+    @staticmethod
+    async def publish(payload, info):
         """Publish query result to all subscribers may be with delay."""
         del info
 
