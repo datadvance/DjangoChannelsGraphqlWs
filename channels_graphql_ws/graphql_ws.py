@@ -882,9 +882,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         group = message["group"]
 
-        assert (
-            group in self._sids_by_group
-        ), "Request to unsubscribe from nonexistent group received!"
+        # Do nothing if group does not exist. It is quite possible for
+        # a client and a backend to unsubscribe from a subscription
+        # concurrently. And these events do not need to be synchronized.
+        if group not in self._sids_by_group:
+            return
 
         # Send messages which look like user unsubscribes from all
         # subscriptions in the subscription group. This saves us from
