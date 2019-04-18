@@ -277,17 +277,52 @@ class Subscription(graphene.ObjectType):
     def unsubscribe(cls, *, group=None):
         """Call this method to stop all subscriptions in the group.
 
+        This method can be called from both synchronous and asynchronous
+        contexts. If you call it from the asynchronous context then you
+        have to `await`.
+
         Args:
             group: Name of the subscription group which members must be
                 unsubscribed. `None` means that all the client of the
                 subscription will be unsubscribed.
         """
 
+        try:
+            event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            if event_loop.is_running():
+                assert cls._from_coroutine(), (
+                    "The eventloop is running so this call is going to return"
+                    " a coroutine object, but the function is called from"
+                    " a synchronous context, so you cannot simply 'await' the result!"
+                    " This may indicate a wrong usage. To force some particular"
+                    " behavior directly call 'unsubscribe_sync' or 'unsubscribe_async'."
+                )
+                return cls.unsubscribe_async(group=group)
+
+        return cls.unsubscribe_sync(group=group)
+
+    @classmethod
+    async def unsubscribe_async(cls, *, group=None):
+        """Asynchronous implementation of the `unsubscribe` method."""
+
+        # Send the 'unsubscribe' message to the Channels group.
+        group = cls._group_name(group)
+        await channels.layers.get_channel_layer().group_send(
+            group=group, message={"type": "unsubscribe", "group": group}
+        )
+
+    @classmethod
+    def unsubscribe_sync(cls, *, group=None):
+        """Synchronous implementation of the `unsubscribe` method."""
+
         # Send the message to the Channels group.
+        group = cls._group_name(group)
         group_send = asgiref.sync.async_to_sync(
             channels.layers.get_channel_layer().group_send
         )
-        group = cls._group_name(group)
         group_send(group=group, message={"type": "unsubscribe", "group": group})
 
     @classmethod
@@ -836,20 +871,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def unsubscribe(self, message):
         """The unsubscribe message handler.
 
-        Method is called when new `_unsubscribe` message received from
+        Method is called when new `unsubscribe` message received from
         the Channels group. The message is typically sent by the method
         `Subscription.unsubscribe`. Here we figure out the group message
-        received from and stop all the active subscriptions in this
-        group.
+        received from and stop all the subscriptions in this group.
         """
 
         # Assert we run in a proper thread.
-        self._assert_thread()
-
-        group = message["group"]
-
-        # Assert we run in a proper thread. In particular, we can access
-        # the `_subscriptions` and `_sids_by_group` without any locks.
         self._assert_thread()
 
         # Send messages which look like user unsubscribes from all
@@ -859,7 +887,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         await asyncio.wait(
             [
                 self.receive_json({"type": "stop", "id": sid})
-                for sid in self._sids_by_group[group]
+                for sid in self._sids_by_group[message["group"]]
             ]
         )
 
@@ -1102,20 +1130,22 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             lambda publish_returned: publish_returned is not Subscription.SKIP
         )
 
-        # Start listening - subscribe to the Channels groups.
-        # Put subscription information into the registry.
+        # Start listening for broadcasts (subscribe to the Channels
+        # groups), spawn the notification processing task and put
+        # subscription information into the registry.
         # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
         # atomic i.e. without `awaits` in between.
         waitlist = []
         for group in groups:
             self._sids_by_group.setdefault(group, []).append(operation_id)
             waitlist.append(self.channel_layer.group_add(group, self.channel_name))
+        notifier_task = self._spawn_background_task(notifier())
         self._subscriptions[operation_id] = self._SubInf(
             groups=groups,
             sid=operation_id,
             unsubscribed_callback=unsubscribed_callback,
             notification_queue=notification_queue,
-            notifier_task=self._spawn_background_task(notifier()),
+            notifier_task=notifier_task,
         )
 
         await asyncio.wait(waitlist)
