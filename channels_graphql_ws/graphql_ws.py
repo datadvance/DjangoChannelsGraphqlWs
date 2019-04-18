@@ -1103,13 +1103,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
 
         # Start listening - subscribe to the Channels groups.
+        # Put subscription information into the registry.
+        # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
+        # atomic i.e. without `awaits` in between.
         waitlist = []
         for group in groups:
             self._sids_by_group.setdefault(group, []).append(operation_id)
             waitlist.append(self.channel_layer.group_add(group, self.channel_name))
-        await asyncio.wait(waitlist)
-
-        # Put subscription information into the registry.
         self._subscriptions[operation_id] = self._SubInf(
             groups=groups,
             sid=operation_id,
@@ -1117,6 +1117,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             notification_queue=notification_queue,
             notifier_task=self._spawn_background_task(notifier()),
         )
+
+        await asyncio.wait(waitlist)
 
         return stream
 
