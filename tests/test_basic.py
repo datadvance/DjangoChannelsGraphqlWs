@@ -69,7 +69,7 @@ async def test_main_usecase(gql):
             "query": textwrap.dedent(
                 """
                 subscription op_name {
-                    on_chat_message_sent(userId: ALICE) { event }
+                    on_chat_message_sent(user_id: ALICE) { event }
                 }
                 """
             ),
@@ -108,7 +108,7 @@ async def test_main_usecase(gql):
     resp = await comm.receive(assert_id=sub_id, assert_type="data")
     event = resp["data"]["on_chat_message_sent"]["event"]
     assert json.loads(event) == {
-        "userId": UserId.ALICE,
+        "user_id": UserId.ALICE,
         "payload": message,
     }, "Subscription notification contains wrong data!"
 
@@ -144,7 +144,7 @@ async def test_subscribe_unsubscribe(gql):
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { on_chat_message_sent(userId: ALICE) { event } }
+                subscription op_name { on_chat_message_sent(user_id: ALICE) { event } }
                 """
             ),
             "variables": {},
@@ -163,7 +163,7 @@ async def test_subscribe_unsubscribe(gql):
             "query": textwrap.dedent(
                 """
                 subscription op_name {
-                    on_chat_message_sent(userId: TOM) { event }
+                    on_chat_message_sent(user_id: TOM) { event }
                 }
                 """
             ),
@@ -176,7 +176,7 @@ async def test_subscribe_unsubscribe(gql):
     msg_id = await comm.send(
         type="start",
         payload={
-            "query": "mutation op_name { kick_out_user(userId: TOM) { success } }",
+            "query": "mutation op_name { kick_out_user(user_id: TOM) { success } }",
             "variables": {},
             "operationName": "op_name",
         },
@@ -232,13 +232,13 @@ async def test_subscription_groups(gql):
     subscribed recipients: Alice, Tom.
     """
 
-    async def create_and_subscribe(userId):
+    async def create_and_subscribe(user_id):
         """Establish and initialize WebSocket GraphQL connection.
 
-        Subscribe to GraphQL subscription by userId.
+        Subscribe to GraphQL subscription by user_id.
 
         Args:
-            userId: User ID for `on_chat_message_sent` subscription.
+            user_id: User ID for `on_chat_message_sent` subscription.
 
         Returns:
             sub_id: Subscription uid.
@@ -258,12 +258,12 @@ async def test_subscription_groups(gql):
             payload={
                 "query": textwrap.dedent(
                     """
-                    subscription op_name($userId: UserId) {
-                        on_chat_message_sent(userId: $userId) { event }
+                    subscription op_name($user_id: UserId) {
+                        on_chat_message_sent(user_id: $user_id) { event }
                     }
                     """
                 ),
-                "variables": {"userId": userId},
+                "variables": {"user_id": user_id},
                 "operationName": "op_name",
             },
         )
@@ -274,12 +274,12 @@ async def test_subscription_groups(gql):
 
         return sub_id, comm
 
-    async def trigger_subscription(comm, userId, message):
+    async def trigger_subscription(comm, user_id, message):
         """Send a message to user using `send_chat_message` mutation.
 
         Args:
             comm: Client, instance of WebsocketCommunicator.
-            userId: User ID for `send_chat_message` mutation.
+            user_id: User ID for `send_chat_message` mutation.
             message: Any string message.
         """
         msg_id = await comm.send(
@@ -287,14 +287,14 @@ async def test_subscription_groups(gql):
             payload={
                 "query": textwrap.dedent(
                     """
-                    mutation op_name($message: String!, $userId: UserId) {
-                        send_chat_message(message: $message, userId: $userId) {
+                    mutation op_name($message: String!, $user_id: UserId) {
+                        send_chat_message(message: $message, user_id: $user_id) {
                             message
                         }
                     }
                     """
                 ),
-                "variables": {"message": message, "userId": userId},
+                "variables": {"message": message, "user_id": user_id},
                 "operationName": "op_name",
             },
         )
@@ -306,12 +306,12 @@ async def test_subscription_groups(gql):
         """Check the response from `on_chat_message_sent` subscription.
 
         Args:
-            userId: Expected user ID.
+            user_id: Expected user ID.
             message: Expected message string.
         """
         event = resp["data"]["on_chat_message_sent"]["event"]
         assert json.loads(event) == {
-            "userId": user_id,
+            "user_id": user_id,
             "payload": message,
         }, "Subscription notification contains wrong data!"
 
@@ -407,30 +407,30 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
     class Arguments:
         """That is how subscription arguments are defined."""
 
-        userId = UserId()
+        user_id = UserId()
 
-    def subscribe(self, info, userId=None):
+    def subscribe(self, info, user_id=None):
         """Specify subscription groups when client subscribes."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
         # Subscribe to the group corresponding to the user.
-        if not userId is None:
-            return [f"user_{userId}"]
+        if not user_id is None:
+            return [f"user_{user_id}"]
         # Subscribe to default group.
         return []
 
-    def publish(self, info, userId):
+    def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"userId": userId, "payload": self}
+        event = {"user_id": user_id, "payload": self}
 
         return OnChatMessageSent(event=event)
 
     @classmethod
-    def notify(cls, userId, message):
+    def notify(cls, user_id, message):
         """Example of the `notify` classmethod usage."""
         # Find the subscription group for user.
-        group = None if userId is None else f"user_{userId}"
+        group = None if user_id is None else f"user_{user_id}"
         super().broadcast(group=group, payload=message)
 
 
@@ -444,23 +444,23 @@ class SendChatMessage(graphene.Mutation):
         """Mutation result."""
 
         message = graphene.String()
-        userId = UserId()
+        user_id = UserId()
 
     class Arguments:
         """That is how mutation arguments are defined."""
 
         message = graphene.String(required=True)
-        userId = graphene.Argument(UserId, required=False)
+        user_id = graphene.Argument(UserId, required=False)
 
-    def mutate(self, info, message, userId=None):
+    def mutate(self, info, message, user_id=None):
         """Send message to the user or all users."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
 
         # Notify subscribers.
-        OnChatMessageSent.notify(message=message, userId=userId)
+        OnChatMessageSent.notify(message=message, user_id=user_id)
 
-        return SendChatMessage.Output(message=message, userId=userId)
+        return SendChatMessage.Output(message=message, user_id=user_id)
 
 
 class KickOutUser(graphene.Mutation):
@@ -472,16 +472,16 @@ class KickOutUser(graphene.Mutation):
     class Arguments:
         """That is how mutation arguments are defined."""
 
-        userId = UserId()
+        user_id = UserId()
 
     success = graphene.Boolean()
 
-    def mutate(self, info, userId):
-        """Unsubscribe everyone associated with the userId."""
+    def mutate(self, info, user_id):
+        """Unsubscribe everyone associated with the user_id."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
 
-        OnChatMessageSent.unsubscribe(group=f"user_{userId}")
+        OnChatMessageSent.unsubscribe(group=f"user_{user_id}")
 
         return KickOutUser(success=True)
 
