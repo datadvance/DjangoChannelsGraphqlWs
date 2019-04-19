@@ -30,9 +30,10 @@ import json
 import textwrap
 import uuid
 
-import channels_graphql_ws
 import graphene
 import pytest
+
+import channels_graphql_ws
 
 
 @pytest.mark.asyncio

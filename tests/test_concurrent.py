@@ -29,13 +29,65 @@
 import asyncio
 import concurrent.futures
 import itertools
+import threading
 import textwrap
+import threading
 import time
 import uuid
 
-import channels_graphql_ws
+import channels
+import django
 import graphene
 import pytest
+
+import channels_graphql_ws
+
+
+@pytest.mark.asyncio
+async def test_concurrent_queries(gql):
+    """Check a single hanging operation does not block other ones."""
+
+    print("Establish & initialize WebSocket GraphQL connection.")
+    comm = gql(query=Query, mutation=Mutation)
+    await comm.connect_and_init()
+
+    print("Invoke a long operation which waits for the wakeup even.")
+    long_op_id = await comm.send(
+        type="start",
+        payload={
+            "query": "mutation op_name { long_op { is_ok } }",
+            "variables": {},
+            "operationName": "op_name",
+        },
+    )
+
+    await comm.assert_no_messages()
+
+    print("Make several fast operations to check they are not blocked by the long one.")
+    for _ in range(3):
+        fast_op_id = await comm.send(
+            type="start",
+            payload={
+                "query": "query op_name { fast_op }",
+                "variables": {},
+                "operationName": "op_name",
+            },
+        )
+        resp = await comm.receive(assert_id=fast_op_id, assert_type="data")
+        assert resp["data"] == {"fast_op": True}
+        await comm.receive(assert_id=fast_op_id, assert_type="complete")
+
+    print("Trigger the wakeup event to let long operation finish.")
+    wakeup.set()
+
+    resp = await comm.receive(assert_id=long_op_id, assert_type="data")
+    assert "errors" not in resp
+    assert resp["data"] == {"long_op": {"is_ok": True}}
+    await comm.receive(assert_id=long_op_id, assert_type="complete")
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.assert_no_messages("Unexpected message received at the end of the test!")
+    await comm.finalize()
 
 
 @pytest.mark.asyncio
@@ -611,7 +663,7 @@ async def test_broadcast_unsubscribe_order_messages(
     while True:
         try:
             resp = await comm.receive(raw_response=True)
-        except Exception:  # pylint: disable=broad-except
+        except asyncio.TimeoutError:
             # Ok, there are no messages.
             break
         resp_id = resp["id"]
@@ -736,6 +788,21 @@ async def test_subscribe_unsubscribe_all_order_messages(
 
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
 
+wakeup = threading.Event()
+
+
+class LongMutation(graphene.Mutation, name="LongMutationPayload"):
+    """Test mutation which simply hangs until event `wakeup` is set."""
+
+    is_ok = graphene.Boolean()
+
+    @staticmethod
+    async def mutate(root, info):
+        """Sleep until `wakeup` event is set."""
+        del root, info
+        wakeup.wait()
+        return LongMutation(True)
+
 
 class UserId(graphene.Enum):
     """User IDs for sending messages."""
@@ -822,6 +889,7 @@ class Subscription(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     """GraphQL mutations."""
 
+    long_op = LongMutation.Field()
     send_chat_message = SendChatMessage.Field()
 
 
@@ -830,6 +898,7 @@ class Query(graphene.ObjectType):
 
     VALUE = str(uuid.uuid4().hex)
     value = graphene.String(args={"issue_error": graphene.Boolean(default_value=False)})
+    fast_op = graphene.Boolean()
 
     def resolve_value(self, info, issue_error):
         """Resolver to return predefined value which can be tested."""
@@ -838,3 +907,26 @@ class Query(graphene.ObjectType):
         if issue_error:
             raise RuntimeError(Query.VALUE)
         return Query.VALUE
+
+    @staticmethod
+    async def resolve_fast_op(root, info):
+        """Simple instant resolver."""
+        del root, info
+        return True
+
+
+class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+    """Channels WebSocket consumer which provides GraphQL API."""
+
+    schema = graphene.Schema(
+        query=Query, mutation=Mutation, subscription=Subscription, auto_camelcase=False
+    )
+
+
+application = channels.routing.ProtocolTypeRouter(
+    {
+        "websocket": channels.routing.URLRouter(
+            [django.urls.path("graphql/", GraphqlWsConsumer)]
+        )
+    }
+)
