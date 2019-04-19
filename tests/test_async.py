@@ -53,7 +53,7 @@ async def test_heavy_load(gql):
     await comm.connect_and_init()
 
     # NOTE: Larger numbers may lead to errors thrown from `select`.
-    REQUESTS_NUMBER = 1000
+    REQUESTS_NUMBER = 1500
 
     print(f"Send {REQUESTS_NUMBER} requests and check {REQUESTS_NUMBER*2} responses.")
     send_waitlist = []
@@ -77,8 +77,14 @@ async def test_heavy_load(gql):
         expected_responses.add((op_id, "complete"))
         receive_waitlist += [comm.transport.receive(), comm.transport.receive()]
 
+    start_ts = time.monotonic()
     await asyncio.wait(send_waitlist)
     responses, _ = await asyncio.wait(receive_waitlist)
+    finish_ts = time.monotonic()
+    print(
+        f"RPS: {REQUESTS_NUMBER / (finish_ts-start_ts)}"
+        f" ({REQUESTS_NUMBER}[req]/{round(finish_ts-start_ts,2)}[sec])"
+    )
 
     for response in (r.result() for r in responses):
         expected_responses.remove((response["id"], response["type"]))
