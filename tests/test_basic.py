@@ -431,7 +431,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
         """Example of the `notify` classmethod usage."""
         # Find the subscription group for user.
         group = None if user_id is None else f"user_{user_id}"
-        super().broadcast(group=group, payload=message)
+        cls.broadcast(group=group, payload=message)
 
 
 class SendChatMessage(graphene.Mutation):
