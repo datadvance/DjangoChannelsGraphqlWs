@@ -847,6 +847,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._assert_thread()
 
         group = message["group"]
+
+        # Do nothing if group does not exist. It is quite possible for
+        # a client and a backend to concurrently unsubscribe and send
+        # notification. And these events do not need to be synchronized.
+        if group not in self._sids_by_group:
+            return
+
         payload = message["payload"]
 
         # Put the payload to the notification queues of subscriptions
