@@ -170,7 +170,7 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
     2) Check that all requests have been successfully processed.
     """
 
-    print("Establish & initialize two WebSocket GraphQL connections.")
+    print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
         query=Query,
         mutation=Mutation,
@@ -315,10 +315,9 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("confirm_subscriptions", [True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_subscribe_unsubscribe_order_messages(
-    gql, confirm_subscriptions, strict_ordering
+    gql, strict_ordering, confirm_subscriptions=True
 ):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
@@ -334,7 +333,7 @@ async def test_subscribe_unsubscribe_order_messages(
     'complete' message.
     """
 
-    print("Establish & initialize two WebSocket GraphQL connections.")
+    print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
         query=Query,
         mutation=Mutation,
@@ -406,11 +405,88 @@ async def test_subscribe_unsubscribe_order_messages(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("sudden_disconnect", [False, True])
+@pytest.mark.parametrize("confirm_subscriptions", [False, True])
+@pytest.mark.parametrize("strict_ordering", [False, True])
+async def test_broadcast_sudden_disconnect(gql, confirm_subscriptions, strict_ordering):
+    """Test disconnect behavior with the GraphQL over WebSocket.
+
+    We send messages and must be sure that at any time after that,
+    the disconnect will be processed correctly.
+    We must receive any messages only before the disconnect.
+
+    Test:
+    1) Send subscribe message and many 'broadcast' messages.
+    2) Disconnect.
+    3) Check that there are no messages.
+    """
+    print("Establish & initialize WebSocket GraphQL connection.")
+    comm = gql(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={
+            "confirm_subscriptions": confirm_subscriptions,
+            "strict_ordering": strict_ordering,
+        },
+    )
+    await comm.connect_and_init()
+
+    sub_id = await comm.send(
+        type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                subscription op_name($userId: UserId) {
+                    on_chat_message_sent(userId: $userId) { event }
+                }
+                """
+            ),
+            "variables": {"userId": "ALICE"},
+            "operationName": "op_name",
+        },
+        id=f"sub_{str(uuid.uuid4().hex)}",
+    )
+
+    spam_payload = {
+        "query": textwrap.dedent(
+            """
+            mutation op_name($message: String!, $userId: UserId) {
+                send_chat_message(message: $message, userId: $userId) {
+                    message
+                }
+            }
+            """
+        ),
+        "variables": {
+            "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
+            "userId": "ALICE",
+        },
+        "operationName": "op_name",
+    }
+
+    # Spam with broadcast messages.
+    for index in range(50):
+        if index == 40:
+            await comm.send(id=sub_id, type="stop")
+        await comm.send(
+            type="start",
+            payload=spam_payload,
+            id=f"mut_{str(index)}_{str(uuid.uuid4().hex)}",
+        )
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.finalize()
+
+    await comm.assert_no_messages(
+        "There was a disconnect, there must not be any messages."
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_broadcast_unsubscribe_order_messages(
-    gql, confirm_subscriptions, strict_ordering, sudden_disconnect
+    gql, confirm_subscriptions, strict_ordering
 ):
     """Test unsubscribe during broadcast behavior with the GraphQL
     over WebSocket.
@@ -448,7 +524,7 @@ async def test_broadcast_unsubscribe_order_messages(
     )
     await comm_spamer.connect_and_init()
 
-    async def subscribe_unsubscribe():
+    async def subscribe_unsubscribe(iteration: int):
         """Subscribe to GraphQL subscription. Spam server with
         the 'broadcast' messages by mutations from different
         clients.
@@ -467,6 +543,7 @@ async def test_broadcast_unsubscribe_order_messages(
                 "variables": {"userId": "ALICE"},
                 "operationName": "op_name",
             },
+            id=f"sub_{str(iteration)} {str(uuid.uuid4().hex)}",
         )
 
         spam_payload = {
@@ -490,8 +567,16 @@ async def test_broadcast_unsubscribe_order_messages(
         for index in range(50):
             if index == 40:
                 await comm.send(id=sub_id, type="stop")
-            await comm_spamer.send(type="start", payload=spam_payload)
-            await comm.send(type="start", payload=spam_payload)
+            await comm_spamer.send(
+                type="start",
+                payload=spam_payload,
+                id=f"mut_spammer_{str(iteration)}_{str(index)}_{str(uuid.uuid4().hex)}",
+            )
+            await comm.send(
+                type="start",
+                payload=spam_payload,
+                id=f"mut_{str(iteration)}_{str(index)}_{str(uuid.uuid4().hex)}",
+            )
 
         while True:
             try:
@@ -511,22 +596,15 @@ async def test_broadcast_unsubscribe_order_messages(
     start_time = loop.time()
 
     print("Start subscribe-unsubscribe iterations.")
+    iteration = 0
     while True:
         # Stop the test if time is up.
         if loop.time() - start_time >= time_border:
             break
         # Start iteration with spam messages.
         async with lock:
-            await subscribe_unsubscribe()
-
-    if sudden_disconnect:
-        print("Disconnect and wait the application to finish gracefully.")
-        await comm.finalize()
-        await asyncio.sleep(1)
-        await comm.assert_no_messages(
-            "There was a disconnect, there must not be any messages."
-        )
-        return
+            await subscribe_unsubscribe(iteration)
+            iteration += 1
 
     # We unsubscribed from all subscriptions and received
     # all 'data' messages.
@@ -536,10 +614,12 @@ async def test_broadcast_unsubscribe_order_messages(
         except Exception:  # pylint: disable=broad-except
             # Ok, there are no messages.
             break
-        assert resp["type"] == "complete", (
-            "Here we can receive only 'COMPLETE' messages after"
-            " mutations, because we have already received the"
-            " 'COMPLETE' message about unsubscribe."
+        resp_id = resp["id"]
+        assert resp_id.startswith("mut_"), (
+            f"We receive the message with id: {resp_id}. Message is not"
+            f" related to mutations! We expect to receive only mutations"
+            f" messages, because we have already received the"
+            f" 'COMPLETE' message about unsubscribe."
         )
 
     await comm.assert_no_messages("There must not be any messages.")
@@ -549,7 +629,7 @@ async def test_broadcast_unsubscribe_order_messages(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("sync", [True, False])
+@pytest.mark.parametrize("sync", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_subscribe_unsubscribe_all_order_messages(
     gql, strict_ordering, sync, confirm_subscriptions=True
@@ -569,7 +649,7 @@ async def test_subscribe_unsubscribe_all_order_messages(
     'complete' message.
     """
 
-    print("Establish & initialize two WebSocket GraphQL connections.")
+    print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
         query=Query,
         mutation=Mutation,
@@ -606,7 +686,7 @@ async def test_subscribe_unsubscribe_all_order_messages(
         )
 
         # Spam with stop messages (unsubscribe all behavior).
-        if sync:
+        if sync == "sync":
 
             def unsubscribe_all():
                 """Stop subscription by sync 'unsubscribe' classmethod."""
@@ -615,7 +695,7 @@ async def test_subscribe_unsubscribe_all_order_messages(
                     time.sleep(0.01)
 
             await loop.run_in_executor(pool, unsubscribe_all)
-        else:
+        elif sync == "async":
             for _ in range(50):
                 await OnChatMessageSent.unsubscribe()
                 await asyncio.sleep(0.01)
