@@ -155,14 +155,12 @@ async def test_heavy_load(gql, sync_resolvers):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
-async def test_subscribe_twice_unsubscribe(gql, sync_resolvers):
-    """Test subscribe-unsubscribe behavior with the GraphQL over
-    WebSocket.
+async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
+    """Check that single unsubscribe does not kill other subscriptions.
 
-    0. Subscribe to the same GraphQL subscription twice.
-    1. Subscribe to the same GraphQL subscription from another
-       communicator.
-    2. Send STOP message for the first subscription and unsubscribe.
+    0. Subscribe to the subscription twice.
+    1. Subscribe to the same subscription from another communicator.
+    2. Send STOP message for the first subscription to unsubscribe.
     3. Execute some mutation.
     4. Check subscription notifications: there are notifications from
        the second and the third subscription.
@@ -283,11 +281,10 @@ async def test_subscribe_twice_unsubscribe(gql, sync_resolvers):
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_subscribe_unsubscribe(
+async def test_subscribe_and_many_unsubscribes(
     gql, confirm_subscriptions, strict_ordering, sync_resolvers
 ):
-    """Test subscribe-unsubscribe behavior with the GraphQL over
-    WebSocket.
+    """Check single subscribe and many unsubscribes run in parallel.
 
     During subscribe-unsubscribe messages possible situation when
     we need to change shared data (dict with operation identifier,
@@ -296,8 +293,7 @@ async def test_subscribe_unsubscribe(
     groups and operation identifiers which we add from another thread.
 
     So test:
-    1) Send subscribe message and many unsubscribe messages
-    concurrently.
+    1) Send subscribe message and many unsubscribe messages in parallel.
     2) Check that all requests have been successfully processed.
     """
 
@@ -458,11 +454,10 @@ async def test_subscribe_unsubscribe(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_subscribe_unsubscribe_order_messages(
+async def test_message_order_in_subscribe_unsubscribe_loop(
     gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
 ):
-    """Test subscribe-unsubscribe behavior with the GraphQL over
-    WebSocket.
+    """Check an order of messages in the subscribe-unsubscribe loop.
 
     We are subscribing and must be sure that at any time after that,
     the subscription stop will be processed correctly.
@@ -561,11 +556,10 @@ async def test_subscribe_unsubscribe_order_messages(
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_broadcast_unsubscribe_order_messages(
+async def test_message_order_in_broadcast_unsubscribe_loop(
     gql, confirm_subscriptions, strict_ordering, sync_resolvers
 ):
-    """Test unsubscribe during broadcast behavior with the GraphQL
-    over WebSocket.
+    """Check an order of messages in the broadcast-unsubscribe cycle.
 
     We send messages and must be sure that at any time after that,
     the subscription stop will be processed correctly.
@@ -724,11 +718,10 @@ async def test_broadcast_unsubscribe_order_messages(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_subscribe_unsubscribe_all_order_messages(
+async def test_message_order_in_subscribe_unsubscribe_all_loop(
     gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
 ):
-    """Test subscribe-unsubscribe behavior with the GraphQL over
-    WebSocket.
+    """Check an order of messages in the subscribe-unsubscribe all loop.
 
     We are subscribing and must be sure that at any time after that,
     the subscription stop will be processed correctly.
