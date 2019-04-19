@@ -25,7 +25,6 @@
 
 # NOTE: The GraphQL schema is defined at the end of the file.
 
-import asyncio
 from datetime import datetime
 import textwrap
 import threading
@@ -40,67 +39,12 @@ import pytest
 import channels_graphql_ws
 
 
-@pytest.mark.asyncio
-async def test_heavy_load(gql):
-    """Test that server correctly processes many simultaneous requests.
-
-    Send many requests simultaneously and make sure all of them have
-    been processed. This test reveals hanging worker threads.
-    """
-
-    print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(query=Query)
-    await comm.connect_and_init()
-
-    # NOTE: Larger numbers may lead to errors thrown from `select`.
-    REQUESTS_NUMBER = 1500
-
-    print(f"Send {REQUESTS_NUMBER} requests and check {REQUESTS_NUMBER*2} responses.")
-    send_waitlist = []
-    receive_waitlist = []
-    expected_responses = set()
-    for _ in range(REQUESTS_NUMBER):
-        op_id = str(uuid.uuid4().hex)
-        send_waitlist += [
-            comm.send(
-                id=op_id,
-                type="start",
-                payload={
-                    "query": "query op_name { fast_op }",
-                    "variables": {},
-                    "operationName": "op_name",
-                },
-            )
-        ]
-        # Expect two messages for each one we have sent.
-        expected_responses.add((op_id, "data"))
-        expected_responses.add((op_id, "complete"))
-        receive_waitlist += [comm.transport.receive(), comm.transport.receive()]
-
-    start_ts = time.monotonic()
-    await asyncio.wait(send_waitlist)
-    responses, _ = await asyncio.wait(receive_waitlist)
-    finish_ts = time.monotonic()
-    print(
-        f"RPS: {REQUESTS_NUMBER / (finish_ts-start_ts)}"
-        f" ({REQUESTS_NUMBER}[req]/{round(finish_ts-start_ts,2)}[sec])"
-    )
-
-    for response in (r.result() for r in responses):
-        expected_responses.remove((response["id"], response["type"]))
-        if response["type"] == "data":
-            assert "errors" not in response["payload"]
-    assert not expected_responses, "Not all expected responses received!"
-
-    print("Disconnect and wait the application to finish gracefully.")
-    await comm.assert_no_messages("Unexpected message received at the end of the test!")
-    await comm.finalize()
-
 
 @pytest.mark.asyncio
 async def test_broadcast(gql):
-    """Test that the `broadcast()` call works correctly from
-    the thread which has running event loop.
+    """Test that the asynchronous 'broadcast()' call works correctly
+    Because we cannot use sync 'broadcats()' method in the thread
+    which has running event loop.
 
     Test simply checks that there is no problem in sending
     notification messages via the `OnMessageSent` subscription
@@ -282,18 +226,6 @@ class Mutation(graphene.ObjectType):
     send_timestamps = SendTimestamps.Field()
 
 
-class Query(graphene.ObjectType):
-    """Root GraphQL query."""
-
-    fast_op = graphene.Boolean()
-
-    @staticmethod
-    async def resolve_fast_op(root, info):
-        """Simple instant resolver."""
-        del root, info
-        return True
-
-
 class Subscription(graphene.ObjectType):
     """GraphQL subscriptions."""
 
@@ -304,7 +236,7 @@ class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
     schema = graphene.Schema(
-        query=Query, mutation=Mutation, subscription=Subscription, auto_camelcase=False
+        mutation=Mutation, subscription=Subscription, auto_camelcase=False
     )
 
 

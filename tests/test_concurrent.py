@@ -29,7 +29,6 @@
 import asyncio
 import concurrent.futures
 import itertools
-import threading
 import textwrap
 import threading
 import time
@@ -68,13 +67,13 @@ async def test_concurrent_queries(gql):
         fast_op_id = await comm.send(
             type="start",
             payload={
-                "query": "query op_name { fast_op }",
+                "query": "query op_name { fast_op_sync }",
                 "variables": {},
                 "operationName": "op_name",
             },
         )
         resp = await comm.receive(assert_id=fast_op_id, assert_type="data")
-        assert resp["data"] == {"fast_op": True}
+        assert resp["data"] == {"fast_op_sync": True}
         await comm.receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
@@ -91,7 +90,72 @@ async def test_concurrent_queries(gql):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_twice_unsubscribe(gql):
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
+async def test_heavy_load(gql, sync_resolvers):
+    """Test that server correctly processes many simultaneous requests.
+
+    Send many requests simultaneously and make sure all of them have
+    been processed. This test reveals hanging worker threads.
+    """
+
+    # Name of Graphql Query used in this test.
+    if sync_resolvers == "sync":
+        query = "fast_op_sync"
+    elif sync_resolvers == "async":
+        query = "fast_op_async"
+
+    print("Establish & initialize WebSocket GraphQL connection.")
+    comm = gql(query=Query)
+    await comm.connect_and_init()
+
+    # NOTE: Larger numbers may lead to errors thrown from `select`.
+    REQUESTS_NUMBER = 1500
+
+    print(f"Send {REQUESTS_NUMBER} requests and check {REQUESTS_NUMBER*2} responses.")
+    send_waitlist = []
+    receive_waitlist = []
+    expected_responses = set()
+    for _ in range(REQUESTS_NUMBER):
+        op_id = str(uuid.uuid4().hex)
+        send_waitlist += [
+            comm.send(
+                id=op_id,
+                type="start",
+                payload={
+                    "query": "query op_name { %s }" % query,
+                    "variables": {},
+                    "operationName": "op_name",
+                },
+            )
+        ]
+        # Expect two messages for each one we have sent.
+        expected_responses.add((op_id, "data"))
+        expected_responses.add((op_id, "complete"))
+        receive_waitlist += [comm.transport.receive(), comm.transport.receive()]
+
+    start_ts = time.monotonic()
+    await asyncio.wait(send_waitlist)
+    responses, _ = await asyncio.wait(receive_waitlist)
+    finish_ts = time.monotonic()
+    print(
+        f"RPS: {REQUESTS_NUMBER / (finish_ts-start_ts)}"
+        f" ({REQUESTS_NUMBER}[req]/{round(finish_ts-start_ts,2)}[sec])"
+    )
+
+    for response in (r.result() for r in responses):
+        expected_responses.remove((response["id"], response["type"]))
+        if response["type"] == "data":
+            assert "errors" not in response["payload"]
+    assert not expected_responses, "Not all expected responses received!"
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await comm.assert_no_messages("Unexpected message received at the end of the test!")
+    await comm.finalize()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
+async def test_subscribe_twice_unsubscribe(gql, sync_resolvers):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
 
@@ -103,6 +167,14 @@ async def test_subscribe_twice_unsubscribe(gql):
     4. Check subscription notifications: there are notifications from
        the second and the third subscription.
     """
+
+    # Names of Graphql mutation and subscription used in this test.
+    if sync_resolvers == "sync":
+        mutation = "send_chat_message_sync"
+        subscription = "on_chat_message_sent_sync"
+    elif sync_resolvers == "async":
+        mutation = "send_chat_message_async"
+        subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize two WebSocket GraphQL connections.")
     comm = gql(
@@ -126,8 +198,9 @@ async def test_subscribe_twice_unsubscribe(gql):
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { on_chat_message_sent(userId: ALICE) { event } }
+                subscription op_name { %s(userId: ALICE) { event } }
                 """
+                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -138,8 +211,9 @@ async def test_subscribe_twice_unsubscribe(gql):
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { on_chat_message_sent(userId: ALICE) { event } }
+                subscription op_name { %s(userId: ALICE) { event } }
                 """
+                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -150,8 +224,9 @@ async def test_subscribe_twice_unsubscribe(gql):
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { on_chat_message_sent(userId: ALICE) { event } }
+                subscription op_name { %s(userId: ALICE) { event } }
                 """
+                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -170,11 +245,12 @@ async def test_subscribe_twice_unsubscribe(gql):
             "query": textwrap.dedent(
                 """
                 mutation op_name($message: String!, $userId: UserId) {
-                    send_chat_message(message: $message, userId: $userId) {
+                    %s(message: $message, userId: $userId) {
                         message
                     }
                 }
                 """
+                % mutation
             ),
             "variables": {"message": message, "userId": "ALICE"},
             "operationName": "op_name",
@@ -186,11 +262,11 @@ async def test_subscribe_twice_unsubscribe(gql):
     # Check responses from subscriptions.
     res = await comm.receive(assert_id=sub_id_2, assert_type="data")
     assert (
-        message in res["data"]["on_chat_message_sent"]["event"]
+        message in res["data"][subscription]["event"]
     ), "Wrong response for second subscriber!"
     res = await comm_new.receive(assert_id=sub_id_new, assert_type="data")
     assert (
-        message in res["data"]["on_chat_message_sent"]["event"]
+        message in res["data"][subscription]["event"]
     ), "Wrong response for third subscriber!"
 
     # Check notifications: there are no notifications. Previously,
@@ -204,9 +280,12 @@ async def test_subscribe_twice_unsubscribe(gql):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering):
+async def test_subscribe_unsubscribe(
+    gql, confirm_subscriptions, strict_ordering, sync_resolvers
+):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
 
@@ -221,6 +300,14 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
     concurrently.
     2) Check that all requests have been successfully processed.
     """
+
+    # Names of Graphql mutation and subscription used in this test.
+    if sync_resolvers == "sync":
+        mutation = "send_chat_message_sync"
+        subscription = "on_chat_message_sent_sync"
+    elif sync_resolvers == "async":
+        mutation = "send_chat_message_async"
+        subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
@@ -249,9 +336,10 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
                 "query": textwrap.dedent(
                     """
                     subscription op_name($userId: UserId) {
-                        on_chat_message_sent(userId: $userId) { event }
+                        %s(userId: $userId) { event }
                     }
                     """
+                    % subscription
                 ),
                 "variables": {"userId": user_id},
                 "operationName": "op_name",
@@ -344,11 +432,12 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
             "query": textwrap.dedent(
                 """
                 mutation op_name($message: String!, $userId: UserId) {
-                    send_chat_message(message: $message, userId: $userId) {
+                    %s(message: $message, userId: $userId) {
                         message
                     }
                 }
                 """
+                % mutation
             ),
             "variables": {"message": message, "userId": "ALICE"},
             "operationName": "op_name",
@@ -367,9 +456,10 @@ async def test_subscribe_unsubscribe(gql, confirm_subscriptions, strict_ordering
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_subscribe_unsubscribe_order_messages(
-    gql, strict_ordering, confirm_subscriptions=True
+    gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
 ):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
@@ -384,6 +474,18 @@ async def test_subscribe_unsubscribe_order_messages(
     2) Check the order of the confirmation message and the
     'complete' message.
     """
+
+    NUMBER_OF_STOP_MESSAGES = 50
+    # Delay in seconds.
+    DELAY_BETWEEN_STOP_MESSAGES = 0.001
+    # Gradually stop the test if time is up.
+    TIME_BORDER = 20
+
+    # Names of Graphql mutation and subscription used in this test.
+    if sync_resolvers == "sync":
+        subscription = "on_chat_message_sent_sync"
+    elif sync_resolvers == "async":
+        subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
@@ -407,9 +509,10 @@ async def test_subscribe_unsubscribe_order_messages(
                 "query": textwrap.dedent(
                     """
                     subscription op_name($userId: UserId) {
-                        on_chat_message_sent(userId: $userId) { event }
+                        %s(userId: $userId) { event }
                     }
                     """
+                    % subscription
                 ),
                 "variables": {"userId": user_id},
                 "operationName": "op_name",
@@ -417,9 +520,9 @@ async def test_subscribe_unsubscribe_order_messages(
         )
 
         # Spam with stop messages.
-        for _ in range(50):
+        for _ in range(NUMBER_OF_STOP_MESSAGES):
             await comm.send(id=sub_id, type="stop")
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(DELAY_BETWEEN_STOP_MESSAGES)
 
         resp = await comm.receive(raw_response=True)
         assert sub_id == resp["id"]
@@ -436,13 +539,11 @@ async def test_subscribe_unsubscribe_order_messages(
 
     lock = asyncio.Lock()
     loop = asyncio.get_event_loop()
-    time_border = 20
     start_time = loop.time()
 
     print("Start subscribe-unsubscribe iterations.")
     while True:
-        # Stop the test if time is up.
-        if loop.time() - start_time >= time_border:
+        if loop.time() - start_time >= TIME_BORDER:
             break
         # Start iteration with spam messages.
         async with lock:
@@ -457,88 +558,11 @@ async def test_subscribe_unsubscribe_order_messages(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("confirm_subscriptions", [False, True])
-@pytest.mark.parametrize("strict_ordering", [False, True])
-async def test_broadcast_sudden_disconnect(gql, confirm_subscriptions, strict_ordering):
-    """Test disconnect behavior with the GraphQL over WebSocket.
-
-    We send messages and must be sure that at any time after that,
-    the disconnect will be processed correctly.
-    We must receive any messages only before the disconnect.
-
-    Test:
-    1) Send subscribe message and many 'broadcast' messages.
-    2) Disconnect.
-    3) Check that there are no messages.
-    """
-    print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(
-        query=Query,
-        mutation=Mutation,
-        subscription=Subscription,
-        consumer_attrs={
-            "confirm_subscriptions": confirm_subscriptions,
-            "strict_ordering": strict_ordering,
-        },
-    )
-    await comm.connect_and_init()
-
-    sub_id = await comm.send(
-        type="start",
-        payload={
-            "query": textwrap.dedent(
-                """
-                subscription op_name($userId: UserId) {
-                    on_chat_message_sent(userId: $userId) { event }
-                }
-                """
-            ),
-            "variables": {"userId": "ALICE"},
-            "operationName": "op_name",
-        },
-        id=f"sub_{str(uuid.uuid4().hex)}",
-    )
-
-    spam_payload = {
-        "query": textwrap.dedent(
-            """
-            mutation op_name($message: String!, $userId: UserId) {
-                send_chat_message(message: $message, userId: $userId) {
-                    message
-                }
-            }
-            """
-        ),
-        "variables": {
-            "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
-            "userId": "ALICE",
-        },
-        "operationName": "op_name",
-    }
-
-    # Spam with broadcast messages.
-    for index in range(50):
-        if index == 40:
-            await comm.send(id=sub_id, type="stop")
-        await comm.send(
-            type="start",
-            payload=spam_payload,
-            id=f"mut_{str(index)}_{str(uuid.uuid4().hex)}",
-        )
-
-    print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
-
-    await comm.assert_no_messages(
-        "There was a disconnect, there must not be any messages."
-    )
-
-
-@pytest.mark.asyncio
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_broadcast_unsubscribe_order_messages(
-    gql, confirm_subscriptions, strict_ordering
+    gql, confirm_subscriptions, strict_ordering, sync_resolvers
 ):
     """Test unsubscribe during broadcast behavior with the GraphQL
     over WebSocket.
@@ -554,6 +578,22 @@ async def test_broadcast_unsubscribe_order_messages(
     2) Check the order of the broadcast messages and the
     'complete' message.
     """
+
+    # Count of spam messages per connection.
+    NUMBER_OF_MUTATION_MESSAGES = 50
+    # When 40 spam messages are sent, we will send the 'stop'
+    # subscription message.
+    MUTATION_INDEX_TO_SEND_STOP = 40
+    # Gradually stop the test if time is up.
+    TIME_BORDER = 20
+
+    # Names of Graphql mutation and subscription used in this test.
+    if sync_resolvers == "sync":
+        mutation = "send_chat_message_sync"
+        subscription = "on_chat_message_sent_sync"
+    elif sync_resolvers == "async":
+        mutation = "send_chat_message_async"
+        subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize two WebSocket GraphQL connections.")
     comm = gql(
@@ -588,9 +628,10 @@ async def test_broadcast_unsubscribe_order_messages(
                 "query": textwrap.dedent(
                     """
                     subscription op_name($userId: UserId) {
-                        on_chat_message_sent(userId: $userId) { event }
+                        %s(userId: $userId) { event }
                     }
                     """
+                    % subscription
                 ),
                 "variables": {"userId": "ALICE"},
                 "operationName": "op_name",
@@ -602,11 +643,12 @@ async def test_broadcast_unsubscribe_order_messages(
             "query": textwrap.dedent(
                 """
                 mutation op_name($message: String!, $userId: UserId) {
-                    send_chat_message(message: $message, userId: $userId) {
+                    %s(message: $message, userId: $userId) {
                         message
                     }
                 }
                 """
+                % mutation
             ),
             "variables": {
                 "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
@@ -616,8 +658,8 @@ async def test_broadcast_unsubscribe_order_messages(
         }
 
         # Spam with broadcast messages.
-        for index in range(50):
-            if index == 40:
+        for index in range(NUMBER_OF_MUTATION_MESSAGES):
+            if index == MUTATION_INDEX_TO_SEND_STOP:
                 await comm.send(id=sub_id, type="stop")
             await comm_spamer.send(
                 type="start",
@@ -644,14 +686,13 @@ async def test_broadcast_unsubscribe_order_messages(
 
     lock = asyncio.Lock()
     loop = asyncio.get_event_loop()
-    time_border = 20
     start_time = loop.time()
 
     print("Start subscribe-unsubscribe iterations.")
     iteration = 0
     while True:
         # Stop the test if time is up.
-        if loop.time() - start_time >= time_border:
+        if loop.time() - start_time >= TIME_BORDER:
             break
         # Start iteration with spam messages.
         async with lock:
@@ -681,10 +722,10 @@ async def test_broadcast_unsubscribe_order_messages(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("sync", ["sync", "async"])
+@pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
 async def test_subscribe_unsubscribe_all_order_messages(
-    gql, strict_ordering, sync, confirm_subscriptions=True
+    gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
 ):
     """Test subscribe-unsubscribe behavior with the GraphQL over
     WebSocket.
@@ -700,6 +741,18 @@ async def test_subscribe_unsubscribe_all_order_messages(
     2) Check the order of the confirmation message and the
     'complete' message.
     """
+
+    NUMBER_OF_UNSUBSCRIBE_CALLS = 50
+    # Delay in seconds.
+    DELAY_BETWEEN_UNSUBSCRIBE_CALLS = 0.01
+    # Gradually stop the test if time is up.
+    TIME_BORDER = 20
+
+    # Name of Graphql subscription used in this test.
+    if sync_resolvers == "sync":
+        subscription = "on_chat_message_sent_sync"
+    elif sync_resolvers == "async":
+        subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
     comm = gql(
@@ -728,9 +781,10 @@ async def test_subscribe_unsubscribe_all_order_messages(
                 "query": textwrap.dedent(
                     """
                     subscription op_name($userId: UserId) {
-                        on_chat_message_sent(userId: $userId) { event }
+                        %s(userId: $userId) { event }
                     }
                     """
+                    % subscription
                 ),
                 "variables": {"userId": user_id},
                 "operationName": "op_name",
@@ -738,19 +792,19 @@ async def test_subscribe_unsubscribe_all_order_messages(
         )
 
         # Spam with stop messages (unsubscribe all behavior).
-        if sync == "sync":
+        if sync_resolvers == "sync":
 
             def unsubscribe_all():
                 """Stop subscription by sync 'unsubscribe' classmethod."""
-                for _ in range(50):
-                    OnChatMessageSent.unsubscribe()
-                    time.sleep(0.01)
+                for _ in range(NUMBER_OF_UNSUBSCRIBE_CALLS):
+                    OnChatMessageSentSync.unsubscribe()
+                    time.sleep(DELAY_BETWEEN_UNSUBSCRIBE_CALLS)
 
             await loop.run_in_executor(pool, unsubscribe_all)
-        elif sync == "async":
-            for _ in range(50):
-                await OnChatMessageSent.unsubscribe()
-                await asyncio.sleep(0.01)
+        elif sync_resolvers == "async":
+            for _ in range(NUMBER_OF_UNSUBSCRIBE_CALLS):
+                await OnChatMessageSentAsync.unsubscribe()
+                await asyncio.sleep(DELAY_BETWEEN_UNSUBSCRIBE_CALLS)
 
         resp = await comm.receive(raw_response=True)
         assert sub_id == resp["id"]
@@ -766,13 +820,12 @@ async def test_subscribe_unsubscribe_all_order_messages(
         )
 
     lock = asyncio.Lock()
-    time_border = 20
     start_time = loop.time()
 
     print("Start subscribe-unsubscribe iterations.")
     while True:
         # Stop the test if time is up.
-        if loop.time() - start_time >= time_border:
+        if loop.time() - start_time >= TIME_BORDER:
             break
         # Start iteration with spam messages.
         async with lock:
@@ -811,7 +864,7 @@ class UserId(graphene.Enum):
     ALICE = 1
 
 
-class OnChatMessageSent(channels_graphql_ws.Subscription):
+class OnChatMessageSentSync(channels_graphql_ws.Subscription):
     """Test GraphQL subscription.
 
     Subscribe to receive messages by user ID.
@@ -841,7 +894,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
         del info
         event = {"userId": userId, "payload": self}
 
-        return OnChatMessageSent(event=event)
+        return OnChatMessageSentSync(event=event)
 
     @classmethod
     def notify(cls, userId, message):
@@ -851,17 +904,60 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
         super().broadcast(group=group, payload=message)
 
 
-class SendChatMessage(graphene.Mutation):
-    """Test GraphQL mutation.
+class OnChatMessageSentAsync(channels_graphql_ws.Subscription):
+    """Test GraphQL subscription with async resolvers.
+
+    Subscribe to receive messages by user ID.
+    """
+
+    # pylint: disable=arguments-differ
+
+    event = graphene.JSONString()
+
+    class Arguments:
+        """That is how subscription arguments are defined."""
+
+        userId = UserId()
+
+    async def subscribe(self, info, userId=None):
+        """Specify subscription groups when client subscribes."""
+        del info
+        assert self is None, "Root `self` expected to be `None`!"
+        # Subscribe to the group corresponding to the user.
+        if not userId is None:
+            return [f"user_{userId}"]
+        # Subscribe to default group.
+        return []
+
+    async def publish(self, info, userId):
+        """Publish query result to the subscribers."""
+        del info
+        event = {"userId": userId, "payload": self}
+
+        return OnChatMessageSentAsync(event=event)
+
+    @classmethod
+    async def notify(cls, userId, message):
+        """Example of the `notify` classmethod usage."""
+        # Find the subscription group for user.
+        group = None if userId is None else f"user_{userId}"
+        await super().broadcast(group=group, payload=message)
+
+
+class SendChatMessageOutput(graphene.ObjectType):
+    """Mutation result."""
+
+    message = graphene.String()
+    userId = UserId()
+
+
+class SendChatMessageSync(graphene.Mutation):
+    """Test GraphQL mutation with the sync 'mutate' resolver.
 
     Send message to the user or all users.
     """
 
-    class Output(graphene.ObjectType):
-        """Mutation result."""
-
-        message = graphene.String()
-        userId = UserId()
+    Output = SendChatMessageOutput
 
     class Arguments:
         """That is how mutation arguments are defined."""
@@ -875,22 +971,48 @@ class SendChatMessage(graphene.Mutation):
         assert self is None, "Root `self` expected to be `None`!"
 
         # Notify subscribers.
-        OnChatMessageSent.notify(message=message, userId=userId)
+        OnChatMessageSentSync.notify(message=message, userId=userId)
+        return SendChatMessageSync.Output(message=message, userId=userId)
 
-        return SendChatMessage.Output(message=message, userId=userId)
+
+class SendChatMessageAsync(graphene.Mutation):
+    """Test GraphQL mutation with the async 'mutate' resolver..
+
+    Send message to the user or all users.
+    """
+
+    Output = SendChatMessageOutput
+
+    class Arguments:
+        """That is how mutation arguments are defined."""
+
+        message = graphene.String(required=True)
+        userId = graphene.Argument(UserId, required=False)
+
+    async def mutate(self, info, message, userId=None):
+        """Send message to the user or all users."""
+        del info
+        assert self is None, "Root `self` expected to be `None`!"
+
+        # Notify subscribers.
+        await OnChatMessageSentAsync.notify(message=message, userId=userId)
+        # Output is the same as in 'SendChatMessageSync'
+        return SendChatMessageAsync.Output(message=message, userId=userId)
 
 
 class Subscription(graphene.ObjectType):
     """GraphQL subscriptions."""
 
-    on_chat_message_sent = OnChatMessageSent.Field()
+    on_chat_message_sent_sync = OnChatMessageSentSync.Field()
+    on_chat_message_sent_async = OnChatMessageSentAsync.Field()
 
 
 class Mutation(graphene.ObjectType):
     """GraphQL mutations."""
 
     long_op = LongMutation.Field()
-    send_chat_message = SendChatMessage.Field()
+    send_chat_message_sync = SendChatMessageSync.Field()
+    send_chat_message_async = SendChatMessageAsync.Field()
 
 
 class Query(graphene.ObjectType):
@@ -898,7 +1020,8 @@ class Query(graphene.ObjectType):
 
     VALUE = str(uuid.uuid4().hex)
     value = graphene.String(args={"issue_error": graphene.Boolean(default_value=False)})
-    fast_op = graphene.Boolean()
+    fast_op_sync = graphene.Boolean()
+    fast_op_async = graphene.Boolean()
 
     def resolve_value(self, info, issue_error):
         """Resolver to return predefined value which can be tested."""
@@ -909,8 +1032,14 @@ class Query(graphene.ObjectType):
         return Query.VALUE
 
     @staticmethod
-    async def resolve_fast_op(root, info):
-        """Simple instant resolver."""
+    def resolve_fast_op_sync(root, info):
+        """Simple instant sync resolver."""
+        del root, info
+        return True
+
+    @staticmethod
+    async def resolve_fast_op_async(root, info):
+        """Simple instant async resolver."""
         del root, info
         return True
 
@@ -919,7 +1048,11 @@ class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
     schema = graphene.Schema(
-        query=Query, mutation=Mutation, subscription=Subscription, auto_camelcase=False
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        types=[SendChatMessageOutput],
+        auto_camelcase=False,
     )
 
 
