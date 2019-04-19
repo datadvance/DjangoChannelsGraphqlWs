@@ -470,11 +470,11 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     'complete' message.
     """
 
-    NUMBER_OF_STOP_MESSAGES = 50
+    NUMBER_OF_STOP_MESSAGES = 42
     # Delay in seconds.
     DELAY_BETWEEN_STOP_MESSAGES = 0.001
     # Gradually stop the test if time is up.
-    TIME_BORDER = 20
+    TIME_LIMIT_SECS = 16
 
     # Names of Graphql mutation and subscription used in this test.
     if sync_resolvers == "sync":
@@ -538,7 +538,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
 
     print("Start subscribe-unsubscribe iterations.")
     while True:
-        if loop.time() - start_time >= TIME_BORDER:
+        if loop.time() - start_time >= TIME_LIMIT_SECS:
             break
         # Start iteration with spam messages.
         async with lock:
