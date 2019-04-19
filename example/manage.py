@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # coding: utf-8
-# Copyright (c) 2018 DATADVANCE
+# Copyright (c) 2019 DATADVANCE
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -26,11 +26,12 @@ import os
 import pathlib
 import sys
 
+
 # Append directory where `channels_graphqlws` package resides.
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 
-if __name__ == '__main__':
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'django_example.settings')
+if __name__ == "__main__":
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "django_example.settings")
     try:
         from django.core.management import execute_from_command_line
     except ImportError:
@@ -41,9 +42,9 @@ if __name__ == '__main__':
             import django
         except ImportError:
             raise ImportError(
-                'Could not import Django. Are you sure it is installed and '
-                'available on your PYTHONPATH environment variable? Did you '
-                'forget to activate a virtual environment?'
+                "Could not import Django. Are you sure it is installed and "
+                "available on your PYTHONPATH environment variable? Did you "
+                "forget to activate a virtual environment?"
             )
         raise
     execute_from_command_line(sys.argv)

@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2018 DATADVANCE
+# Copyright (c) 2019 DATADVANCE
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -37,7 +37,6 @@ import graphene
 import pytest
 
 import channels_graphql_ws
-
 
 
 @pytest.mark.asyncio

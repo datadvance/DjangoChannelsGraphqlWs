@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2018 DATADVANCE
+# Copyright (c) 2019 DATADVANCE
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -71,7 +71,7 @@ DATABASES = {
             # Experiment showed that value `2147483.647` is the maximum
             # allowed SQLite timeout. Setting `timeout` to the larger
             # one will simply disable it.
-            "timeout": 2147483.647
+            "timeout": 2_147_483.647
         },
         "TEST": {"NAME": os.path.join(test_db_tmpdir.name, "test_db.sqlite")},
     }
