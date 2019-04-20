@@ -45,3 +45,6 @@ ALLOWED_HOSTS = "*"
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 ROOT_URLCONF = "example"
 ASGI_APPLICATION = "example.application"
+
+# The database config is only needed to make serialization tests work.
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3"}}
