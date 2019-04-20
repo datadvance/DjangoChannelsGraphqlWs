@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # coding: utf-8
 # Copyright (c) 2019 DATADVANCE
@@ -22,29 +21,27 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import os
+
+"""Django settings for the test project `example`."""
+
+# This is super-minimal configuration which is just enough for unit
+# tests and to illustrate main principles in the `example.py`.
+
 import pathlib
-import sys
+import uuid
 
 
-# Append directory where `channels_graphqlws` package resides.
-sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+BASE_DIR = (
+    pathlib.Path(__file__).absolute().parent.parent
+)  # os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SECRET_KEY = str(uuid.uuid4())
+DEBUG = True
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "channels"]
+ALLOWED_HOSTS = "*"
 
-if __name__ == "__main__":
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings")
-    try:
-        from django.core.management import execute_from_command_line
-    except ImportError:
-        # The above import may fail for some other reason. Ensure that
-        # the issue is really that Django is missing to avoid masking
-        # other exceptions on Python 2.
-        try:
-            import django
-        except ImportError:
-            raise ImportError(
-                "Could not import Django. Are you sure it is installed and "
-                "available on your PYTHONPATH environment variable? Did you "
-                "forget to activate a virtual environment?"
-            )
-        raise
-    execute_from_command_line(sys.argv)
+
+# In this simple example we use in-process in-memory Channel layer.
+# In a real-life cases you need Redis or something familiar.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+ROOT_URLCONF = "example"
+ASGI_APPLICATION = "example.application"

@@ -6,6 +6,7 @@
     - [Features](#features)
     - [Installation](#installation)
     - [Getting started](#getting-started)
+    - [Example](#example)
     - [Details](#details)
         - [Automatic Django model serialization](#automatic-django-model-serialization)
         - [Execution](#execution)
@@ -171,6 +172,42 @@ await MySubscription.broadcast(
     # Dict delivered to the `publish` method.
     payload={},
 )
+```
+
+## Example
+
+You can find simple usage example in the [example](example/) directory.
+
+Run:
+```bash
+cd example/
+./manage.py runserver
+```
+
+Play with the API though the GraphiQL browser at http://127.0.0.1:8000.
+
+You can start with the following GraphQL requests:
+```graphql
+query q {
+  history(chatroom: "kittens") {
+    chatroom
+    message
+    sender
+  }
+}
+
+mutation m {
+  sendChatMessage(chatroom: "kittens", username: "Luke", message: "Hello all!"){
+    ok
+  }
+}
+
+subscription s {
+  onChatMessageSent(chatroom: "kittens", username: "Robot") {
+    message
+    chatroom
+  }
+}
 ```
 
 ## Details
