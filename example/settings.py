@@ -31,9 +31,7 @@ import pathlib
 import uuid
 
 
-BASE_DIR = (
-    pathlib.Path(__file__).absolute().parent.parent
-)  # os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = pathlib.Path(__file__).absolute().parent.parent
 SECRET_KEY = str(uuid.uuid4())
 DEBUG = True
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "channels"]
