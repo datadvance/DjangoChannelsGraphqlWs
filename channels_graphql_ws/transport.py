@@ -37,7 +37,7 @@ class GraphqlWsTransport:
     """Transport interface for the `GraphqlWsClient`."""
 
     # Default timeout for the WebSocket messages.
-    TIMEOUT = 5
+    TIMEOUT = 60
 
     async def connect(self, timeout=TIMEOUT):
         """Connect to the server."""
