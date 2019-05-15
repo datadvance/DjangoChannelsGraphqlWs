@@ -62,7 +62,11 @@ class GraphqlWsTransportChannels(
         """Get next response from channels."""
         return await self.receive_json_from(timeout=timeout)
 
-    async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
+    async def receive_nothing(
+        self,
+        timeout=GraphqlWsTransport.RECEIVE_NOTHING_TIMEOUT,
+        interval=GraphqlWsTransport.RECEIVE_NOTHING_INTERVAL,
+    ):
         """Check that there is nothing more to receive."""
         implementation = channels.testing.WebsocketCommunicator.receive_nothing
         return await implementation(self, timeout, interval)

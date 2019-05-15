@@ -38,6 +38,11 @@ class GraphqlWsTransport:
 
     # Default timeout for the WebSocket messages.
     TIMEOUT = 60
+    # Timeout in seconds to wait to ensure the queue of messages
+    # is empty.
+    RECEIVE_NOTHING_TIMEOUT = 1
+    # Number of seconds to wait for another check for new events.
+    RECEIVE_NOTHING_INTERVAL = 0.01
 
     async def connect(self, timeout=TIMEOUT):
         """Connect to the server."""
@@ -51,7 +56,9 @@ class GraphqlWsTransport:
         """Receive server response."""
         raise NotImplementedError()
 
-    async def receive_nothing(self, timeout=TIMEOUT, interval=0.01):
+    async def receive_nothing(
+        self, timeout=RECEIVE_NOTHING_TIMEOUT, interval=RECEIVE_NOTHING_INTERVAL
+    ):
         """Check that there is no messages left."""
         raise NotImplementedError()
 
@@ -133,7 +140,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
                 self._message_processor.result()
             raise e
 
-    async def receive_nothing(self, timeout=GraphqlWsTransport.TIMEOUT, interval=0.01):
+    async def receive_nothing(
+        self,
+        timeout=GraphqlWsTransport.RECEIVE_NOTHING_TIMEOUT,
+        interval=GraphqlWsTransport.RECEIVE_NOTHING_INTERVAL,
+    ):
         """Check that there is no messages left."""
         # The `interval` has precedence over the `timeout`.
         start = time.monotonic()
