@@ -72,5 +72,6 @@ pytest-cov = "*"
 pytest-django = "*"
 pytest-pythonpath = "*"
 
-[tool.black]
-py36 = true
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
