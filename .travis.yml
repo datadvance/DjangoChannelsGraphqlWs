@@ -22,45 +22,49 @@
 # Travis CI configuration.
 
 stages:
-    - test
-    - lint
-    - test-win
+    - test-linux
+    - test-macos
+    - test-windows
 
 jobs:
     include:
-        # First instance of "stage: tests" creates alias and tests for linux.
-        - &test
-          stage: test
+        - stage: test-linux
           name: "Python 3.7 on Xenial Linux"
           os: linux
-          python: "3.7" # this works for Linux but is ignored on macOS or Windows
-          dist: xenial # required for Python >= 3.7 on Linux
+          python: "3.7" # Works in Linux, ignored in macOS and Windows.
+          dist: xenial
           language: python
           before_install:
               - sudo apt-get update
               - sudo apt-get install -y enchant
           install:
-              - pip3 install --upgrade pip # all three OSes agree about 'pip3'
+              - pip3 install --upgrade pip
               - pip3 install --progress-bar off poetry
-              # 'python' points to Python 2.7 on macOS but points to Python 3.7 on Linux and Windows
-              # 'python3' is a 'command not found' error on Windows but 'python' works on Windows only
               - python3 -m poetry --no-interaction install
               - python3 -m poetry --no-interaction build
           script:
               - python3 -m poetry run pytest --cov-report=term --cov-report=html
-
-        # Subsequent instances use the alias to test different platforms.
-        - <<: *test
+        - stage: test-macos
           name: "Python 3.7 on macOS"
           os: osx
-          osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3
-          language: shell # 'language: python' is an error on Travis CI macOS
-
-        - stage: test-win
+          osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3.
+          python: "3.7"
+          language: shell # 'Language: python' gives error here.
+          before_install:
+              - sudo apt-get update
+              - sudo apt-get install -y enchant
+          install:
+              - pip3 install --upgrade pip
+              - pip3 install --progress-bar off poetry
+              - python3 -m poetry --no-interaction install
+              - python3 -m poetry --no-interaction build
+          script:
+              - python3 -m poetry run pytest --cov-report=term --cov-report=html
+        - stage: test-windows
           name: "Python 3.7 on Windows"
           env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
           os: windows # Windows 10.0.17134 N/A Build 17134
-          language: shell # 'language: python' is an error on Travis CI Windows
+          language: shell # 'Language: python' gives error here.
           before_install:
               - choco install python -y
           install:
@@ -70,20 +74,3 @@ jobs:
               - python -m poetry --no-interaction build
           script:
               - python -m poetry run pytest --cov-report=term --cov-report=html
-
-        - stage: lint
-          os: linux
-          language: python
-          python: "3.7"
-          dist: xenial
-          before_install:
-              - pip install --progress-bar off poetry
-          install:
-              # Install all third party dependencies so isort finds it.
-              - poetry --no-interaction install
-          script:
-              - black --check --diff .
-              # We override 'virtual-env' settings so isort finds third party in
-              # the virtualenv directory of travis ('~/virtualenv' by default).
-              # https://github.com/timothycrosley/isort#configuring-isort
-              - isort --check-only --diff --recursive --virtual-env ~/virtualenv
