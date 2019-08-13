@@ -13,6 +13,7 @@ chatroom
 classmethod
 cli
 config
+coroutine
 daphne
 dedent
 deserialization
@@ -45,6 +46,7 @@ operaion
 py
 pydocstyle
 redis
+resolvers
 sessionid
 sid
 spam
@@ -53,9 +55,12 @@ subinf
 sublicense
 subprotocol
 subprotocols
+superclass
 threadpool
 timeouterror
 timestamp
+timestamps
+tuple
 uid
 unsubscribe
 unsubscribed

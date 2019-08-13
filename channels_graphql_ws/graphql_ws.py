@@ -694,7 +694,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._assert_thread()
 
         # Print debug or warning message depending on the value of the
-        # connection close code. We consider all reserver codes (<999),
+        # connection close code. We consider all reserved codes (<999),
         # 1000 "Normal Closure", and 1001 "Going Away" as OK.
         # See: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
         if not code:
