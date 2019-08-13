@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -69,7 +69,7 @@ async def test_error_cases(gql):
 
     print("Check that query syntax error leads to the `error` response.")
     msg_id = await comm.send(
-        type="wrong_type__(ツ)_/¯", payload={"variables": {}, "operationName": ""}
+        msg_type="wrong_type__(ツ)_/¯", payload={"variables": {}, "operationName": ""}
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
         await comm.receive(assert_id=msg_id, assert_type="error")
@@ -82,7 +82,7 @@ async def test_error_cases(gql):
     )
 
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "This produces a syntax error!",
             "variables": {},
@@ -101,7 +101,7 @@ async def test_error_cases(gql):
 
     print("Check that syntax error leads to the `data` response with `errors` array.")
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "query op_name { value(issue_error: true) }",
             "variables": {},
@@ -118,7 +118,7 @@ async def test_error_cases(gql):
 
     print("Check multiple errors in the `data` message.")
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -164,7 +164,7 @@ async def test_connection_error(gql):
     await comm.connect_and_init(connect_only=True)
 
     print("Try to initialize the connection.")
-    await comm.send(type="connection_init", payload="")
+    await comm.send(msg_type="connection_init", payload="")
     resp = await comm.receive(assert_type="connection_error")
     assert resp["message"] == "RuntimeError: Connection rejected!"
     resp = await comm.transport.receive_output()
@@ -193,7 +193,7 @@ async def test_subscribe_return_value(gql):
         """
 
         # Returning different values (even `None`) from the `subscribe`
-        # method is the main idea of this test. Make PyLint ignore this.
+        # method is the main idea of this test. Make Pylint ignore this.
         # pylint: disable=inconsistent-return-statements
 
         ok = graphene.Boolean()
@@ -238,7 +238,7 @@ async def test_subscribe_return_value(gql):
         comm = gql(subscription=Subscription)
         await comm.connect_and_init()
         await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": """subscription { test_subscription (switch: "%s") { ok } }"""
                 % result_type
@@ -253,7 +253,7 @@ async def test_subscribe_return_value(gql):
         comm = gql(subscription=Subscription)
         await comm.connect_and_init()
         msg_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": """subscription { test_subscription (switch: "%s") { ok } }"""
                 % result_type

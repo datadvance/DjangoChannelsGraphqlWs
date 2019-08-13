@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -64,7 +64,7 @@ import inspect
 import logging
 import traceback
 import types
-import typing
+from typing import Callable, List
 import weakref
 
 import asgiref.sync
@@ -87,7 +87,7 @@ import rx
 
 
 # Module logger.
-log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 # WebSocket subprotocol used for the GraphQL.
 GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
@@ -153,10 +153,10 @@ class Subscription(graphene.ObjectType):
             Returns:
                 The list or tuple of subscription group names this
                 subscription instance belongs to. Later the subscription
-                will trigger on publishes to any of that groups. If method
-                returns None (default behavior) then the subscription is
-                only put to the default group (the one which corresponds to
-                the `Subscription` subclass).
+                will trigger on publishes to any of that groups. If
+                method returns None (default behavior) then the
+                subscription is only put to the default group (the one
+                which corresponds to the `Subscription` subclass).
 
         [async] unsubscribed(root, info, *args, **kwds):
             Called when client unsubscribes. Define this to be notified
@@ -186,6 +186,7 @@ class Subscription(graphene.ObjectType):
             group.
     NOTE: If you call any of these methods from the asynchronous context
     then `await` the result of the call.
+
     """
 
     # ----------------------------------------------------------------------- PUBLIC API
@@ -208,8 +209,8 @@ class Subscription(graphene.ObjectType):
             payload: The payload delivered to the `publish` handler.
                 NOTE: The `payload` is serialized before sending
                 to the subscription group.
-        """
 
+        """
         try:
             event_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -229,8 +230,7 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     async def broadcast_async(cls, *, group=None, payload=None):
-        """Asynchronous implementation of the `broadcast` method."""
-
+        """Broadcast, asynchronous version."""
         # Offload to the thread cause it do DB operations and may work
         # slowly.
         db_sync_to_async = channels.db.database_sync_to_async
@@ -253,8 +253,7 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     def broadcast_sync(cls, *, group=None, payload=None):
-        """Synchronous implementation of the `broadcast` method."""
-
+        """Broadcast, synchronous version."""
         # Manually serialize the `payload` to allow transfer of Django
         # models inside the `payload`.
         serialized_payload = Serializer.serialize(payload)
@@ -285,8 +284,8 @@ class Subscription(graphene.ObjectType):
             group: Name of the subscription group which members must be
                 unsubscribed. `None` means that all the client of the
                 subscription will be unsubscribed.
-        """
 
+        """
         try:
             event_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -306,8 +305,7 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     async def unsubscribe_async(cls, *, group=None):
-        """Asynchronous implementation of the `unsubscribe` method."""
-
+        """Unsubscribe, asynchronous version."""
         # Send the 'unsubscribe' message to the Channels group.
         group = cls._group_name(group)
         await channels.layers.get_channel_layer().group_send(
@@ -316,8 +314,7 @@ class Subscription(graphene.ObjectType):
 
     @classmethod
     def unsubscribe_sync(cls, *, group=None):
-        """Synchronous implementation of the `unsubscribe` method."""
-
+        """Unsubscribe, synchronous version."""
         # Send the message to the Channels group.
         group = cls._group_name(group)
         group_send = asgiref.sync.async_to_sync(
@@ -326,7 +323,7 @@ class Subscription(graphene.ObjectType):
         group_send(group=group, message={"type": "unsubscribe", "group": group})
 
     @classmethod
-    def Field(
+    def Field(  # pylint: disable=invalid-name
         cls, name=None, description=None, deprecation_reason=None, required=False
     ):
         """Represent subscription as a field to "deploy" it."""
@@ -418,7 +415,6 @@ class Subscription(graphene.ObjectType):
 
         This is called by the Graphene when a client subscribes.
         """
-
         # Extract function which associates the callback with the groups
         # and remove it from the context so extra field does not pass to
         # the `subscribe` method of a subclass.
@@ -482,33 +478,36 @@ class Subscription(graphene.ObjectType):
     @classmethod
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
-
         prefix = GraphqlWsConsumer.group_name_prefix
         suffix = f"{cls.__module__}.{cls.__qualname__}"
         if group is not None:
             suffix += "-" + group
 
-        # Wrap the suffix into MD5 to guarantee that the length of the
-        # group name is limited. Otherwise Channels will complain about
-        # that the group name is wrong (actually is too long).
-        suffix_md5 = hashlib.md5()
-        suffix_md5.update(suffix.encode("utf-8"))
-        suffix_md5 = suffix_md5.hexdigest()
+        # Wrap the suffix into SHA256 to guarantee that the length of
+        # the group name is limited. Otherwise Channels will complain
+        # about that the group name is wrong (actually is too long).
+        suffix_sha256 = hashlib.sha256()
+        suffix_sha256.update(suffix.encode("utf-8"))
+        suffix_sha256 = suffix_sha256.hexdigest()
 
-        return f"{prefix}-{suffix_md5}"
+        return f"{prefix}-{suffix_sha256}"
 
     @staticmethod
     def _from_coroutine() -> bool:
-        """Determine whether the current function is called from a
+        """Check if called from the coroutine function.
+
+        Determine whether the current function is called from a
         coroutine function (native coroutine, generator-based coroutine,
         or asynchronous generator function).
 
         NOTE: That it's only recommended to use for debugging, not as
         part of your production code's functionality.
         """
-
-        frame = inspect.currentframe()
         try:
+            frame = inspect.currentframe()
+            if frame is None:
+                return False
+            # pylint: disable=no-member
             coroutine_function_flags = (
                 inspect.CO_COROUTINE
                 | inspect.CO_ASYNC_GENERATOR
@@ -588,13 +587,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     group_name_prefix = "GRAPHQL_WS_SUBSCRIPTION"
 
     async def on_connect(self, payload):
-        """Called after CONNECTION_INIT message from client.
+        """Client connection handler.
 
-        Overwrite and raise an Exception to tell the server
-        to reject the connection when it's necessary.
+        Called after CONNECTION_INIT message from client. Overwrite and
+        raise an Exception to tell the server to reject the connection
+        when it's necessary.
 
         Args:
             payload: Payload from CONNECTION_INIT message.
+
         """
 
     # ------------------------------------------------------------------- IMPLEMENTATION
@@ -604,7 +605,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         thread_name_prefix="GraphqlWs.", max_workers=max_worker_threads
     )
 
-    # Disable promise's "trampoline" (whatever it means), cause when it
+    # Disable promise "trampoline" (whatever it means), cause when it
     # is enabled (which is by default) the promise is not thread-safe.
     # This leads to hanging threads and unanswered requests.
     # https://github.com/syrusakbary/promise/issues/57#issuecomment-406778476
@@ -618,7 +619,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Subscription identifier - protocol operation identifier.
         sid: int
         # Subscription groups the subscription belongs to.
-        groups: typing.List[typing.AnyStr]
+        groups: List[str]
         # The subscription notification queue. Required to preserve the
         # order of notifications within a single subscription.
         notification_queue: asyncio.Queue
@@ -626,9 +627,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # clients. Task triggers subscription `publish` resolvers.
         notifier_task: asyncio.Task
         # The callback to invoke when client unsubscribes.
-        unsubscribed_callback: typing.Callable[[], None]
+        unsubscribed_callback: Callable[[], None]
 
     def __init__(self, *args, **kwargs):
+        """Consumer constructor."""
         assert self.schema is not None, (
             "An attribute 'schema' is not set! Subclasses must specify "
             "the schema which processes GraphQL subscription queries."
@@ -645,7 +647,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # We use weak collection so finished task will be autoremoved.
         self._background_tasks = weakref.WeakSet()
 
-        # Remmember current eventloop so we can check it further in
+        # remember current eventloop so we can check it further in
         # `_assert_thread` method.
         self._eventloop = asyncio.get_running_loop()
 
@@ -662,7 +664,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         """Handle new WebSocket connection."""
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -684,12 +685,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         await self.accept(subprotocol=GRAPHQL_WS_SUBPROTOCOL)
 
     async def disconnect(self, code):
-        """WebSocket disconnection handler.
+        """Handle WebSocket disconnect.
 
         Remove itself from the Channels groups, clear triggers and stop
         sending keepalive messages.
         """
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -698,11 +698,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # 1000 "Normal Closure", and 1001 "Going Away" as OK.
         # See: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
         if not code:
-            log.warning("WebSocket connection closed without a code")
+            LOG.warning("WebSocket connection closed without a code")
         elif code <= 1001:
-            log.debug("WebSocket connection closed with code: %s.", code)
+            LOG.debug("WebSocket connection closed with code: %s.", code)
         else:
-            log.warning("WebSocket connection closed with code: %s!", code)
+            LOG.warning("WebSocket connection closed with code: %s!", code)
 
         # The list of awaitables to simultaneously wait at the end.
         waitlist = []
@@ -733,16 +733,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def receive_json(self, content):  # pylint: disable=arguments-differ
         """Process WebSocket message received from the client.
 
-        # NOTE: We force 'STOP' message processing to wait until 'START'
-        # with the same operation id finishes (if it is running). This
-        # protects us from a rase conditions which may happen when
-        # a client stops operation immediately after starting it. An
-        # illustrative example is a subscribe-unsubscribe pair. If we
-        # spawn processing of both messages concurrently we can deliver
-        # subscription confirmation after unsubscription confirmation.
+        NOTE: We force 'STOP' message processing to wait until 'START'
+        with the same operation id finishes (if it is running). This
+        protects us from a raise conditions which may happen when
+        a client stops operation immediately after starting it. An
+        illustrative example is a subscribe-unsubscribe pair. If we
+        spawn processing of both messages concurrently we can deliver
+        subscription confirmation after unsubscription confirmation.
         """
-
-        # Disable this check cause the current version of PyLint
+        # Disable this check cause the current version of Pylint
         # improperly complains when we assign a coroutine object to
         # a local variable `task` below.
         # pylint: disable=assignment-from-no-return
@@ -767,7 +766,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # weak collection so we do not have to manually clean it up.
             if op_id in self._operation_locks:
                 raise graphql.error.GraphQLError(
-                    f"Operation with id={op_id} is already running!"
+                    f"Operation with msg_id={op_id} is already running!"
                 )
             op_lock = asyncio.Lock()
             self._operation_locks[op_id] = op_lock
@@ -822,7 +821,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Currently we recommend to monkey-patch the `channels_redis` to
         avoid this.
         """
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -841,7 +839,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task by the `broadcast` method (message handler).
         """
-
         # Assert we run in a proper thread. In particular, we can access
         # the `_subscriptions` and `_sids_by_group` without any locks.
         self._assert_thread()
@@ -868,7 +865,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 except asyncio.QueueFull:
                     # The queue is full - issue a warning and throw away
                     # the oldest item from the queue.
-                    log.warning(
+                    LOG.warning(
                         "Subscription notification dropped!"
                         " Subscription operation id: %s.",
                         sid,
@@ -883,7 +880,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         `Subscription.unsubscribe`. Here we figure out the group message
         received from and stop all the subscriptions in this group.
         """
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -897,7 +893,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Send messages which look like user unsubscribes from all
         # subscriptions in the subscription group. This saves us from
-        # thinking about rase condition between subscription and
+        # thinking about raise condition between subscription and
         # unsubscription.
         await asyncio.wait(
             [
@@ -918,15 +914,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
         try:
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
-        except Exception as e:  # pylint: disable=broad-except
-            await self._send_gql_connection_error(self._format_error(e))
+        except Exception as ex:  # pylint: disable=broad-except
+            await self._send_gql_connection_error(self._format_error(ex))
             # Close the connection.
             # NOTE: We use the 4000 code because there are two reasons:
             # A) We can not use codes greater than 1000 and less than
@@ -962,7 +957,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
-
         # Assert we run in a proper thread.
         self._assert_thread()
 
@@ -979,7 +973,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
-
         # Assert we run in a proper thread. In particular, we can access
         # the `_subscriptions` and `_sids_by_group` without any locks.
         self._assert_thread()
@@ -987,7 +980,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         try:
             if operation_id in self._subscriptions:
                 raise graphql.error.GraphQLError(
-                    f"Subscription with id={operation_id} already exists!"
+                    f"Subscription with msg_id={operation_id} already exists!"
                 )
 
             # Get the message data.
@@ -1046,7 +1039,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # Respond with the subscription activation message if
                 # enabled in the consumer configuration.
-                # NOTE: We intentionally do it before subscrubing to the
+                # NOTE: We intentionally do it before subscribing to the
                 # `result` stream. This guarantees that subscription
                 # confirmation message is sent before any subscription
                 # notifications.
@@ -1099,8 +1092,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 subscription groups current subscription belongs to.
             unsubscribed_callback: Called to notify when a client
                 unsubscribes.
-        """
 
+        """
         # NOTE: It is important to invoke `group_add` from an
         # eventloop which serves the current consumer. Besides
         # this is a "proper" way of doing async things, it is
@@ -1176,7 +1169,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
-
         # Assert we run in a proper thread. In particular, we can access
         # the `_subscriptions` and `_sids_by_group` without any locks.
         self._assert_thread()
@@ -1239,6 +1231,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             data: Dict with GraphQL query response.
             errors: List with exceptions occurred during processing the
                 GraphQL query. (Errors happened in the resolvers.)
+
         """
         self._assert_thread()
         await self.send_json(
@@ -1268,6 +1261,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Args:
             operation_id: Id of the operation that failed on the server.
             error: String with the information about the error.
+
         """
         self._assert_thread()
         await self.send_json(
@@ -1279,6 +1273,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         Args:
             operation_id: If of the corresponding operation.
+
         """
         self._assert_thread()
         await self.send_json({"type": "complete", "id": operation_id})
@@ -1313,14 +1308,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         Returns:
             The result of the `func` invocation.
-        """
 
+        """
         # Assert we run in a proper thread.
         self._assert_thread()
 
         def thread_func():
-            """Wrap the `func` to initialize evenloop and to cleanup."""
-
+            """Wrap the `func` to init eventloop and to cleanup."""
             # Create an eventloop if this worker thread does not have
             # one yet. Eventually each worker will have its own
             # eventloop for `func` can use it.
@@ -1344,8 +1338,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
 
     def _assert_thread(self):
-        """Assert that function is invoked from a thread where eventloop
-        serving current consumer is running."""
+        """Assert called from our thread with the eventloop."""
 
         assert asyncio.get_running_loop() == self._eventloop, (
             "Function is called from an inappropriate thread! This"
@@ -1356,11 +1349,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     def _spawn_background_task(self, awaitable):
         """Spawn background task.
 
-        Tasks are cancelled and awaited when a client disconnects.
+        Tasks are canceled and awaited when a client disconnects.
         Args:
             awaitable: An awaitable to run in a task.
         Returns:
             A started `asyncio.Task` instance.
+
         """
         background_task = asyncio.create_task(awaitable)
         self._background_tasks.add(background_task)

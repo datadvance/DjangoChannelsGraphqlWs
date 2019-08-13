@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -74,9 +74,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         url: WebSocket GraphQL endpoint.
         cookies: HTTP request cookies.
         headers: HTTP request headers.
+
     """
 
     def __init__(self, url, cookies=None, headers=None):
+        """Constructor. See class description for details."""
         # Server URL.
         self._url = url
         # HTTP cookies.
@@ -96,8 +98,8 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         Returns:
             `(True, <chosen-subprotocol>)` if connection accepted.
             `(False, None)` if connection rejected.
-        """
 
+        """
         connected = asyncio.Event()
         self._message_processor = asyncio.create_task(
             self._process_messages(connected, timeout)
@@ -123,8 +125,8 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
 
         Returns:
             The message received as a `dict`.
-        """
 
+        """
         # Make sure there's no an exception to raise from the task.
         if self._message_processor.done():
             self._message_processor.result()
@@ -134,11 +136,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
             payload = await asyncio.wait_for(self._incoming_messages.get(), timeout)
             assert isinstance(payload, str), "Non-string data received!"
             return json.loads(payload)
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError as ex:
             # See if we have another error to raise inside.
             if self._message_processor.done():
                 self._message_processor.result()
-            raise e
+            raise ex
 
     async def receive_nothing(
         self,
@@ -171,13 +173,13 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
                     pass
 
     async def _process_messages(self, connected, timeout):
-        """A task to process messages coming from the connection.
+        """Process messages coming from the connection.
 
         Args:
             connected: Event for reporting that connection established.
             timeout: Connection timeout in seconds.
-        """
 
+        """
         session = aiohttp.ClientSession(cookies=self._cookies, headers=self._headers)
         async with session as session:
             connection = session.ws_connect(

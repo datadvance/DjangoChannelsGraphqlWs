@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -34,11 +34,10 @@ from .transport import GraphqlWsTransport
 class GraphqlWsTransportChannels(
     GraphqlWsTransport, channels.testing.WebsocketCommunicator
 ):
-    """Testing client transport which uses channels protocol instead of
-    real websocket connection.
-    """
+    """Testing client transport to work without WebSocket connection."""
 
     def __init__(self, *args, **kwds):
+        """Constructor, see `channels.testing.WebsocketCommunicator`."""
         kwds.setdefault("subprotocols", ["graphql-ws"])
         kwds.setdefault("path", "graphql/")
         channels.testing.WebsocketCommunicator.__init__(self, *args, **kwds)

@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -49,7 +49,7 @@ async def test_confirmation_enabled(gql):
     print("Subscribe & check there is a subscription confirmation message.")
 
     sub_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
@@ -62,7 +62,7 @@ async def test_confirmation_enabled(gql):
     print("Trigger the subscription.")
 
     mut_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",
@@ -96,7 +96,7 @@ async def test_confirmation_disabled(gql):
     print("Subscribe & check there is no subscription confirmation message.")
 
     sub_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
@@ -108,7 +108,7 @@ async def test_confirmation_disabled(gql):
     print("Trigger the subscription.")
 
     mut_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",
@@ -152,7 +152,7 @@ async def test_custom_confirmation_message(gql):
     print("Subscribe & check there is a subscription confirmation message.")
 
     sub_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
@@ -173,7 +173,7 @@ async def test_custom_confirmation_message(gql):
     print("Trigger the subscription.")
 
     mut_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",

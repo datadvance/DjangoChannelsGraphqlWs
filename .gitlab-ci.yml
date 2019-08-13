@@ -2,7 +2,7 @@
 
 # GitLab CI configuration.
 
-# Documentations:
+# Documentation:
 # https://docs.gitlab.com/ce/ci/yaml/README.html
 # List of available environment variables:
 # https://docs.gitlab.com/ce/ci/variables/README.html

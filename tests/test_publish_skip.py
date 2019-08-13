@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -53,7 +53,7 @@ async def test_publish_skip(gql):
         the sessionid inside. Simply extract it.
         """
         # Expected headers list looks like:
-        # [(b'cookie', b'sessionid=acea05bbb40941a488d5e9a830e67354')]
+        # [(b"cookie", b"sessionid=acea05bbb40941a488d5e9a830e67354")]
         assert (
             len(headers) == 1 and headers[0][0] == b"cookie"
         ), f"Unexpected headers received: {headers}"
@@ -133,7 +133,7 @@ async def test_publish_skip(gql):
     print("Subscribe to receive a new message notifications.")
 
     await comm1.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -143,7 +143,7 @@ async def test_publish_skip(gql):
     await comm1.assert_no_messages("Subscribe responded with a message!")
 
     sub_op_id = await comm2.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -155,7 +155,7 @@ async def test_publish_skip(gql):
     print("Send a new message to check we have not received notification about it.")
 
     mut_op_id = await comm1.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": """mutation op_name { send_message(message: "Hi!") { is_ok } }""",
             "variables": {},

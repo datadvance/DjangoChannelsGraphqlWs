@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -51,7 +51,7 @@ async def test_main_usecase(gql):
 
     print("Make simple GraphQL query and check the response.")
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "query op_name { value }",
             "variables": {},
@@ -64,7 +64,7 @@ async def test_main_usecase(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -83,7 +83,7 @@ async def test_main_usecase(gql):
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -140,7 +140,7 @@ async def test_subscribe_unsubscribe(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -153,12 +153,12 @@ async def test_subscribe_unsubscribe(gql):
     )
 
     print("Stop subscription by id.")
-    await comm.send(id=sub_id, type="stop")
+    await comm.send(msg_id=sub_id, msg_type="stop")
     await comm.receive(assert_id=sub_id, assert_type="complete")
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -174,7 +174,7 @@ async def test_subscribe_unsubscribe(gql):
 
     print("Stop all subscriptions for TOM.")
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "mutation op_name { kick_out_user(user_id: TOM) { success } }",
             "variables": {},
@@ -188,7 +188,7 @@ async def test_subscribe_unsubscribe(gql):
 
     print("Trigger the subscription by mutation to receive notification.")
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -254,7 +254,7 @@ async def test_subscription_groups(gql):
         await comm.connect_and_init()
 
         sub_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
@@ -283,7 +283,7 @@ async def test_subscription_groups(gql):
             message: Any string message.
         """
         msg_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
@@ -334,7 +334,7 @@ async def test_subscription_groups(gql):
     print("Trigger subscription: send message to Alice.")
     message = "Hi, Alice!"
     await trigger_subscription(comm_tom, alice_id, message)
-    # Check Alise's notifications.
+    # Check Alice's notifications.
     resp = await comm_alice.receive(assert_id=uid_alice, assert_type="data")
     check_resp(resp, UserId[alice_id].value, message)
     # Any other did not receive any notifications.
@@ -378,7 +378,7 @@ async def test_keepalive(gql):
         await receive_keep_alive()
 
     print("Send connection termination message.")
-    await comm.send(id=None, type="connection_terminate")
+    await comm.send(msg_id=None, msg_type="connection_terminate")
 
     print("Disconnect and wait the application to finish gracefully.")
     await comm.finalize()

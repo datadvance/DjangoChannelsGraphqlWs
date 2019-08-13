@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -27,12 +27,9 @@
 
 from datetime import datetime
 import textwrap
-import threading
 import time
 import uuid
 
-import channels
-import django
 import graphene
 import pytest
 
@@ -42,7 +39,7 @@ import channels_graphql_ws
 @pytest.mark.asyncio
 async def test_broadcast(gql):
     """Test that the asynchronous 'broadcast()' call works correctly
-    Because we cannot use sync 'broadcats()' method in the thread
+    Because we cannot use sync 'broadcasts()' method in the thread
     which has running event loop.
 
     Test simply checks that there is no problem in sending
@@ -61,7 +58,7 @@ async def test_broadcast(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "subscription on_message_sent { on_message_sent { message } }",
             "variables": {},
@@ -74,7 +71,7 @@ async def test_broadcast(gql):
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -103,7 +100,7 @@ async def test_broadcast(gql):
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -139,8 +136,6 @@ async def test_broadcast(gql):
 
 
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP
-
-wakeup = threading.Event()
 
 
 class SendMessage(graphene.Mutation, name="SendMessagePayload"):
@@ -184,7 +179,7 @@ class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):
 
     @staticmethod
     async def mutate(root, info, count):
-        """Send increaseing timestamps with decreasing delays."""
+        """Send increasing timestamps with decreasing delays."""
 
         del root, info
 
@@ -229,20 +224,3 @@ class Subscription(graphene.ObjectType):
     """GraphQL subscriptions."""
 
     on_message_sent = OnMessageSent.Field()
-
-
-class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
-    """Channels WebSocket consumer which provides GraphQL API."""
-
-    schema = graphene.Schema(
-        mutation=Mutation, subscription=Subscription, auto_camelcase=False
-    )
-
-
-application = channels.routing.ProtocolTypeRouter(
-    {
-        "websocket": channels.routing.URLRouter(
-            [django.urls.path("graphql/", GraphqlWsConsumer)]
-        )
-    }
-)

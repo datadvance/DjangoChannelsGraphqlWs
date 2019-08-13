@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (c) 2020 DATADVANCE
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -37,12 +37,11 @@ import channels_graphql_ws
 @pytest.mark.asyncio
 async def test_serialization(gql, transactional_db):
     """Test serialization of the Django model inside the `payload`."""
-
     del transactional_db
 
     # Get Django user model class without referencing it directly:
     # https://docs.djangoproject.com/en/dev/topics/auth/customizing/#referencing-the-user-model
-    User = django.contrib.auth.get_user_model()
+    User = django.contrib.auth.get_user_model()  # pylint: disable=invalid-name
 
     user1_id = random.randint(0, 1023)
     user2_id = random.randint(1024, 2047)
@@ -116,7 +115,7 @@ async def test_serialization(gql, transactional_db):
     print("Subscribe to receive subscription notifications.")
 
     sub_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """

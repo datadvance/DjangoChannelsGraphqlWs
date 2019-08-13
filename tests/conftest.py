@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -33,7 +33,7 @@ import channels_graphql_ws.testing
 
 
 @pytest.fixture
-def gql():
+def gql(db):
     """PyTest fixture for testing GraphQL WebSocket backends.
 
     The fixture provides a method to setup GraphQL testing backend for
@@ -82,6 +82,10 @@ def gql():
     ```
 
     """
+    # NOTE: We need Django DB to be initialized each time we work with
+    # `GraphqlWsConsumer`, because it uses threads and sometimes calls
+    # `django.db.close_old_connections()`.
+    del db
 
     def communicator_constructor(
         *,

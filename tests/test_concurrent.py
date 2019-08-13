@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -34,8 +34,6 @@ import threading
 import time
 import uuid
 
-import channels
-import django
 import graphene
 import pytest
 
@@ -52,7 +50,7 @@ async def test_concurrent_queries(gql):
 
     print("Invoke a long operation which waits for the wakeup even.")
     long_op_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": "mutation op_name { long_op { is_ok } }",
             "variables": {},
@@ -65,7 +63,7 @@ async def test_concurrent_queries(gql):
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
         fast_op_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": "query op_name { fast_op_sync }",
                 "variables": {},
@@ -77,7 +75,7 @@ async def test_concurrent_queries(gql):
         await comm.receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
-    wakeup.set()
+    WAKEUP.set()
 
     resp = await comm.receive(assert_id=long_op_id, assert_type="data")
     assert "errors" not in resp
@@ -89,9 +87,11 @@ async def test_concurrent_queries(gql):
     await comm.finalize()
 
 
+# NOTE: Large `requests_number` values may lead to errors in `select`.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
-async def test_heavy_load(gql, sync_resolvers):
+@pytest.mark.parametrize("requests_number", [1, 10, 100, 1000])
+async def test_heavy_load(gql, sync_resolvers, requests_number):
     """Test that server correctly processes many simultaneous requests.
 
     Send many requests simultaneously and make sure all of them have
@@ -108,19 +108,16 @@ async def test_heavy_load(gql, sync_resolvers):
     comm = gql(query=Query)
     await comm.connect_and_init()
 
-    # NOTE: Larger numbers may lead to errors thrown from `select`.
-    REQUESTS_NUMBER = 1500
-
-    print(f"Send {REQUESTS_NUMBER} requests and check {REQUESTS_NUMBER*2} responses.")
+    print(f"Send {requests_number} requests and check {requests_number*2} responses.")
     send_waitlist = []
     receive_waitlist = []
     expected_responses = set()
-    for _ in range(REQUESTS_NUMBER):
-        op_id = str(uuid.uuid4().hex)
+    for _ in range(requests_number):
+        op_id = uuid.uuid4().hex
         send_waitlist += [
             comm.send(
-                id=op_id,
-                type="start",
+                msg_id=op_id,
+                msg_type="start",
                 payload={
                     "query": "query op_name { %s }" % query,
                     "variables": {},
@@ -138,8 +135,8 @@ async def test_heavy_load(gql, sync_resolvers):
     responses, _ = await asyncio.wait(receive_waitlist)
     finish_ts = time.monotonic()
     print(
-        f"RPS: {REQUESTS_NUMBER / (finish_ts-start_ts)}"
-        f" ({REQUESTS_NUMBER}[req]/{round(finish_ts-start_ts,2)}[sec])"
+        f"RPS: {requests_number / (finish_ts-start_ts)}"
+        f" ({requests_number}[req]/{round(finish_ts-start_ts,2)}[sec])"
     )
 
     for response in (r.result() for r in responses):
@@ -192,11 +189,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
 
     print("Subscribe to GraphQL subscription with the same subscription group.")
     sub_id_1 = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { %s(userId: ALICE) { event } }
+                subscription op_name { %s(user_id: ALICE) { event } }
                 """
                 % subscription
             ),
@@ -205,11 +202,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     sub_id_2 = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { %s(userId: ALICE) { event } }
+                subscription op_name { %s(user_id: ALICE) { event } }
                 """
                 % subscription
             ),
@@ -218,11 +215,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     sub_id_new = await comm_new.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
-                subscription op_name { %s(userId: ALICE) { event } }
+                subscription op_name { %s(user_id: ALICE) { event } }
                 """
                 % subscription
             ),
@@ -232,25 +229,25 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
     )
 
     print("Stop the first subscription by id.")
-    await comm.send(id=sub_id_1, type="stop")
+    await comm.send(msg_id=sub_id_1, msg_type="stop")
     await comm.receive(assert_id=sub_id_1, assert_type="complete")
 
     print("Trigger the subscription by mutation to receive notifications.")
     message = "HELLO WORLD"
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
-                mutation op_name($message: String!, $userId: UserId) {
-                    %s(message: $message, userId: $userId) {
+                mutation op_name($message: String!, $user_id: UserId) {
+                    %s(message: $message, user_id: $user_id) {
                         message
                     }
                 }
                 """
                 % mutation
             ),
-            "variables": {"message": message, "userId": "ALICE"},
+            "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
         },
     )
@@ -327,26 +324,26 @@ async def test_subscribe_and_many_unsubscribes(
         """
 
         sub_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
-                    subscription op_name($userId: UserId) {
-                        %s(userId: $userId) { event }
+                    subscription op_name($user_id: UserId) {
+                        %s(user_id: $user_id) { event }
                     }
                     """
                     % subscription
                 ),
-                "variables": {"userId": user_id},
+                "variables": {"user_id": user_id},
                 "operationName": "op_name",
             },
-            id=op_id,
+            msg_id=op_id,
         )
         assert sub_id == op_id
 
         # Multiple stop messages.
         while True:
-            await comm.send(id=op_id, type="stop")
+            await comm.send(msg_id=op_id, msg_type="stop")
             await asyncio.sleep(0.01)
             if flag.is_set():
                 break
@@ -423,19 +420,19 @@ async def test_subscribe_and_many_unsubscribes(
     print("Trigger the subscription by mutation.")
     message = "HELLO WORLD"
     msg_id = await comm.send(
-        type="start",
+        msg_type="start",
         payload={
             "query": textwrap.dedent(
                 """
-                mutation op_name($message: String!, $userId: UserId) {
-                    %s(message: $message, userId: $userId) {
+                mutation op_name($message: String!, $user_id: UserId) {
+                    %s(message: $message, user_id: $user_id) {
                         message
                     }
                 }
                 """
                 % mutation
             ),
-            "variables": {"message": message, "userId": "ALICE"},
+            "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
         },
     )
@@ -470,11 +467,11 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     'complete' message.
     """
 
-    NUMBER_OF_STOP_MESSAGES = 42
+    NUMBER_OF_STOP_MESSAGES = 42  # pylint: disable=invalid-name
     # Delay in seconds.
-    DELAY_BETWEEN_STOP_MESSAGES = 0.001
+    DELAY_BETWEEN_STOP_MESSAGES = 0.001  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
-    TIME_LIMIT_SECS = 16
+    TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
     # Names of Graphql mutation and subscription used in this test.
     if sync_resolvers == "sync":
@@ -499,24 +496,24 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
         'stop' messages.
         """
         sub_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
-                    subscription op_name($userId: UserId) {
-                        %s(userId: $userId) { event }
+                    subscription op_name($user_id: UserId) {
+                        %s(user_id: $user_id) { event }
                     }
                     """
                     % subscription
                 ),
-                "variables": {"userId": user_id},
+                "variables": {"user_id": user_id},
                 "operationName": "op_name",
             },
         )
 
         # Spam with stop messages.
         for _ in range(NUMBER_OF_STOP_MESSAGES):
-            await comm.send(id=sub_id, type="stop")
+            await comm.send(msg_id=sub_id, msg_type="stop")
             await asyncio.sleep(DELAY_BETWEEN_STOP_MESSAGES)
 
         resp = await comm.receive(raw_response=True)
@@ -574,14 +571,14 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     """
 
     # Count of spam messages per connection.
-    NUMBER_OF_MUTATION_MESSAGES = 50
+    NUMBER_OF_MUTATION_MESSAGES = 50  # pylint: disable=invalid-name
     # When 40 spam messages are sent, we will send the 'stop'
     # subscription message.
-    MUTATION_INDEX_TO_SEND_STOP = 40
+    MUTATION_INDEX_TO_SEND_STOP = 40  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
-    TIME_BORDER = 20
+    TIME_BORDER = 20  # pylint: disable=invalid-name
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -617,27 +614,27 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         """
 
         sub_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
-                    subscription op_name($userId: UserId) {
-                        %s(userId: $userId) { event }
+                    subscription op_name($user_id: UserId) {
+                        %s(user_id: $user_id) { event }
                     }
                     """
                     % subscription
                 ),
-                "variables": {"userId": "ALICE"},
+                "variables": {"user_id": "ALICE"},
                 "operationName": "op_name",
             },
-            id=f"sub_{str(iteration)} {str(uuid.uuid4().hex)}",
+            msg_id=f"sub_{iteration} {uuid.uuid4().hex}",
         )
 
         spam_payload = {
             "query": textwrap.dedent(
                 """
-                mutation op_name($message: String!, $userId: UserId) {
-                    %s(message: $message, userId: $userId) {
+                mutation op_name($message: String!, $user_id: UserId) {
+                    %s(message: $message, user_id: $user_id) {
                         message
                     }
                 }
@@ -646,7 +643,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             ),
             "variables": {
                 "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
-                "userId": "ALICE",
+                "user_id": "ALICE",
             },
             "operationName": "op_name",
         }
@@ -654,16 +651,16 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         # Spam with broadcast messages.
         for index in range(NUMBER_OF_MUTATION_MESSAGES):
             if index == MUTATION_INDEX_TO_SEND_STOP:
-                await comm.send(id=sub_id, type="stop")
+                await comm.send(msg_id=sub_id, msg_type="stop")
             await comm_spamer.send(
-                type="start",
+                msg_type="start",
                 payload=spam_payload,
-                id=f"mut_spammer_{str(iteration)}_{str(index)}_{str(uuid.uuid4().hex)}",
+                msg_id=f"mut_spammer_{iteration}_{index}_{uuid.uuid4().hex}",
             )
             await comm.send(
-                type="start",
+                msg_type="start",
                 payload=spam_payload,
-                id=f"mut_{str(iteration)}_{str(index)}_{str(uuid.uuid4().hex)}",
+                msg_id=f"mut_{iteration}_{index}_{uuid.uuid4().hex}",
             )
 
         while True:
@@ -735,11 +732,11 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     'complete' message.
     """
 
-    NUMBER_OF_UNSUBSCRIBE_CALLS = 50
+    NUMBER_OF_UNSUBSCRIBE_CALLS = 50  # pylint: disable=invalid-name
     # Delay in seconds.
-    DELAY_BETWEEN_UNSUBSCRIBE_CALLS = 0.01
+    DELAY_BETWEEN_UNSUBSCRIBE_CALLS = 0.01  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
-    TIME_BORDER = 20
+    TIME_BORDER = 20  # pylint: disable=invalid-name
 
     # Name of Graphql subscription used in this test.
     if sync_resolvers == "sync":
@@ -769,17 +766,17 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 
         # Just subscribe.
         sub_id = await comm.send(
-            type="start",
+            msg_type="start",
             payload={
                 "query": textwrap.dedent(
                     """
-                    subscription op_name($userId: UserId) {
-                        %s(userId: $userId) { event }
+                    subscription op_name($user_id: UserId) {
+                        %s(user_id: $user_id) { event }
                     }
                     """
                     % subscription
                 ),
-                "variables": {"userId": user_id},
+                "variables": {"user_id": user_id},
                 "operationName": "op_name",
             },
         )
@@ -834,19 +831,19 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
 
-wakeup = threading.Event()
+WAKEUP = threading.Event()
 
 
 class LongMutation(graphene.Mutation, name="LongMutationPayload"):
-    """Test mutation which simply hangs until event `wakeup` is set."""
+    """Test mutation which simply hangs until event `WAKEUP` is set."""
 
     is_ok = graphene.Boolean()
 
     @staticmethod
     async def mutate(root, info):
-        """Sleep until `wakeup` event is set."""
+        """Sleep until `WAKEUP` event is set."""
         del root, info
-        wakeup.wait()
+        WAKEUP.wait()
         return LongMutation(True)
 
 
@@ -870,30 +867,30 @@ class OnChatMessageSentSync(channels_graphql_ws.Subscription):
     class Arguments:
         """That is how subscription arguments are defined."""
 
-        userId = UserId()
+        user_id = UserId()
 
-    def subscribe(self, info, userId=None):
+    def subscribe(self, info, user_id=None):
         """Specify subscription groups when client subscribes."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
         # Subscribe to the group corresponding to the user.
-        if not userId is None:
-            return [f"user_{userId}"]
+        if not user_id is None:
+            return [f"user_{user_id}"]
         # Subscribe to default group.
         return []
 
-    def publish(self, info, userId):
+    def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"userId": userId, "payload": self}
+        event = {"user_id": user_id, "payload": self}
 
         return OnChatMessageSentSync(event=event)
 
     @classmethod
-    def notify(cls, userId, message):
+    def notify(cls, user_id, message):
         """Example of the `notify` classmethod usage."""
         # Find the subscription group for user.
-        group = None if userId is None else f"user_{userId}"
+        group = None if user_id is None else f"user_{user_id}"
         super().broadcast(group=group, payload=message)
 
 
@@ -910,30 +907,30 @@ class OnChatMessageSentAsync(channels_graphql_ws.Subscription):
     class Arguments:
         """That is how subscription arguments are defined."""
 
-        userId = UserId()
+        user_id = UserId()
 
-    async def subscribe(self, info, userId=None):
+    async def subscribe(self, info, user_id=None):
         """Specify subscription groups when client subscribes."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
         # Subscribe to the group corresponding to the user.
-        if not userId is None:
-            return [f"user_{userId}"]
+        if not user_id is None:
+            return [f"user_{user_id}"]
         # Subscribe to default group.
         return []
 
-    async def publish(self, info, userId):
+    async def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"userId": userId, "payload": self}
+        event = {"user_id": user_id, "payload": self}
 
         return OnChatMessageSentAsync(event=event)
 
     @classmethod
-    async def notify(cls, userId, message):
+    async def notify(cls, user_id, message):
         """Example of the `notify` classmethod usage."""
         # Find the subscription group for user.
-        group = None if userId is None else f"user_{userId}"
+        group = None if user_id is None else f"user_{user_id}"
         await super().broadcast(group=group, payload=message)
 
 
@@ -941,7 +938,7 @@ class SendChatMessageOutput(graphene.ObjectType):
     """Mutation result."""
 
     message = graphene.String()
-    userId = UserId()
+    user_id = UserId()
 
 
 class SendChatMessageSync(graphene.Mutation):
@@ -956,16 +953,16 @@ class SendChatMessageSync(graphene.Mutation):
         """That is how mutation arguments are defined."""
 
         message = graphene.String(required=True)
-        userId = graphene.Argument(UserId, required=False)
+        user_id = graphene.Argument(UserId, required=False)
 
-    def mutate(self, info, message, userId=None):
+    def mutate(self, info, message, user_id=None):
         """Send message to the user or all users."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
 
         # Notify subscribers.
-        OnChatMessageSentSync.notify(message=message, userId=userId)
-        return SendChatMessageSync.Output(message=message, userId=userId)
+        OnChatMessageSentSync.notify(message=message, user_id=user_id)
+        return SendChatMessageSync.Output(message=message, user_id=user_id)
 
 
 class SendChatMessageAsync(graphene.Mutation):
@@ -980,17 +977,17 @@ class SendChatMessageAsync(graphene.Mutation):
         """That is how mutation arguments are defined."""
 
         message = graphene.String(required=True)
-        userId = graphene.Argument(UserId, required=False)
+        user_id = graphene.Argument(UserId, required=False)
 
-    async def mutate(self, info, message, userId=None):
+    async def mutate(self, info, message, user_id=None):
         """Send message to the user or all users."""
         del info
         assert self is None, "Root `self` expected to be `None`!"
 
         # Notify subscribers.
-        await OnChatMessageSentAsync.notify(message=message, userId=userId)
+        await OnChatMessageSentAsync.notify(message=message, user_id=user_id)
         # Output is the same as in 'SendChatMessageSync'
-        return SendChatMessageAsync.Output(message=message, userId=userId)
+        return SendChatMessageAsync.Output(message=message, user_id=user_id)
 
 
 class Subscription(graphene.ObjectType):
@@ -1011,7 +1008,7 @@ class Mutation(graphene.ObjectType):
 class Query(graphene.ObjectType):
     """Root GraphQL query."""
 
-    VALUE = str(uuid.uuid4().hex)
+    VALUE = uuid.uuid4().hex
     value = graphene.String(args={"issue_error": graphene.Boolean(default_value=False)})
     fast_op_sync = graphene.Boolean()
     fast_op_async = graphene.Boolean()
@@ -1035,24 +1032,3 @@ class Query(graphene.ObjectType):
         """Simple instant async resolver."""
         del root, info
         return True
-
-
-class GraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
-    """Channels WebSocket consumer which provides GraphQL API."""
-
-    schema = graphene.Schema(
-        query=Query,
-        mutation=Mutation,
-        subscription=Subscription,
-        types=[SendChatMessageOutput],
-        auto_camelcase=False,
-    )
-
-
-application = channels.routing.ProtocolTypeRouter(
-    {
-        "websocket": channels.routing.URLRouter(
-            [django.urls.path("graphql/", GraphqlWsConsumer)]
-        )
-    }
-)

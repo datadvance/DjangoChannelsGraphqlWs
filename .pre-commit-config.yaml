@@ -1,4 +1,4 @@
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -20,14 +20,28 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 repos:
-- repo: https://github.com/ambv/black
-  rev: stable
-  hooks:
-  - id: black
-    language_version: python3.7
-- repo: https://github.com/pre-commit/mirrors-isort
-  rev: v4.3.4
-  hooks:
-    - id: isort
-      language: python_venv
-      language_version: python3.7
+    # The Black: Python code formatter.
+    # https://black.readthedocs.io/
+    - repo: local
+      hooks:
+          - description: "Black: The uncompromising Python code formatter"
+            entry: black
+            id: black
+            language_version: python3.7
+            language: python
+            name: black
+            require_serial: true
+            types: [python]
+
+    # Isort: Sort Python imports.
+    # https://github.com/timothycrosley/isort
+    - repo: local
+      hooks:
+          - description: "Isort: Python import statements formatter"
+            entry: isort
+            id: isort
+            language_version: python3.7
+            language: python
+            name: isort
+            require_serial: false
+            types: [python]

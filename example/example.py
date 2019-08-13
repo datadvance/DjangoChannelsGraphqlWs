@@ -1,6 +1,6 @@
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -24,6 +24,7 @@
 """Simple example of the DjangoChannelsGraphqlWs."""
 
 import pathlib
+from typing import Dict, List
 
 import channels
 import django
@@ -32,10 +33,13 @@ import graphene
 import channels_graphql_ws
 
 
+# It is OK, Graphene works this way.
+# pylint: disable=no-self-use,unsubscriptable-object,invalid-name
+
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
 
 # Store chat history right here.
-chats = {}
+chats: Dict[str, List[str]] = {}
 
 
 class Message(

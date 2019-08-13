@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # coding: utf-8
-# Copyright (c) 2019 DATADVANCE
+# Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -22,6 +22,8 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Django CLI entry point."""
+
 import os
 import pathlib
 import sys
@@ -39,7 +41,7 @@ if __name__ == "__main__":
         # the issue is really that Django is missing to avoid masking
         # other exceptions on Python 2.
         try:
-            import django
+            import django  # pylint: disable=unused-import
         except ImportError:
             raise ImportError(
                 "Could not import Django. Are you sure it is installed and "

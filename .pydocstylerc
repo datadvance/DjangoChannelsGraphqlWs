@@ -19,20 +19,21 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# PyDocStyle configuration.
+# http://www.pydocstyle.org/en/latest/usage.html#available-options
 
-[pytest]
+[pydocstyle]
 
-# pytest-pythonpath:
-# Set up paths to the projects.
-python_paths = example .
-
-# pytest-django:
-DJANGO_SETTINGS_MODULE = settings
-
-# Test files to explore.
-python_files = **/test_*.py
-
-# Default command-line arguments:
-#   - Enable coverage measurement and set config file.
-#   - Force verbose output: output list of tests by default.
-addopts = --cov --cov-config=pytestcov.ini --verbose
+# Disable some checks.
+#
+# D202: No blank lines allowed after function docstring.
+#     We cannot follow this, cause Black inject blank line before
+#     function declaration and if it is a nested function when this
+#     violates this rule.
+# D401: First line should be in imperative mood; try rephrasing.
+#     Often it is not possible. Especially for callback functions such
+#     as "A new message handler."
+# D403: First word of the first line should be properly capitalized.
+#     There is nothing bad in using words like "WebSocket" or
+#     "MessagePack" even in the beginning of the docstring.
+add_ignore=D202,D401,D403
