@@ -43,7 +43,7 @@ jobs:
               - python3 -m poetry --no-interaction install
               - python3 -m poetry --no-interaction build
           script:
-              - python3 -m poetry run pytest --cov-report=term --cov-report=html
+              - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         - stage: test-macos
           name: "Python 3.7 on macOS"
           os: osx
@@ -59,7 +59,7 @@ jobs:
               - python3 -m poetry --no-interaction install
               - python3 -m poetry --no-interaction build
           script:
-              - python3 -m poetry run pytest --cov-report=term --cov-report=html
+              - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         - stage: test-windows
           name: "Python 3.7 on Windows"
           env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
@@ -73,4 +73,4 @@ jobs:
               - python -m poetry --no-interaction install
               - python -m poetry --no-interaction build
           script:
-              - python -m poetry run pytest --cov-report=term --cov-report=html
+              - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
