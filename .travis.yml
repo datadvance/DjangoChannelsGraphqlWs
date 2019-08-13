@@ -1,64 +1,86 @@
+# Copyright (C) DATADVANCE, 2010-2020
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+# Travis CI configuration.
+
 stages:
-  - test
-  - lint
-  - test-win
+    - test
+    - lint
+    - test-win
 
 jobs:
-  include:
+    include:
+        # First instance of "stage: tests" creates alias and tests for linux.
+        - &test
+          stage: test
+          name: "Python 3.7 on Xenial Linux"
+          os: linux
+          python: "3.7" # this works for Linux but is ignored on macOS or Windows
+          dist: xenial # required for Python >= 3.7 on Linux
+          language: python
+          install:
+              - pip3 install --upgrade pip # all three OSes agree about 'pip3'
+              - pip3 install --progress-bar off poetry
+              # 'python' points to Python 2.7 on macOS but points to Python 3.7 on Linux and Windows
+              # 'python3' is a 'command not found' error on Windows but 'python' works on Windows only
+              - python3 -m poetry --no-interaction install
+              - python3 -m poetry --no-interaction build
+          script:
+              - python3 -m poetry run pytest --cov-report=term --cov-report=html
 
-  # First instance of "stage: tests" creates alias and tests for linux.
-  - &test
-    stage: test
-    name: "Python 3.7 on Xenial Linux"
-    os: linux
-    python: "3.7"         # this works for Linux but is ignored on macOS or Windows
-    dist: xenial          # required for Python >= 3.7 on Linux
-    language: python
-    install:
-      - pip3 install --upgrade pip  # all three OSes agree about 'pip3'
-      - pip3 install --progress-bar off poetry
-      # 'python' points to Python 2.7 on macOS but points to Python 3.7 on Linux and Windows
-      # 'python3' is a 'command not found' error on Windows but 'python' works on Windows only
-      - python3 -m poetry --no-interaction install
-      - python3 -m poetry --no-interaction build
-    script:
-      - python3 -m poetry run pytest --cov-report=term --cov-report=html
+        # Subsequent instances use the alias to test different platforms.
+        - <<: *test
+          name: "Python 3.7 on macOS"
+          os: osx
+          osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3
+          language: shell # 'language: python' is an error on Travis CI macOS
 
-  # Subsequent instances use the alias to test different platforms.
-  - <<: *test
-    name: "Python 3.7 on macOS"
-    os: osx
-    osx_image: xcode10.2  # Python 3.7.2 running on macOS 10.14.3
-    language: shell       # 'language: python' is an error on Travis CI macOS
+        - stage: test-win
+          name: "Python 3.7 on Windows"
+          env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
+          os: windows # Windows 10.0.17134 N/A Build 17134
+          language: shell # 'language: python' is an error on Travis CI Windows
+          before_install:
+              - choco install python -y
+          install:
+              - python -m pip install --upgrade pip
+              - python -m pip install --progress-bar off poetry
+              - python -m poetry --no-interaction install
+              - python -m poetry --no-interaction build
+          script:
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
-  - stage: test-win
-    name: "Python 3.7 on Windows"
-    env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
-    os: windows           # Windows 10.0.17134 N/A Build 17134
-    language: shell       # 'language: python' is an error on Travis CI Windows
-    before_install:
-      - choco install python -y
-    install:
-      - python -m pip install --upgrade pip
-      - python -m pip install --progress-bar off poetry
-      - python -m poetry --no-interaction install
-      - python -m poetry --no-interaction build
-    script:
-      - python -m poetry run pytest --cov-report=term --cov-report=html
-
-  - stage: lint
-    os: linux
-    language: python
-    python: "3.7"
-    dist: xenial
-    before_install:
-      - pip install --progress-bar off poetry
-    install:
-      # Install all third party dependencies so isort finds it.
-      - poetry --no-interaction install
-    script:
-      - black --check --diff .
-      # We override 'virtual-env' settings so isort finds third party in
-      # the virtualenv directory of travis ('~/virtualenv' by default).
-      # https://github.com/timothycrosley/isort#configuring-isort
-      - isort --check-only --diff --recursive --virtual-env ~/virtualenv
+        - stage: lint
+          os: linux
+          language: python
+          python: "3.7"
+          dist: xenial
+          before_install:
+              - pip install --progress-bar off poetry
+          install:
+              # Install all third party dependencies so isort finds it.
+              - poetry --no-interaction install
+          script:
+              - black --check --diff .
+              # We override 'virtual-env' settings so isort finds third party in
+              # the virtualenv directory of travis ('~/virtualenv' by default).
+              # https://github.com/timothycrosley/isort#configuring-isort
+              - isort --check-only --diff --recursive --virtual-env ~/virtualenv
