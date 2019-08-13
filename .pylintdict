@@ -23,6 +23,7 @@ dict
 django
 docstring
 docstrings
+enqueue
 eventloop
 func
 gql
