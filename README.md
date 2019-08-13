@@ -362,6 +362,7 @@ Just a reminder of how to setup an environment for the development:
 ```bash
 > python3 -m venv .venv
 > direnv allow
+> pip install --upgrade pip
 > pip install poetry
 > poetry install
 > pre-commit install
