@@ -36,6 +36,9 @@ jobs:
           python: "3.7" # this works for Linux but is ignored on macOS or Windows
           dist: xenial # required for Python >= 3.7 on Linux
           language: python
+          before_install:
+              - sudo apt-get update
+              - sudo apt-get install -y enchant
           install:
               - pip3 install --upgrade pip # all three OSes agree about 'pip3'
               - pip3 install --progress-bar off poetry
