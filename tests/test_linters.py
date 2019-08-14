@@ -22,6 +22,7 @@
 """Check code by running different linters and code style checkers."""
 
 import pathlib
+import sys
 
 import plumbum
 
@@ -32,9 +33,16 @@ PROJECT_ROOT_DIR = pathlib.Path(__file__).absolute().parent.parent
 
 def test_pylint():
     """Run Pylint."""
+
     pylint = plumbum.local["pylint"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = pylint(*SOURCE_DIRS)
+        # Disable spelling on Windows cause Pyenchant which does the
+        # spellcheking job for Pylint cannot be simply installed with
+        # `pip install` in Windows.
+        if sys.platform == "win32":
+            result = pylint("--disable=spelling", *SOURCE_DIRS)
+        else:
+            result = pylint(*SOURCE_DIRS)
         print("\nPylint:", result)
 
 
