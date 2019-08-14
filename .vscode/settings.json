@@ -32,7 +32,7 @@
     "python.linting.pylintUseMinimalCheckers": false,
     "python.pythonPath": ".venv/bin/python3",
     "python.sortImports.args": ["--virtual-env", "${workspaceFolder}/.venv"],
-    "python.testing.autoTestDiscoverOnSaveEnabled": false,
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestArgs": ["-n8"],
     "python.testing.pytestEnabled": true,
