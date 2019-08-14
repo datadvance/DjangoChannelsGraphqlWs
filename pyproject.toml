@@ -56,6 +56,7 @@ graphene = "^2.1"
 graphql-core = "^2.2"
 msgpack = "^0.6.1"
 
+
 [tool.poetry.dev-dependencies]
 bandit = "*"
 black = { version = "*", allows-prereleases = true }
@@ -66,6 +67,7 @@ mypy = "*"
 plumbum = "*"
 pre-commit = "*"
 pydocstyle = "*"
+pyenchant = {version = "*", platform = "darwin||linux"}
 pylint = "*"
 pylint-django = "*"
 pylint-quotes = "*"
@@ -75,7 +77,6 @@ pytest-cov = "*"
 pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
-pyenchant = {version = "*", platform = "linux;darwin"}
 
 
 [tool.isort]

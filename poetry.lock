@@ -449,6 +449,9 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "4.3.21"
 
+[package.dependencies]
+toml = "*"
+
 [[package]]
 category = "dev"
 description = "A fast and thorough lazy object proxy."
@@ -618,7 +621,7 @@ snowballstemmer = "*"
 [[package]]
 category = "dev"
 description = "Python bindings for the Enchant spellchecking system"
-marker = "sys_platform == \"linux;darwin\""
+marker = "sys_platform == \"darwin\" or sys_platform == \"linux\""
 name = "pyenchant"
 optional = false
 python-versions = "*"
@@ -968,7 +971,7 @@ version = "4.6.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "5f113dd229764a16a2c73a5714f052184f13366ed113bcc012d11a85456b123a"
+content-hash = "57357b8c7fc3e8b79b9ed11ab6689273fb4d0a3d664e72648c80b3d5ca99db6b"
 python-versions = "^3.7.0"
 
 [metadata.hashes]
