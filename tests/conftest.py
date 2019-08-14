@@ -31,7 +31,7 @@ import channels_graphql_ws.testing
 
 
 @pytest.fixture
-def gql(db):
+def gql(db, request):
     """PyTest fixture for testing GraphQL WebSocket backends.
 
     The fixture provides a method to setup GraphQL testing backend for
@@ -85,6 +85,8 @@ def gql(db):
     # `django.db.close_old_connections()`.
     del db
 
+    issued_clients = []
+
     def client_constructor(
         *,
         query=None,
@@ -124,6 +126,14 @@ def gql(db):
             communicator_kwds=communicator_kwds,
         )
 
-        return channels_graphql_ws.testing.GraphqlWsClient(transport)
+        client = channels_graphql_ws.testing.GraphqlWsClient(transport)
+        issued_clients.append(client)
+        return client
 
-    return client_constructor
+    yield client_constructor
+
+    # Assert all issued client are properly finalized.
+    for client in reversed(issued_clients):
+        assert (
+            not client.connected
+        ), f"Test has left connected client: {request.node.nodeid}!"

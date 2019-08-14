@@ -60,11 +60,17 @@ class GraphqlWsClient:
             transport, GraphqlWsTransport
         ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
+        self._is_connected = False
 
     @property
     def transport(self) -> GraphqlWsTransport:
         """Underlying network transport."""
         return self._transport
+
+    @property
+    def connected(self) -> bool:
+        """Indicate whether client is connected."""
+        return self._is_connected
 
     async def connect_and_init(self, connect_only: bool = False) -> None:
         """Establish and initialize WebSocket GraphQL connection.
@@ -77,6 +83,7 @@ class GraphqlWsClient:
             await self._transport.send({"type": "connection_init", "payload": ""})
             resp = await self._transport.receive()
             assert resp["type"] == "connection_ack", f"Unexpected response `{resp}`!"
+        self._is_connected = True
 
     # Default value for `id`, because `None` is also a valid value.
     AUTO = object()
@@ -201,6 +208,7 @@ class GraphqlWsClient:
     async def finalize(self):
         """Disconnect and wait the transport to finish gracefully."""
         await self._transport.disconnect()
+        self._is_connected = False
 
     async def wait_response(self, response_checker, timeout=None):
         """Wait for particular response skipping all intermediate ones.
@@ -248,6 +256,7 @@ class GraphqlWsClient:
 
         """
         await self._transport.wait_disconnect(timeout)
+        self._is_connected = False
 
     @staticmethod
     def _is_keep_alive_response(response):

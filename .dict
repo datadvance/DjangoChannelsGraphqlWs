@@ -38,6 +38,7 @@ html
 init
 ipython
 isort
+itertools
 json
 keepalive
 kwds
@@ -84,12 +85,14 @@ unsubscribe
 unsubscribed
 unsubscribes
 unsubscribing
+unsubscriptable
 unsubscription
 url
 urlrouter
 urls
 username
 venv
+wakeup
 websocket
 websocketcommunicator
 workflows

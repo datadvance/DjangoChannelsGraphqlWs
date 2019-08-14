@@ -180,14 +180,14 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
-    comm_new = gql(
+    client_new = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
     await client.connect_and_init()
-    await comm_new.connect_and_init()
+    await client_new.connect_and_init()
 
     print("Subscribe to GraphQL subscription with the same subscription group.")
     sub_id_1 = await client.send(
@@ -216,7 +216,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
             "operationName": "op_name",
         },
     )
-    sub_id_new = await comm_new.send(
+    sub_id_new = await client_new.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -261,7 +261,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for second subscriber!"
-    res = await comm_new.receive(assert_id=sub_id_new, assert_type="data")
+    res = await client_new.receive(assert_id=sub_id_new, assert_type="data")
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for third subscriber!"
@@ -269,11 +269,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
     # Check notifications: there are no notifications. Previously,
     # we got all notifications.
     await client.assert_no_messages()
-    await comm_new.assert_no_messages()
+    await client_new.assert_no_messages()
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.finalize()
-    await comm_new.finalize()
+    await client_new.finalize()
 
 
 @pytest.mark.asyncio
@@ -352,24 +352,20 @@ async def test_subscribe_and_many_unsubscribes(
 
     async def receiver(op_ids):
         """Handler to receive successful messages about unsubscribing.
+
         We mark each received message with success and delete the id
         from the 'op_ids' set.
         """
         while True:
-            try:
-                resp = await client.receive(raw_response=True)
-                op_id = resp["id"]
-                if resp["type"] == "complete":
-                    op_ids.remove(op_id)
-                else:
-                    assert resp["type"] == "data" and resp["payload"]["data"] is None, (
-                        "This should be a successful subscription message, not '%s'",
-                        resp,
-                    )
-            except asyncio.TimeoutError:
-                continue
-            except Exception:  # pylint: disable=broad-except
-                break
+            resp = await client.receive(raw_response=True)
+            op_id = resp["id"]
+            if resp["type"] == "complete":
+                op_ids.remove(op_id)
+            else:
+                assert resp["type"] == "data" and resp["payload"]["data"] is None, (
+                    "This should be a successful subscription message, not '%s'",
+                    resp,
+                )
             if flag.is_set():
                 break
             if not op_ids:
@@ -602,14 +598,14 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     )
     await client.connect_and_init()
 
-    comm_spamer = gql(
+    client_spamer = gql(
         mutation=Mutation,
         consumer_attrs={
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
     )
-    await comm_spamer.connect_and_init()
+    await client_spamer.connect_and_init()
 
     async def subscribe_unsubscribe(iteration: int):
         """Subscribe to GraphQL subscription. Spam server with
@@ -656,7 +652,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         for index in range(NUMBER_OF_MUTATION_MESSAGES):
             if index == MUTATION_INDEX_TO_SEND_STOP:
                 await client.send(msg_id=sub_id, msg_type="stop")
-            await comm_spamer.send(
+            await client_spamer.send(
                 msg_type="start",
                 payload=spam_payload,
                 msg_id=f"mut_spammer_{iteration}_{index}_{uuid.uuid4().hex}",
@@ -718,6 +714,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     await client.assert_no_messages("There must not be any messages.")
 
     print("Disconnect and wait the application to finish gracefully.")
+    await client_spamer.finalize()
     await client.finalize()
 
 
