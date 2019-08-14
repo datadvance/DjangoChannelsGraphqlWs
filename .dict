@@ -1,6 +1,7 @@
 aiohttp
 api
 args
+asgiref
 async
 asyncio
 autoremoved
@@ -10,6 +11,7 @@ backend
 backends
 broadcasted
 chatroom
+choco
 classmethod
 cli
 config
@@ -40,12 +42,17 @@ linters
 mozilla
 mutex
 mymutation
+mypy
 myquery
 mysubscription
 ok
 operaion
+prokhorov
 py
 pydocstyle
+pyenchant
+pylint
+pyproject
 pytest
 redis
 resolvers
@@ -70,8 +77,11 @@ unsubscribes
 unsubscribing
 unsubscription
 url
+venv
 websocket
 websocketcommunicator
 workflows
 ws
+xdist
+xenial
 zen
