@@ -503,9 +503,6 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "4.3.21"
 
-[package.dependencies]
-toml = "*"
-
 [[package]]
 category = "dev"
 description = "An autocompletion tool for Python that can be used for text editors."
@@ -1106,7 +1103,7 @@ version = "4.6.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "2ae7d9ecd48c11978ec547180a3455a637875c200fc91f877d76818def9c90dc"
+content-hash = "ef4f3596d4febb6157fd5d32dd0c02ec4fb11569137e1d62bac1f47288146c7f"
 python-versions = "^3.7.0"
 
 [metadata.hashes]
