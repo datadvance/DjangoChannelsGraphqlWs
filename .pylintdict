@@ -46,6 +46,7 @@ ok
 operaion
 py
 pydocstyle
+pytest
 redis
 resolvers
 sessionid
