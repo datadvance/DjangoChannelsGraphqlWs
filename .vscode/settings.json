@@ -23,6 +23,8 @@
 // https://code.visualstudio.com/docs/getstarted/settings
 
 {
+    "editor.rulers": [72, 88],
+    "editor.tabSize": 4,
     "python.linting.banditEnabled": true,
     "python.linting.mypyEnabled": true,
     "python.linting.pydocstyleEnabled": true,
