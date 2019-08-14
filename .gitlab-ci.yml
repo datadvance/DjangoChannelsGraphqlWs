@@ -21,10 +21,13 @@
 
 # GitLab CI configuration.
 
-# Documentation:
-# https://docs.gitlab.com/ce/ci/yaml/README.html
-# List of available environment variables:
-# https://docs.gitlab.com/ce/ci/variables/README.html
+# RTFM:
+# - GitLab CI/CD Pipeline Configuration Reference:
+#   https://docs.gitlab.com/ce/ci/yaml/README.html
+# - GitLab CI/CD environment variables:
+#   https://docs.gitlab.com/ce/ci/variables/README.html
+# - Creating and Tweaking GitLab CI/CD for GitLab Pages:
+#   https://docs.gitlab.com/ee/user/project/pages/getting_started_part_four.html
 
 # CI stages.
 stages:
