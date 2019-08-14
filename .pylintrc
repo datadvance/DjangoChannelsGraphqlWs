@@ -75,7 +75,7 @@ max-nested-blocks=9000  # We have line length 88, no need to check.
 [SPELLING]
 
 spelling-dict=en_US
-spelling-private-dict-file=.pylintdict
+spelling-private-dict-file=.dict
 
 [REPORTS]
 
