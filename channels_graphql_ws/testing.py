@@ -1,5 +1,3 @@
-#
-# coding: utf-8
 # Copyright (C) DATADVANCE, 2010-2020
 #
 # Permission is hereby granted, free of charge, to any person obtaining
