@@ -23,6 +23,7 @@
 
 import pathlib
 import sys
+import tempfile
 
 import plumbum
 
@@ -36,11 +37,25 @@ def test_pylint():
 
     pylint = plumbum.local["pylint"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
+
         # Disable spelling on Windows cause Pyenchant which does the
         # spellcheking job for Pylint cannot be simply installed with
-        # `pip install` in Windows.
+        # `pip install` in Windows. Unfortunately it is not enough to
+        # tell Pylint `--disable=spelling`, cause it still complains
+        # about `spelling-dict=en_US`, so we wipe out spelling from its
+        # configuration file.
         if sys.platform == "win32":
-            result = pylint("--disable=spelling", *SOURCE_DIRS)
+            with tempfile.NamedTemporaryFile(mode="w+") as fixed_pylintrc:
+                with open(PROJECT_ROOT_DIR / ".pylintrc", mode="r") as pylintrc:
+                    fixed_pylintrc.writelines(
+                        (
+                            line
+                            for line in pylintrc.readlines()
+                            if "spelling" not in line
+                        )
+                    )
+                fixed_pylintrc.flush()
+                result = pylint(f"--rcfile={fixed_pylintrc.name}", *SOURCE_DIRS)
         else:
             result = pylint(*SOURCE_DIRS)
         print("\nPylint:", result)

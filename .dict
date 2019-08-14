@@ -4,6 +4,8 @@ args
 asgiref
 async
 asyncio
+auth
+authmiddlewarestack
 autoremoved
 awaitable
 awaitables
@@ -34,6 +36,7 @@ graphql
 grp
 html
 init
+ipython
 isort
 json
 keepalive
@@ -45,15 +48,19 @@ mymutation
 mypy
 myquery
 mysubscription
+namespace
 ok
 operaion
 prokhorov
+protocoltyperouter
 py
 pydocstyle
 pyenchant
 pylint
+pylintrc
 pyproject
 pytest
+rcfile
 redis
 resolvers
 sessionid
@@ -78,6 +85,9 @@ unsubscribes
 unsubscribing
 unsubscription
 url
+urlrouter
+urls
+username
 venv
 websocket
 websocketcommunicator
