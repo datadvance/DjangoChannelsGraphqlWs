@@ -43,9 +43,6 @@ jobs:
           osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3.
           python: "3.7"
           language: shell # 'Language: python' gives error here.
-          before_install:
-              - sudo apt-get update
-              - sudo apt-get install -y enchant
           install:
               - pip3 install --upgrade pip
               - pip3 install --progress-bar off poetry
