@@ -75,7 +75,7 @@ pytest-cov = "*"
 pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
-pyenchant = {version = "^2.0", platform = "linux;darwin"}
+pyenchant = {version = "*", platform = "linux;darwin"}
 
 
 [tool.isort]
