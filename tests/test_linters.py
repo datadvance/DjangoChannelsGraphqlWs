@@ -26,13 +26,15 @@ import sys
 import tempfile
 
 import plumbum
+import pytest
 
 
 SOURCE_DIRS = ["channels_graphql_ws/", "tests/", "example/"]
 PROJECT_ROOT_DIR = pathlib.Path(__file__).absolute().parent.parent
 
 
-def test_pylint():
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
+def test_pylint(src_dir):
     """Run Pylint."""
 
     pylint = plumbum.local["pylint"]
@@ -55,47 +57,66 @@ def test_pylint():
                         )
                     )
                 fixed_pylintrc.flush()
-                result = pylint(f"--rcfile={fixed_pylintrc.name}", *SOURCE_DIRS)
+                result = pylint(f"--rcfile={fixed_pylintrc.name}", src_dir)
         else:
-            result = pylint(*SOURCE_DIRS)
-        print("\nPylint:", result)
+            result = pylint(src_dir)
+        if result:
+            print("\nPylint:", result)
 
 
-def test_black():
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
+def test_black(src_dir):
     """Run Black."""
     black = plumbum.local["black"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = black("--check", *SOURCE_DIRS)
-        print("\nBlack:", result)
+        result = black("--check", src_dir)
+        if result:
+            print("\nBlack:", result)
 
 
-def test_isort():
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
+def test_isort(src_dir):
     """Run Isort."""
     isort = plumbum.local["isort"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = isort("--check-only", "-rc", *SOURCE_DIRS)
-        print("\nIsort:", result)
+        result = isort("--check-only", "-rc", src_dir)
+        if result:
+            print("\nIsort:", result)
 
 
-def test_mypy():
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
+def test_mypy(src_dir):
     """Run MyPy."""
     mypy = plumbum.local["mypy"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = mypy(*SOURCE_DIRS)
-        print("\nMyPy:", result)
+        result = mypy(src_dir)
+        if result:
+            print("\nMyPy:", result)
 
 
-def test_pydocstyle():
+# There is an issue in Pydocstyle that it crashes on nested async def:
+# https://github.com/PyCQA/pydocstyle/issues/370. We have such things in
+# `tests/` so mark them as xfail.
+@pytest.mark.parametrize(
+    "src_dir",
+    [d for d in SOURCE_DIRS if d != "tests/"]
+    + [pytest.param("tests/", marks=pytest.mark.xfail(reason="Pydocstyle issue #370"))],
+)
+def test_pydocstyle(src_dir):
     """Run Pydocstyle."""
+
     pydocstyle = plumbum.local["pydocstyle"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = pydocstyle(*SOURCE_DIRS)
-        print("\nPydocstyle:", result)
+        result = pydocstyle(src_dir)
+        if result:
+            print("\nPydocstyle:", result)
 
 
-def test_bandit():
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
+def test_bandit(src_dir):
     """Run Bandit."""
     bandit = plumbum.local["bandit"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = bandit("-ll", "-r", *SOURCE_DIRS)
-        print("\nBandit:", result)
+        result = bandit("-ll", "-r", src_dir)
+        if result:
+            print("\nBandit:", result)

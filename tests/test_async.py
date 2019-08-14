@@ -51,11 +51,11 @@ async def test_broadcast(gql):
     # Test subscription notifications order, even with disabled ordering
     # notifications must be send in the order they were broadcasted.
     settings = {"strict_ordering": False}
-    comm = gql(mutation=Mutation, subscription=Subscription, consumer_attrs=settings)
-    await comm.connect_and_init()
+    client = gql(mutation=Mutation, subscription=Subscription, consumer_attrs=settings)
+    await client.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await comm.send(
+    sub_id = await client.send(
         msg_type="start",
         payload={
             "query": "subscription on_message_sent { on_message_sent { message } }",
@@ -64,11 +64,11 @@ async def test_broadcast(gql):
         },
     )
 
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
-    msg_id = await comm.send(
+    msg_id = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -86,18 +86,18 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await comm.receive(assert_id=msg_id, assert_type="data")
+    resp = await client.receive(assert_id=msg_id, assert_type="data")
     assert resp["data"] == {"send_message": {"success": True}}
-    await comm.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
-    resp = await comm.receive(assert_id=sub_id, assert_type="data")
+    resp = await client.receive(assert_id=sub_id, assert_type="data")
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
 
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
-    msg_id = await comm.send(
+    msg_id = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -115,13 +115,13 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await comm.receive(assert_id=msg_id, assert_type="data")
+    resp = await client.receive(assert_id=msg_id, assert_type="data")
     assert resp["data"] == {"send_timestamps": {"success": True}}
-    await comm.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive(assert_id=msg_id, assert_type="complete")
 
     timestamps = []
     for _ in range(count):
-        resp = await comm.receive(assert_id=sub_id, assert_type="data")
+        resp = await client.receive(assert_id=sub_id, assert_type="data")
         data = resp["data"]["on_message_sent"]
         timestamps.append(data["message"])
     assert timestamps == sorted(
@@ -129,8 +129,10 @@ async def test_broadcast(gql):
     ), "Server does not preserve messages order for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.assert_no_messages("Unexpected message received at the end of the test!")
-    await comm.finalize()
+    await client.assert_no_messages(
+        "Unexpected message received at the end of the test!"
+    )
+    await client.finalize()
 
 
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP

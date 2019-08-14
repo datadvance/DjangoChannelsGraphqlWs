@@ -319,8 +319,8 @@ documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
 In order to simplify unit testing there is a `GraphqlWsTransport`
 implementation based on the Django Channels testing communicator:
-`channels_graphql_ws.testing.GraphqlWsTransportChannels`. Check its
-docstring and take a look at the [tests](/tests) to see how to use it.
+`channels_graphql_ws.testing.GraphqlWsTransport`. Check its docstring
+and take a look at the [tests](/tests) to see how to use it.
 
 ### Subscription activation confirmation
 

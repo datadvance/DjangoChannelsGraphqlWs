@@ -54,24 +54,25 @@ class GraphqlWsClient:
 
     """
 
-    def __init__(self, transport):
+    def __init__(self, transport: GraphqlWsTransport):
         """Constructor."""
         assert isinstance(
             transport, GraphqlWsTransport
         ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
 
-    # Increase default timeout for websocket messages to avoid errors on
-    # slow machines.
-    TIMEOUT = GraphqlWsTransport.TIMEOUT
+    @property
+    def transport(self) -> GraphqlWsTransport:
+        """Underlying network transport."""
+        return self._transport
 
-    async def connect_and_init(self, connect_only=False):
+    async def connect_and_init(self, connect_only: bool = False) -> None:
         """Establish and initialize WebSocket GraphQL connection.
 
         1. Establish WebSocket connection.
         2. Initialize GraphQL connection. Skipped if connect_only=True.
         """
-        await self._transport.connect(timeout=self.TIMEOUT)
+        await self._transport.connect()
         if not connect_only:
             await self._transport.send({"type": "connection_init", "payload": ""})
             resp = await self._transport.receive()
@@ -144,18 +145,6 @@ class GraphqlWsClient:
             return payload
         return response
 
-    async def assert_no_messages(self, message=None):
-        """Ensure no data response received."""
-        while True:
-            if await self._transport.receive_nothing():
-                return
-            response = await self._transport.receive()
-            assert self._is_keep_alive_response(response), (
-                f"{message}\n{response}"
-                if message is not None
-                else f"Message received when nothing expected!\n{response}"
-            )
-
     async def execute(self, query, variables=None):
         """Execute query or mutation request and wait for the reply.
 
@@ -211,7 +200,7 @@ class GraphqlWsClient:
 
     async def finalize(self):
         """Disconnect and wait the transport to finish gracefully."""
-        await self._transport.shutdown()
+        await self._transport.disconnect()
 
     async def wait_response(self, response_checker, timeout=None):
         """Wait for particular response skipping all intermediate ones.
@@ -234,7 +223,7 @@ class GraphqlWsClient:
 
         """
         if timeout is None:
-            timeout = self.TIMEOUT
+            timeout = self._transport.TIMEOUT
         while timeout > 0:
             start = time.monotonic()
             try:
@@ -247,6 +236,18 @@ class GraphqlWsClient:
                 pass
             timeout -= time.monotonic() - start
         raise asyncio.TimeoutError
+
+    async def wait_disconnect(self, timeout=None):
+        """Wait server to close the connection.
+
+        Args:
+            timeout: Seconds to wait the connection to close.
+
+        Raises:
+            `asyncio.TimeoutError` when timeout is reached.
+
+        """
+        await self._transport.wait_disconnect(timeout)
 
     @staticmethod
     def _is_keep_alive_response(response):

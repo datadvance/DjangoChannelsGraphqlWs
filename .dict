@@ -51,6 +51,7 @@ mysubscription
 namespace
 ok
 operaion
+processexecutionerror
 prokhorov
 protocoltyperouter
 py
@@ -95,4 +96,5 @@ workflows
 ws
 xdist
 xenial
+xfail
 zen

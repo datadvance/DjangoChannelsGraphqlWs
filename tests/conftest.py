@@ -66,7 +66,7 @@ def gql(db):
     Use like this:
     ```
     def test_something(gql):
-        comm = gql(
+        client = gql(
             # GraphQl schema.
             query=MyQuery,
             mutation=MyMutation,
@@ -85,7 +85,7 @@ def gql(db):
     # `django.db.close_old_connections()`.
     del db
 
-    def communicator_constructor(
+    def client_constructor(
         *,
         query=None,
         mutation=None,
@@ -118,13 +118,12 @@ def gql(db):
             }
         )
 
-        transport = channels_graphql_ws.testing.GraphqlWsTransportChannels(
-            application=application, path="graphql/", **(communicator_kwds or {})
+        transport = channels_graphql_ws.testing.GraphqlWsTransport(
+            application=application,
+            path="graphql/",
+            communicator_kwds=communicator_kwds,
         )
-        graphql_ws_communicator = channels_graphql_ws.GraphqlWsClient(transport)
-        # Expose transport for the tests.
-        graphql_ws_communicator.transport = transport
 
-        return graphql_ws_communicator
+        return channels_graphql_ws.testing.GraphqlWsClient(transport)
 
-    return communicator_constructor
+    return client_constructor

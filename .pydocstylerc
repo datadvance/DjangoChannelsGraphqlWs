@@ -24,6 +24,9 @@
 
 [pydocstyle]
 
+# Redefine match rules, cause by default it skips `test_*` files.
+match=.*\.py
+
 # Disable some checks.
 #
 # D202: No blank lines allowed after function docstring.

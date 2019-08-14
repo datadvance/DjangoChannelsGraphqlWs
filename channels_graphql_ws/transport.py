@@ -24,7 +24,7 @@
 
 import asyncio
 import json
-import time
+from typing import Optional
 
 import aiohttp
 
@@ -35,33 +35,26 @@ class GraphqlWsTransport:
     """Transport interface for the `GraphqlWsClient`."""
 
     # Default timeout for the WebSocket messages.
-    TIMEOUT = 60
-    # Timeout in seconds to wait to ensure the queue of messages
-    # is empty.
-    RECEIVE_NOTHING_TIMEOUT = 1
-    # Number of seconds to wait for another check for new events.
-    RECEIVE_NOTHING_INTERVAL = 0.01
+    TIMEOUT: float = 60.0
 
-    async def connect(self, timeout=TIMEOUT):
+    async def connect(self, timeout: Optional[float] = None) -> None:
         """Connect to the server."""
         raise NotImplementedError()
 
-    async def send(self, request):
-        """Send request data."""
+    async def send(self, message: dict) -> None:
+        """Send message."""
         raise NotImplementedError()
 
-    async def receive(self, timeout=TIMEOUT):
-        """Receive server response."""
+    async def receive(self, timeout: Optional[float] = None) -> dict:
+        """Receive message."""
         raise NotImplementedError()
 
-    async def receive_nothing(
-        self, timeout=RECEIVE_NOTHING_TIMEOUT, interval=RECEIVE_NOTHING_INTERVAL
-    ):
-        """Check that there is no messages left."""
-        raise NotImplementedError()
-
-    async def shutdown(self, timeout=TIMEOUT):
+    async def disconnect(self, timeout: Optional[float] = None) -> None:
         """Disconnect from the server."""
+        raise NotImplementedError()
+
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+        """Wait server to close the connection."""
         raise NotImplementedError()
 
 
@@ -90,7 +83,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         # A queue for incoming messages.
         self._incoming_messages = asyncio.Queue()
 
-    async def connect(self, timeout=GraphqlWsTransport.TIMEOUT):
+    async def connect(self, timeout: Optional[float] = None) -> None:
         """Establish a connection with the WebSocket server.
 
         Returns:
@@ -100,7 +93,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         """
         connected = asyncio.Event()
         self._message_processor = asyncio.create_task(
-            self._process_messages(connected, timeout)
+            self._process_messages(connected, timeout or self.TIMEOUT)
         )
         await asyncio.wait(
             [connected.wait(), self._message_processor],
@@ -111,12 +104,12 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
             self._message_processor.result()
             raise RuntimeError(f"Failed to connect to the server: {self._url}!")
 
-    async def send(self, request):
-        """Send given `request` after encoding it to the JSON."""
-        assert self._connection is not None, "Connect must be called first!"
-        await self._connection.send_str(json.dumps(request))
+    async def send(self, message: dict) -> None:
+        """Send message."""
+        assert self._connection is not None, "Client is not connected!"
+        await self._connection.send_str(json.dumps(message))
 
-    async def receive(self, timeout=GraphqlWsTransport.TIMEOUT):
+    async def receive(self, timeout: Optional[float] = None) -> dict:
         """Wait and receive a message from the WebSocket connection.
 
         Method fails if the connection closes.
@@ -131,34 +124,24 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
 
         # Wait and receive the message.
         try:
-            payload = await asyncio.wait_for(self._incoming_messages.get(), timeout)
+            payload = await asyncio.wait_for(
+                self._incoming_messages.get(), timeout or self.TIMEOUT
+            )
             assert isinstance(payload, str), "Non-string data received!"
-            return json.loads(payload)
+            return dict(json.loads(payload))
         except asyncio.TimeoutError as ex:
             # See if we have another error to raise inside.
             if self._message_processor.done():
                 self._message_processor.result()
             raise ex
 
-    async def receive_nothing(
-        self,
-        timeout=GraphqlWsTransport.RECEIVE_NOTHING_TIMEOUT,
-        interval=GraphqlWsTransport.RECEIVE_NOTHING_INTERVAL,
-    ):
-        """Check that there is no messages left."""
-        # The `interval` has precedence over the `timeout`.
-        start = time.monotonic()
-        while time.monotonic() < start + timeout:
-            if self._incoming_messages.empty():
-                return True
-            await asyncio.sleep(interval)
-        return self._incoming_messages.empty()
-
-    async def shutdown(self, timeout=GraphqlWsTransport.TIMEOUT):
+    async def disconnect(self, timeout: Optional[float] = None) -> None:
         """Close the connection gracefully."""
         await self._connection.close(code=1000)
         try:
-            await asyncio.wait_for(asyncio.shield(self._message_processor), timeout)
+            await asyncio.wait_for(
+                asyncio.shield(self._message_processor), timeout or self.TIMEOUT
+            )
             self._message_processor.result()
         except asyncio.TimeoutError:
             pass
@@ -169,6 +152,10 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
                     await self._message_processor
                 except asyncio.CancelledError:
                     pass
+
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+        """Wait server to close the connection."""
+        raise NotImplementedError()
 
     async def _process_messages(self, connected, timeout):
         """Process messages coming from the connection.

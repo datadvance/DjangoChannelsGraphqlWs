@@ -19,56 +19,97 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""GraphQL client and transport for testing purposes.
+"""GraphQL client transport for testing purposes."""
 
-Transport class for the tests must implement `receive_nothing` method.
-"""
+import asyncio
+from typing import Optional
 
 import channels.testing
 
-from .transport import GraphqlWsTransport
+from . import client, transport
 
 
-class GraphqlWsTransportChannels(
-    GraphqlWsTransport, channels.testing.WebsocketCommunicator
-):
-    """Testing client transport to work without WebSocket connection."""
+class GraphqlWsClient(client.GraphqlWsClient):
+    """Add functions useful for testing purposes."""
 
-    def __init__(self, *args, **kwds):
-        """Constructor, see `channels.testing.WebsocketCommunicator`."""
-        kwds.setdefault("subprotocols", ["graphql-ws"])
-        kwds.setdefault("path", "graphql/")
-        channels.testing.WebsocketCommunicator.__init__(self, *args, **kwds)
+    # Time in seconds to wait to ensure the queue of messages is empty.
+    RECEIVE_NOTHING_ATTEMPTS = 10
+    # Number of seconds to wait for another check for new events.
+    RECEIVE_NOTHING_INTERVAL = 0.01
 
-    async def receive_json_from(self, timeout=None):
-        """Overwrite to tune the `timeout` argument."""
-        if timeout is None:
-            timeout = self.TIMEOUT
-        implementation = channels.testing.WebsocketCommunicator.receive_json_from
-        return await implementation(self, timeout)
-
-    async def connect(self, timeout=GraphqlWsTransport.TIMEOUT):
-        """Emulate connect to the server."""
-        await channels.testing.WebsocketCommunicator.connect(self, timeout)
-
-    async def send(self, request):
-        """Send request as json to the channels."""
-        await channels.testing.WebsocketCommunicator.send_json_to(self, request)
-
-    async def receive(self, timeout=GraphqlWsTransport.TIMEOUT):
-        """Get next response from channels."""
-        return await self.receive_json_from(timeout=timeout)
-
-    async def receive_nothing(
+    async def assert_no_messages(
         self,
-        timeout=GraphqlWsTransport.RECEIVE_NOTHING_TIMEOUT,
-        interval=GraphqlWsTransport.RECEIVE_NOTHING_INTERVAL,
+        error_message=None,
+        attempts=RECEIVE_NOTHING_ATTEMPTS,
+        interval=RECEIVE_NOTHING_INTERVAL,
     ):
-        """Check that there is nothing more to receive."""
-        implementation = channels.testing.WebsocketCommunicator.receive_nothing
-        return await implementation(self, timeout, interval)
+        """Ensure no data message received."""
+        approx_execution_time = attempts * interval
+        for _ in range(attempts):
+            try:
+                # Be sure internal timeout in `receive` will not expire,
+                # it it is expired then transport stops working by some
+                # reason and only raises CancellerError messages.
+                received = await asyncio.wait_for(
+                    self.transport.receive(timeout=10 * approx_execution_time),
+                    timeout=interval,
+                )
+            except asyncio.TimeoutError:
+                continue
+            else:
+                if self._is_keep_alive_response(received):
+                    continue
+                assert False, (
+                    f"{error_message}\n{received}"
+                    if error_message is not None
+                    else f"Message received when nothing expected!\n{received}"
+                )
 
-    async def shutdown(self, timeout=GraphqlWsTransport.TIMEOUT):
+
+class GraphqlWsTransport(transport.GraphqlWsTransport):
+    """Testing client transport to work without WebSocket connection.
+
+    Client is implemented based on the Channels `WebsocketCommunicator`.
+    """
+
+    def __init__(self, application, path, communicator_kwds=None):
+        """Constructor."""
+        self._comm = channels.testing.WebsocketCommunicator(
+            application=application,
+            path=path,
+            subprotocols=["graphql-ws"],
+            **(communicator_kwds or {}),
+        )
+
+    async def connect(self, timeout: Optional[float] = None) -> None:
+        """Connect to the server."""
+        ok, code = await self._comm.connect(timeout or self.TIMEOUT)
+        if not ok:
+            raise RuntimeError(
+                f"Failed to establish fake connection! WebSocket close code={code}!"
+            )
+
+    async def send(self, message: dict) -> None:
+        """Send message."""
+        await self._comm.send_json_to(message)
+
+    async def receive(self, timeout: Optional[float] = None) -> dict:
+        """Receive message."""
+        return dict(await self._comm.receive_json_from(timeout or self.TIMEOUT))
+
+    async def disconnect(self, timeout: Optional[float] = None) -> None:
         """Disconnect from the server."""
-        await self.disconnect(timeout=timeout)
-        await self.wait(timeout=timeout)
+        await self._comm.disconnect(timeout=timeout or self.TIMEOUT)
+
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+        """Wait server to close the connection."""
+        message = await self._comm.receive_output(timeout or self.TIMEOUT)
+        assert message["type"] == "websocket.close", (
+            "Message with a wrong type received while waiting server to close the"
+            f" connection! Expected 'websocket.close' received '{message['type']}'!"
+        )
+        assert message["code"] == 4000, (
+            "Message with a wrong code received while waiting server to close the"
+            f" connection! Expected '4000' received '{message['code']}'!"
+        )
+        await self._comm.disconnect(timeout=timeout or self.TIMEOUT)

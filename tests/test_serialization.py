@@ -103,16 +103,16 @@ async def test_serialization(gql, transactional_db):
 
     print("Establish & initialize WebSocket GraphQL connections.")
 
-    comm = gql(
+    client = gql(
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
 
     print("Subscribe to receive subscription notifications.")
 
-    sub_id = await comm.send(
+    sub_id = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -134,11 +134,11 @@ async def test_serialization(gql, transactional_db):
 
     print("Invoke mutation which sends Django model to the subscription.")
 
-    await comm.execute("mutation { send_model { is_ok } }")
+    await client.execute("mutation { send_model { is_ok } }")
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await comm.receive(assert_id=sub_id)
+    models_info = await client.receive(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user1_id"] == user1_id
     assert models_info["user2_id"] == user2_id
@@ -147,4 +147,4 @@ async def test_serialization(gql, transactional_db):
     assert models_info["user1_typename"] == str(User)
     assert models_info["user2_typename"] == str(User)
 
-    await comm.finalize()
+    await client.finalize()

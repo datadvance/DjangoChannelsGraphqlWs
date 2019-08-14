@@ -43,11 +43,11 @@ async def test_concurrent_queries(gql):
     """Check a single hanging operation does not block other ones."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(query=Query, mutation=Mutation)
-    await comm.connect_and_init()
+    client = gql(query=Query, mutation=Mutation)
+    await client.connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
-    long_op_id = await comm.send(
+    long_op_id = await client.send(
         msg_type="start",
         payload={
             "query": "mutation op_name { long_op { is_ok } }",
@@ -56,11 +56,11 @@ async def test_concurrent_queries(gql):
         },
     )
 
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
-        fast_op_id = await comm.send(
+        fast_op_id = await client.send(
             msg_type="start",
             payload={
                 "query": "query op_name { fast_op_sync }",
@@ -68,21 +68,23 @@ async def test_concurrent_queries(gql):
                 "operationName": "op_name",
             },
         )
-        resp = await comm.receive(assert_id=fast_op_id, assert_type="data")
+        resp = await client.receive(assert_id=fast_op_id, assert_type="data")
         assert resp["data"] == {"fast_op_sync": True}
-        await comm.receive(assert_id=fast_op_id, assert_type="complete")
+        await client.receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     WAKEUP.set()
 
-    resp = await comm.receive(assert_id=long_op_id, assert_type="data")
+    resp = await client.receive(assert_id=long_op_id, assert_type="data")
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
-    await comm.receive(assert_id=long_op_id, assert_type="complete")
+    await client.receive(assert_id=long_op_id, assert_type="complete")
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.assert_no_messages("Unexpected message received at the end of the test!")
-    await comm.finalize()
+    await client.assert_no_messages(
+        "Unexpected message received at the end of the test!"
+    )
+    await client.finalize()
 
 
 # NOTE: Large `requests_number` values may lead to errors in `select`.
@@ -103,8 +105,8 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
         query = "fast_op_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(query=Query)
-    await comm.connect_and_init()
+    client = gql(query=Query)
+    await client.connect_and_init()
 
     print(f"Send {requests_number} requests and check {requests_number*2} responses.")
     send_waitlist = []
@@ -113,7 +115,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
     for _ in range(requests_number):
         op_id = uuid.uuid4().hex
         send_waitlist += [
-            comm.send(
+            client.send(
                 msg_id=op_id,
                 msg_type="start",
                 payload={
@@ -126,7 +128,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
         # Expect two messages for each one we have sent.
         expected_responses.add((op_id, "data"))
         expected_responses.add((op_id, "complete"))
-        receive_waitlist += [comm.transport.receive(), comm.transport.receive()]
+        receive_waitlist += [client.transport.receive(), client.transport.receive()]
 
     start_ts = time.monotonic()
     await asyncio.wait(send_waitlist)
@@ -144,8 +146,10 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
     assert not expected_responses, "Not all expected responses received!"
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.assert_no_messages("Unexpected message received at the end of the test!")
-    await comm.finalize()
+    await client.assert_no_messages(
+        "Unexpected message received at the end of the test!"
+    )
+    await client.finalize()
 
 
 @pytest.mark.asyncio
@@ -170,7 +174,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize two WebSocket GraphQL connections.")
-    comm = gql(
+    client = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
@@ -182,11 +186,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
     await comm_new.connect_and_init()
 
     print("Subscribe to GraphQL subscription with the same subscription group.")
-    sub_id_1 = await comm.send(
+    sub_id_1 = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -199,7 +203,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
             "operationName": "op_name",
         },
     )
-    sub_id_2 = await comm.send(
+    sub_id_2 = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -227,12 +231,12 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
     )
 
     print("Stop the first subscription by id.")
-    await comm.send(msg_id=sub_id_1, msg_type="stop")
-    await comm.receive(assert_id=sub_id_1, assert_type="complete")
+    await client.send(msg_id=sub_id_1, msg_type="stop")
+    await client.receive(assert_id=sub_id_1, assert_type="complete")
 
     print("Trigger the subscription by mutation to receive notifications.")
     message = "HELLO WORLD"
-    msg_id = await comm.send(
+    msg_id = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -250,10 +254,10 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     # Mutation response.
-    await comm.receive(assert_id=msg_id, assert_type="data")
-    await comm.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive(assert_id=msg_id, assert_type="data")
+    await client.receive(assert_id=msg_id, assert_type="complete")
     # Check responses from subscriptions.
-    res = await comm.receive(assert_id=sub_id_2, assert_type="data")
+    res = await client.receive(assert_id=sub_id_2, assert_type="data")
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for second subscriber!"
@@ -264,11 +268,11 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
 
     # Check notifications: there are no notifications. Previously,
     # we got all notifications.
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
     await comm_new.assert_no_messages()
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
+    await client.finalize()
     await comm_new.finalize()
 
 
@@ -301,7 +305,7 @@ async def test_subscribe_and_many_unsubscribes(
         subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(
+    client = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
@@ -310,18 +314,18 @@ async def test_subscribe_and_many_unsubscribes(
             "strict_ordering": strict_ordering,
         },
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
 
     # Flag for communication between threads. If the flag is set, then
     # we have successfully unsubscribed from all subscriptions.
     flag = asyncio.Event()
 
-    async def subscribe_unsubscribe(comm, user_id, op_id: str):
+    async def subscribe_unsubscribe(client, user_id, op_id: str):
         """Subscribe to GraphQL subscription. And spam server with the
         'stop' messages while the flag is not set.
         """
 
-        sub_id = await comm.send(
+        sub_id = await client.send(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
@@ -341,7 +345,7 @@ async def test_subscribe_and_many_unsubscribes(
 
         # Multiple stop messages.
         while True:
-            await comm.send(msg_id=op_id, msg_type="stop")
+            await client.send(msg_id=op_id, msg_type="stop")
             await asyncio.sleep(0.01)
             if flag.is_set():
                 break
@@ -353,7 +357,7 @@ async def test_subscribe_and_many_unsubscribes(
         """
         while True:
             try:
-                resp = await comm.receive(raw_response=True)
+                resp = await client.receive(raw_response=True)
                 op_id = resp["id"]
                 if resp["type"] == "complete":
                     op_ids.remove(op_id)
@@ -390,7 +394,7 @@ async def test_subscribe_and_many_unsubscribes(
     for user_id in itertools.cycle(["ALICE", "TOM", None]):
         op_id += 1
         op_ids.add(str(op_id))
-        awaitables.append(subscribe_unsubscribe(comm, user_id, str(op_id)))
+        awaitables.append(subscribe_unsubscribe(client, user_id, str(op_id)))
         if number_of_tasks == op_id:
             print("Tasks with the following ids prepared:", op_ids)
             break
@@ -413,11 +417,11 @@ async def test_subscribe_and_many_unsubscribes(
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Trigger the subscription by mutation.")
     message = "HELLO WORLD"
-    msg_id = await comm.send(
+    msg_id = await client.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -435,15 +439,15 @@ async def test_subscribe_and_many_unsubscribes(
         },
     )
     # Mutation response.
-    await comm.receive(assert_id=msg_id, assert_type="data")
-    await comm.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive(assert_id=msg_id, assert_type="data")
+    await client.receive(assert_id=msg_id, assert_type="complete")
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
+    await client.finalize()
 
 
 @pytest.mark.asyncio
@@ -478,7 +482,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
         subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(
+    client = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
@@ -487,13 +491,13 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             "strict_ordering": strict_ordering,
         },
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
 
     async def subscribe_unsubscribe(user_id="TOM"):
         """Subscribe to GraphQL subscription. And spam server with the
         'stop' messages.
         """
-        sub_id = await comm.send(
+        sub_id = await client.send(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
@@ -511,16 +515,16 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
 
         # Spam with stop messages.
         for _ in range(NUMBER_OF_STOP_MESSAGES):
-            await comm.send(msg_id=sub_id, msg_type="stop")
+            await client.send(msg_id=sub_id, msg_type="stop")
             await asyncio.sleep(DELAY_BETWEEN_STOP_MESSAGES)
 
-        resp = await comm.receive(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
             resp["type"] == "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
-        resp = await comm.receive(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert resp["type"] == "complete", (
             "Here we expect to receive a message about the completion"
@@ -541,10 +545,10 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
+    await client.finalize()
 
 
 @pytest.mark.asyncio
@@ -575,6 +579,8 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     MUTATION_INDEX_TO_SEND_STOP = 40  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
+    # The timeout after which we suppose that all messages are consumed.
+    NOTHING_RECEIVED_TIMEOUT = 0.1  # pylint: disable=invalid-name
 
     # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
@@ -585,7 +591,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize two WebSocket GraphQL connections.")
-    comm = gql(
+    client = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
@@ -594,7 +600,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             "strict_ordering": strict_ordering,
         },
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
 
     comm_spamer = gql(
         mutation=Mutation,
@@ -611,7 +617,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         clients.
         """
 
-        sub_id = await comm.send(
+        sub_id = await client.send(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
@@ -649,13 +655,13 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         # Spam with broadcast messages.
         for index in range(NUMBER_OF_MUTATION_MESSAGES):
             if index == MUTATION_INDEX_TO_SEND_STOP:
-                await comm.send(msg_id=sub_id, msg_type="stop")
+                await client.send(msg_id=sub_id, msg_type="stop")
             await comm_spamer.send(
                 msg_type="start",
                 payload=spam_payload,
                 msg_id=f"mut_spammer_{iteration}_{index}_{uuid.uuid4().hex}",
             )
-            await comm.send(
+            await client.send(
                 msg_type="start",
                 payload=spam_payload,
                 msg_id=f"mut_{iteration}_{index}_{uuid.uuid4().hex}",
@@ -663,7 +669,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
         while True:
             try:
-                resp = await comm.receive(raw_response=True)
+                resp = await client.receive(raw_response=True)
             except Exception:  # pylint: disable=broad-except
                 assert False, (
                     "Here we expect to receive a message about the completion"
@@ -688,14 +694,19 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             await subscribe_unsubscribe(iteration)
             iteration += 1
 
-    # We unsubscribed from all subscriptions and received
-    # all 'data' messages.
+    print("Subscribe-unsubscribe iterations done.")
+
+    # We have unsubscribed from all the subscriptions and received all
+    # 'data' messages.
     while True:
         try:
-            resp = await comm.receive(raw_response=True)
+            resp = await asyncio.wait_for(
+                client.receive(raw_response=True), timeout=NOTHING_RECEIVED_TIMEOUT
+            )
         except asyncio.TimeoutError:
             # Ok, there are no messages.
             break
+
         resp_id = resp["id"]
         assert resp_id.startswith("mut_"), (
             f"We receive the message with id: {resp_id}. Message is not"
@@ -704,10 +715,10 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             f" 'COMPLETE' message about unsubscribe."
         )
 
-    await comm.assert_no_messages("There must not be any messages.")
+    await client.assert_no_messages("There must not be any messages.")
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
+    await client.finalize()
 
 
 @pytest.mark.asyncio
@@ -743,7 +754,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
         subscription = "on_chat_message_sent_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    comm = gql(
+    client = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
@@ -752,7 +763,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             "strict_ordering": strict_ordering,
         },
     )
-    await comm.connect_and_init()
+    await client.connect_and_init()
 
     loop = asyncio.get_event_loop()
     pool = concurrent.futures.ThreadPoolExecutor()
@@ -763,7 +774,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
         """
 
         # Just subscribe.
-        sub_id = await comm.send(
+        sub_id = await client.send(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
@@ -794,13 +805,13 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
                 await OnChatMessageSentAsync.unsubscribe()
                 await asyncio.sleep(DELAY_BETWEEN_UNSUBSCRIBE_CALLS)
 
-        resp = await comm.receive(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
             resp["type"] == "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
-        resp = await comm.receive(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert resp["type"] == "complete", (
             "Here we expect to receive a message about the completion"
@@ -821,10 +832,10 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
-    await comm.assert_no_messages()
+    await client.assert_no_messages()
 
     print("Disconnect and wait the application to finish gracefully.")
-    await comm.finalize()
+    await client.finalize()
 
 
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
