@@ -621,6 +621,7 @@ snowballstemmer = "*"
 [[package]]
 category = "dev"
 description = "Python bindings for the Enchant spellchecking system"
+marker = "sys_platform == \"linux;darwin\""
 name = "pyenchant"
 optional = false
 python-versions = "*"
@@ -970,7 +971,7 @@ version = "4.6.0"
 setuptools = "*"
 
 [metadata]
-content-hash = "89a9038157d5e2d27b57636cc8db29357bc9c4d16a8c53c8bae5e4ee5a1e2dda"
+content-hash = "91d2cbd12e3028931824451ee7b40b7510dab78388f26ac01ba7a504be45c942"
 python-versions = "^3.7.0"
 
 [metadata.hashes]

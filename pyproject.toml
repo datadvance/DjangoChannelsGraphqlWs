@@ -31,6 +31,7 @@
 # File format is STANDARDIZED in the PEP 518:
 # https://www.python.org/dev/peps/pep-0518/
 
+
 [tool.poetry]
 name = "django-channels-graphql-ws"
 version = "0.2.1"
@@ -43,6 +44,7 @@ license = "MIT"
 packages = [
     { include = "channels_graphql_ws/" },
 ]
+
 
 [tool.poetry.dependencies]
 python = "^3.7.0"
@@ -64,7 +66,6 @@ mypy = "*"
 plumbum = "*"
 pre-commit = "*"
 pydocstyle = "*"
-pyenchant = "*"
 pylint = "*"
 pylint-django = "*"
 pylint-quotes = "*"
@@ -74,10 +75,8 @@ pytest-cov = "*"
 pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
+pyenchant = {version = "^2.0", platform = "linux;darwin"}
 
-[build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
 
 [tool.isort]
 # Isort configuration.
@@ -103,3 +102,8 @@ multi_line_output = 3
 not_skip = "__init__.py"
 skip_glob = [".venv"]
 use_parentheses = "True"
+
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
