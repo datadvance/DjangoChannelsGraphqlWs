@@ -55,6 +55,7 @@ mypy
 myquery
 mysubscription
 namespace
+nodeid
 ok
 operaion
 processexecutionerror
@@ -72,6 +73,7 @@ redis
 resolvers
 sessionid
 sid
+skipif
 spam
 spellcheking
 staticmethod
