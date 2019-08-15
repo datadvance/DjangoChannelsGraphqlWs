@@ -21,6 +21,7 @@
 
 """Auxiliary fixtures to simplify testing."""
 
+import inspect
 import threading
 
 import channels
@@ -160,22 +161,39 @@ def synchronize_inmemory_channel_layer():
      graphql.error.located_error.GraphQLLocatedError:
          dictionary changed size during iteration
     """
-    mutex = threading.RLock()
+    guard = threading.RLock()
 
     def wrap(func):
-        async def wrapper(*args, **kwds):
-            with mutex:
-                return await func(*args, **kwds)
+        if inspect.iscoroutinefunction(func):
+
+            async def wrapper(*args, **kwds):
+                with guard:
+                    return await func(*args, **kwds)
+
+        else:
+
+            def wrapper(*args, **kwds):
+                with guard:
+                    return func(*args, **kwds)
 
         return wrapper
 
-    public_callable_attr_names = (
-        attr_name
-        for attr_name in dir(channels.layers.InMemoryChannelLayer)
-        if callable(getattr(channels.layers.InMemoryChannelLayer, attr_name))
-        and not attr_name.startswith("_")
-    )
-    for attr_name in public_callable_attr_names:
+    # Carefully selected methods to protect. We cannot simply wrap all
+    # the callables, cause this will lead to deadlocks, e.g. when we
+    # locked the mutex in `await receive` and then another coroutine
+    # calls `await send`.
+    callables_to_protect = [
+        "_clean_expired",
+        "_remove_from_groups",
+        "close",
+        "flush",
+        "group_add",
+        "group_discard",
+        "group_send",
+        "new_channel",
+        "send",
+    ]
+    for attr_name in callables_to_protect:
         setattr(
             channels.layers.InMemoryChannelLayer,
             attr_name,
