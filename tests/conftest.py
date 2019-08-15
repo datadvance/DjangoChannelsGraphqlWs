@@ -163,9 +163,9 @@ def synchronize_inmemory_channel_layer():
     mutex = threading.RLock()
 
     def wrap(func):
-        def wrapper(*args, **kwds):
+        async def wrapper(*args, **kwds):
             with mutex:
-                return func(*args, **kwds)
+                return await func(*args, **kwds)
 
         return wrapper
 
