@@ -576,7 +576,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
     # The timeout after which we suppose that all messages are consumed.
-    NOTHING_RECEIVED_TIMEOUT = 0.5  # pylint: disable=invalid-name
+    NOTHING_RECEIVED_TIMEOUT = 1  # pylint: disable=invalid-name
 
     # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
