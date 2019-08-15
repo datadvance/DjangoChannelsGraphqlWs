@@ -1,3 +1,4 @@
+addfinalizer
 aiohttp
 api
 args
@@ -36,6 +37,7 @@ graphql
 grp
 html
 init
+inmemory
 ipython
 isort
 itertools
@@ -43,6 +45,7 @@ json
 keepalive
 kwds
 linters
+monkeypatch
 mozilla
 mutex
 mymutation
