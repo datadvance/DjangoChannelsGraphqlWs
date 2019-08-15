@@ -35,7 +35,7 @@ class GraphqlWsClient(client.GraphqlWsClient):
     # Time in seconds to wait to ensure the queue of messages is empty.
     RECEIVE_NOTHING_ATTEMPTS = 10
     # Number of seconds to wait for another check for new events.
-    RECEIVE_NOTHING_INTERVAL = 0.05
+    RECEIVE_NOTHING_INTERVAL = 0.1
 
     async def assert_no_messages(
         self,
