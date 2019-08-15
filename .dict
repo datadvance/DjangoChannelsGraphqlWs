@@ -70,6 +70,7 @@ pyproject
 pytest
 rcfile
 redis
+repo
 resolvers
 sessionid
 sid
