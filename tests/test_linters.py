@@ -47,7 +47,9 @@ def test_pylint(src_dir):
         # about `spelling-dict=en_US`, so we wipe out spelling from its
         # configuration file.
         if sys.platform == "win32":
-            with tempfile.NamedTemporaryFile(mode="w+") as fixed_pylintrc:
+            with tempfile.NamedTemporaryFile(
+                mode="w+", dir=PROJECT_ROOT_DIR
+            ) as fixed_pylintrc:
                 with open(PROJECT_ROOT_DIR / ".pylintrc", mode="r") as pylintrc:
                     fixed_pylintrc.writelines(
                         (
