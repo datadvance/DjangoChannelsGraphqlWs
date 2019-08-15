@@ -21,6 +21,8 @@
 
 """Auxiliary fixtures to simplify testing."""
 
+import threading
+
 import channels
 import django
 import graphene
@@ -137,3 +139,45 @@ def gql(db, request):
         assert (
             not client.connected
         ), f"Test has left connected client: {request.node.nodeid}!"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def synchronize_inmemory_channel_layer():
+    """Monkeypatch `InMemoryChannelLayer` to make it thread safe.
+
+    Without this we have a blinking fails in the unit tests run:
+    Traceback (most recent call last):
+        File ".../site-packages/promise/promise.py", line 842, in handle_future_result
+            resolve(future.result())
+        File ".../tests/test_concurrent.py", line 994, in mutate
+            await OnChatMessageSentAsync.notify(message=message, user_id=user_id)
+        File ".../tests/test_concurrent.py", line 940, in notify
+            await super().broadcast(group=group, payload=message)
+        File ".../channels_graphql_ws/graphql_ws.py", line 248, in broadcast_async
+            "payload": serialized_payload,
+        File ".../site-packages/channels/layers.py", line 351, in group_send
+            for channel in self.groups.get(group, set()):
+     graphql.error.located_error.GraphQLLocatedError:
+         dictionary changed size during iteration
+    """
+    mutex = threading.RLock()
+
+    def wrap(func):
+        def wrapper(*args, **kwds):
+            with mutex:
+                return func(*args, **kwds)
+
+        return wrapper
+
+    public_callable_attr_names = (
+        attr_name
+        for attr_name in dir(channels.layers.InMemoryChannelLayer)
+        if callable(getattr(channels.layers.InMemoryChannelLayer, attr_name))
+        and not attr_name.startswith("_")
+    )
+    for attr_name in public_callable_attr_names:
+        setattr(
+            channels.layers.InMemoryChannelLayer,
+            attr_name,
+            wrap(getattr(channels.layers.InMemoryChannelLayer, attr_name)),
+        )
