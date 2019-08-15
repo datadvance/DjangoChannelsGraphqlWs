@@ -23,7 +23,6 @@
 
 import pathlib
 import sys
-import tempfile
 import textwrap
 
 import plumbum
