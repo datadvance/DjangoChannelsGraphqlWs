@@ -343,14 +343,6 @@ apipkg = ">=1.4"
 [[package]]
 category = "dev"
 description = "Git Object Database"
-name = "gitdb"
-optional = false
-python-versions = "*"
-version = "0.6.4"
-
-[[package]]
-category = "dev"
-description = "Git Object Database"
 name = "gitdb2"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
@@ -365,11 +357,10 @@ description = "Python Git Library"
 name = "gitpython"
 optional = false
 python-versions = ">=3.0, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "3.0.0"
+version = "3.0.1"
 
 [package.dependencies]
 ddt = ">=1.1.1"
-gitdb = ">=0.6.4"
 gitdb2 = ">=2.0.0"
 
 [[package]]
@@ -657,7 +648,7 @@ description = "A framework for managing and maintaining multi-language pre-commi
 name = "pre-commit"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "1.18.1"
+version = "1.18.2"
 
 [package.dependencies]
 "aspy.yaml" = "*"
@@ -723,8 +714,8 @@ category = "dev"
 description = "Python docstring style checker"
 name = "pydocstyle"
 optional = false
-python-versions = "*"
-version = "4.0.0"
+python-versions = ">=3.4"
+version = "4.0.1"
 
 [package.dependencies]
 snowballstemmer = "*"
@@ -820,18 +811,21 @@ description = "pytest: simple powerful testing with Python"
 name = "pytest"
 optional = false
 python-versions = ">=3.5"
-version = "5.0.1"
+version = "5.1.0"
 
 [package.dependencies]
 atomicwrites = ">=1.0"
 attrs = ">=17.4.0"
 colorama = "*"
-importlib-metadata = ">=0.12"
 more-itertools = ">=4.0.0"
 packaging = "*"
 pluggy = ">=0.12,<1.0"
 py = ">=1.5.0"
 wcwidth = "*"
+
+[package.dependencies.importlib-metadata]
+python = "<3.8"
+version = ">=0.12"
 
 [[package]]
 category = "dev"
@@ -1140,9 +1134,8 @@ ddt = ["474546b4020ce8a2f9550ba8899c28aa2c284c7bbf175bddede98be949d1ca7c", "d13e
 decorator = ["86156361c50488b84a3f148056ea716ca587df2f0de1d34750d35c21312725de", "f069f3a01830ca754ba5258fde2278454a0b5b79e0d7f5c13b3b97e57d4acff6"]
 django = ["16a5d54411599780ac9dfe3b9b38f90f785c51259a584e0b24b6f14a7f69aae8", "9a2f98211ab474c710fcdad29c82f30fc14ce9917c7a70c3682162a624de4035"]
 execnet = ["0dd40ad3b960aae93bdad7fe1c3f049bbcc8fba47094655a4301f5b33e906816", "3839f3c1e9270926e7b3d9b0a52a57be89c302a3826a2b19c8d6e6c3d2b506d2"]
-gitdb = ["a3ebbc27be035a2e874ed904df516e35f4a29a778a764385de09de9e0f139658"]
 gitdb2 = ["83361131a1836661a155172932a13c08bda2db3674e4caa32368aa6eb02f38c2", "e3a0141c5f2a3f635c7209d56c496ebe1ad35da82fe4d3ec4aaa36278d70648a"]
-gitpython = ["556b64796c5e268b35e3b431a429e813ad54aa178e1baaec2a9ba82e8575a89e", "629867ebf609cef21bb9d849039e281e25963fb7d714a2f6bacc1ecce4800293"]
+gitpython = ["259a8b6d6a4a118738c4a65fa990f8c8c91525bb43970aed2868952ebb86ceb8", "73aa7b59e58dd3435121421c33c284e5ef51bc7b2f4373e1a1e4cc06e9c928ec"]
 graphene = ["77d61618132ccd084c343e64c22d806cee18dce73cc86e0f427378dbdeeac287", "acf808d50d053b94f7958414d511489a9e490a7f9563b9be80f6875fc5723d2a"]
 graphql-core = ["1488f2a5c2272dc9ba66e3042a6d1c30cea0db4c80bd1e911c6791ad6187d91b", "da64c472d720da4537a2e8de8ba859210b62841bd47a9be65ca35177f62fe0e4"]
 graphql-relay = ["0e94201af4089e1f81f07d7bd8f84799768e39d70fa1ea16d1df505b46cc6335", "75aa0758971e252964cb94068a4decd472d2a8295229f02189e3cbca1f10dbb5", "7fa74661246e826ef939ee92e768f698df167a7617361ab399901eaebf80dce6"]
@@ -1171,13 +1164,13 @@ pexpect = ["2094eefdfcf37a1fdbfb9aa090862c1a4878e5c7e0e7e7088bdb511c558e5cd1", "
 pickleshare = ["87683d47965c1da65cdacaf31c8441d12b8044cdec9aca500cd78fc2c683afca", "9649af414d74d4df115d5d718f82acb59c9d418196b7b4290ed47a12ce62df56"]
 pluggy = ["0825a152ac059776623854c1543d65a4ad408eb3d33ee114dff91e57ec6ae6fc", "b9817417e95936bf75d85d3f8767f7df6cdde751fc40aed3bb3074cbcb77757c"]
 plumbum = ["d143f079bfb60b11e9bec09a49695ce2e55ce5ca0246877bdb0818ab7c7fc312", "df96a5facf621db4a6d682bdc93afa5ed6b107a8667c73c3f0a0f0fab4217c81"]
-pre-commit = ["0767b235f8efafcefd7a6e4dbcf80b47d7e9c1ab8a4c07bca0635261516fb43a", "1762f2a551732e250d0e16131d3bf9e653adb6ec262e58dfe033906750503235"]
+pre-commit = ["21ce389ea3a480170804208baff8ceaac815ecf6b9bd6c6797de5584ad69cff8", "3b0e901f442b966444833f1924e9bf9a7c10c79741b21520f68bc87639220f5e"]
 promise = ["2ebbfc10b7abf6354403ed785fe4f04b9dfd421eb1a474ac8d187022228332af", "348f5f6c3edd4fd47c9cd65aed03ac1b31136d375aa63871a57d3e444c85655c"]
 prompt-toolkit = ["11adf3389a996a6d45cc277580d0d53e8a5afd281d0c9ec71b28e6f121463780", "2519ad1d8038fd5fc8e770362237ad0364d16a7650fb5724af6997ed5515e3c1", "977c6583ae813a37dc1c2e1b715892461fcbdaa57f6fc62f33a528c4886c8f55"]
 ptyprocess = ["923f299cc5ad920c68f2bc0bc98b75b9f838b93b599941a6b63ddbc2476394c0", "d7cc528d76e76342423ca640335bd3633420dc1366f258cb31d05e865ef5ca1f"]
 py = ["64f65755aee5b381cea27766a3a147c3f15b9b6b9ac88676de66ba2ae36793fa", "dc639b046a6e2cff5bbe40194ad65936d6ba360b52b3c3fe1d08a82dd50b5e53"]
 pycparser = ["a988718abfad80b6b157acce7bf130a30876d27603738ac39f140993246b25b3"]
-pydocstyle = ["58c421dd605eec0bce65df8b8e5371bb7ae421582cdf0ba8d9435ac5b0ffc36a"]
+pydocstyle = ["04c84e034ebb56eb6396c820442b8c4499ac5eb94a3bda88951ac3dc519b6058", "66aff87ffe34b1e49bff2dd03a88ce6843be2f3346b0c9814410d34987fbab59"]
 pyenchant = ["9a66aa441535e27d228baca320f7feed1b08d0c5e6167d5e5cf455b545b7c2cd", "b9526fc2c5f1ba0637e50200b645a7c20fb6644dbc6f6322027e7d2fbf1084a5", "e8000144e61551fcab9cd1b6fdccdded20e577e8d6d0985533f0b2b9c38fd952", "fc31cda72ace001da8fe5d42f11c26e514a91fa8c70468739216ddd8de64e2a0"]
 pygments = ["71e430bc85c88a430f000ac1d9b331d2407f681d6f6aec95e8bcfbc3df5b0127", "881c4c157e45f30af185c1ffe8d549d48ac9127433f2c380c24b84572ad66297"]
 pyhamcrest = ["6b672c02fdf7470df9674ab82263841ce8333fb143f32f021f6cb26f0e512420", "7a4bdade0ed98c699d728191a058a60a44d2f9c213c51e2dd1e6fb42f2c6128a", "8ffaa0a53da57e89de14ced7185ac746227a8894dbd5a3c718bf05ddbd1d56cd", "bac0bea7358666ce52e3c6c85139632ed89f115e9af52d44b3c36e0bf8cf16a9", "f30e9a310bcc1808de817a92e95169ffd16b60cbc5a016a49c8d0e8ababfae79"]
@@ -1186,7 +1179,7 @@ pylint-django = ["6740b60dd94b6896cffa28d7fe1bb5dd167cbdcb3d9fb3db01b30390ea18b9
 pylint-plugin-utils = ["8d9e31d5ea8b7b0003e1f0f136b44a5235896a32e47c5bc2ef1143e9f6ba0b74"]
 pylint-quotes = ["5332fa8b48ce5d8780df196d684f38c00614f8233fdc4c67efbdc0bbe7dc51d7", "c53d2a63b4cd16c9fa426d243de6396910ff04c65001efdbea37427d401fce72"]
 pyparsing = ["6f98a7b9397e206d78cc01df10131398f1c8b8510a2f4d97d9abd82e1aacdd80", "d9338df12903bbf5d65a0e4e87c2161968b10d2e489652bb47001d82a9b028b4"]
-pytest = ["6ef6d06de77ce2961156013e9dff62f1b2688aa04d0dc244299fe7d67e09370d", "a736fed91c12681a7b34617c8fcefe39ea04599ca72c608751c31d89579a3f77"]
+pytest = ["3805d095f1ea279b9870c3eeae5dddf8a81b10952c8835cd628cf1875b0ef031", "abc562321c2d190dd63c2faadf70b86b7af21a553b61f0df5f5e1270717dc5a3"]
 pytest-asyncio = ["9fac5100fd716cbecf6ef89233e8590a4ad61d729d1732e0a96b84182df1daaf", "d734718e25cfc32d2bf78d346e99d33724deeba774cc4afdf491530c6184b63b"]
 pytest-cov = ["2b097cde81a302e1047331b48cadacf23577e431b61e9c6f49a1170bbe3d3da6", "e00ea4fdde970725482f1f35630d12f074e121a23801aabf2ae154ec6bdd343a"]
 pytest-django = ["264fb4c506db5d48a6364c311a0b00b7b48a52715bad8839b2d8bee9b99ed6bb", "4adfe5fb3ed47f0ba55506dd3daf688b1f74d5e69148c10ad2dd2f79f40c0d62"]
