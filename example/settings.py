@@ -26,13 +26,19 @@
 # tests and to illustrate main principles in the `example.py`.
 
 import pathlib
+from typing import List
 import uuid
 
 
 BASE_DIR = pathlib.Path(__file__).absolute().parent.parent
 SECRET_KEY = str(uuid.uuid4())
 DEBUG = True
-INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "channels"]
+INSTALLED_APPS: List[str] = [
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.auth",
+    "channels",
+]
 ALLOWED_HOSTS = "*"
 
 
@@ -43,4 +49,4 @@ ROOT_URLCONF = "example"
 ASGI_APPLICATION = "example.application"
 
 # The database config is only needed to make serialization tests work.
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3"}}
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "db.sqlite3"}}

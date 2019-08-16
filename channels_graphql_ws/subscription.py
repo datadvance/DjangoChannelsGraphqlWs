@@ -365,16 +365,15 @@ class Subscription(graphene.ObjectType):
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
     @classmethod
-    def _subscribe(cls, obj, info, *args, **kwds):
+    def _subscribe(cls, root, info, *args, **kwds):
         """Subscription request received.
 
         This is called by the Graphene when a client subscribes.
         """
         # Extract function which associates the callback with the groups
-        # and remove it from the context so extra field does not pass to
-        # the `subscribe` method of a subclass.
-        register = info.context.register
-        del info.context.register
+        # and bring real root back.
+        register_subscription = root.register_subscription
+        root = root.real_root
 
         # Attach current subscription to the group corresponding to the
         # concrete class. This allows to trigger all the subscriptions
@@ -385,7 +384,7 @@ class Subscription(graphene.ObjectType):
         # Invoke the subclass-specified `subscribe` method to get the
         # groups subscription must be attached to.
         if cls._meta.subscribe is not None:
-            subclass_groups = cls._meta.subscribe(obj, info, *args, **kwds)
+            subclass_groups = cls._meta.subscribe(root, info, *args, **kwds)
             # Properly handle `async def subscribe`.
             if asyncio.iscoroutinefunction(cls._meta.subscribe):
                 subclass_groups = asyncio.get_event_loop().run_until_complete(
@@ -428,7 +427,7 @@ class Subscription(graphene.ObjectType):
             # `subscribe`.
             return result
 
-        return register(groups, publish_callback, unsubscribed_callback)
+        return register_subscription(groups, publish_callback, unsubscribed_callback)
 
     @classmethod
     def _group_name(cls, group=None):

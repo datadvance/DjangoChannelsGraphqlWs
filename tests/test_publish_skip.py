@@ -76,7 +76,9 @@ async def test_publish_skip(gql):
             del root
             OnNewMessage.broadcast(
                 payload={
-                    "author_sessionid": sessionid_from_headers(info.context.headers),
+                    "author_sessionid": sessionid_from_headers(
+                        info.context.scope["headers"]
+                    ),
                     "message": message,
                 }
             )
@@ -90,7 +92,7 @@ async def test_publish_skip(gql):
         @staticmethod
         def publish(payload, info):
             """Notify all clients except the author of the message."""
-            sessionid = sessionid_from_headers(info.context.headers)
+            sessionid = sessionid_from_headers(info.context.scope["headers"])
             if payload["author_sessionid"] == sessionid:
                 return OnNewMessage.SKIP
 

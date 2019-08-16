@@ -184,6 +184,11 @@ You can find simple usage example in the [example](example/) directory.
 Run:
 ```bash
 cd example/
+# Initialize database.
+./manage.py migrate
+# Create 'user' with password 'user'.
+./manage.py createsuperuser
+# Run development server.
 ./manage.py runserver
 ```
 
@@ -191,26 +196,30 @@ Play with the API though the GraphiQL browser at http://127.0.0.1:8000.
 
 You can start with the following GraphQL requests:
 ```graphql
-query q {
-  history(chatroom: "kittens") {
-    chatroom
-    message
-    sender
-  }
-}
 
-mutation m {
-  sendChatMessage(chatroom: "kittens", username: "Luke", message: "Hello all!"){
-    ok
-  }
-}
+# Check there are no messages.
+query read { history(chatroom: "kittens") { chatroom text sender }}
 
-subscription s {
-  onChatMessageSent(chatroom: "kittens", username: "Robot") {
-    message
-    chatroom
-  }
-}
+# Send a message as Anonymous.
+mutation send { sendChatMessage(chatroom: "kittens", text: "Hi all!"){ ok }}
+
+# Check there is a message from `Anonymous`.
+query read { history(chatroom: "kittens") { text sender } }
+
+# Login as `user`.
+mutation send { login(username: "user", password: "pass") { ok } }
+
+# Send a message as a `user`.
+mutation send { sendChatMessage(chatroom: "kittens", text: "It is me!"){ ok }}
+
+# Check there is a message from both `Anonymous` and from `user`.
+query read { history(chatroom: "kittens") { text sender } }
+
+# Subscribe, do this from a separate browser tab, it waits for events.
+subscription s { onNewChatMessage(chatroom: "kittens") { text sender }}
+
+# Send something again to check subscription triggers.
+mutation send { sendChatMessage(chatroom: "kittens", text: "Something ;-)!"){ ok }}
 ```
 
 ## Details
@@ -274,10 +283,8 @@ the the Django's guide [Serializing Django objects](https://docs.djangoproject.c
 
 ### Authentication
 
-Implementing authentication is straightforward. Follow
-[the Channels documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
-
-Here is an example. Note the `channels.auth.AuthMiddlewareStack` class.
+To enable authentication it is typically enough to wrap your ASGI
+application into the  `channels.auth.AuthMiddlewareStack`:
 
 ```python
 application = channels.routing.ProtocolTypeRouter({
@@ -289,7 +296,44 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-This gives you a Django user `info.context.user` in all the resolvers.
+This gives you a Django user `info.context.scope["user"]` in all the
+resolvers. To authenticate user you can create a `Login` mutation like
+the following:
+
+```python
+class Login(graphene.Mutation, name="LoginPayload"):
+    """Login mutation."""
+
+    ok = graphene.Boolean(required=True)
+
+    class Arguments:
+        """Login request arguments."""
+
+        username = graphene.String(required=True)
+        password = graphene.String(required=True)
+
+    def mutate(self, info, username, password):
+        """Login request."""
+
+        # Ask Django to authenticate user.
+        user = django.contrib.auth.authenticate(username=username, password=password)
+        if user is None:
+            return Login(ok=False)
+
+        # Use Channels to login, in other words to put proper data to
+        # the session stored in the scope. The `info.context.scope` is
+        # practically a Channel `self.scope`.
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context.scope, user)
+        # Save the session,cause `channels.auth.login` does not do this.
+        info.context.scope["session"].save()
+
+        return Login(ok=True)
+```
+
+The authentication is based on the Channels authentication mechanisms.
+Check [the Channels
+documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
+Also take a look at the example in the [example](example/) directory.
 
 ### The client
 
@@ -344,6 +388,28 @@ To customize the confirmation message itself set the `GraphqlWsConsumer`
 setting `subscription_confirmation_message`. It must be a dictionary
 with two keys `"data"` and `"errors"`. By default it is set to
 `{"data": None, "errors": None}`.
+
+### GraphQL middleware
+
+It is possible to inject middleware into the GraphQL operation
+processing. For that define `middleware` setting of your
+
+```python
+def my_middleware(next_middleware, root, info, *args, **kwds):
+    """My custome GraphQL middleware."""
+    # Invoke next middleware.
+    return next_middleware(root, info, *args, **kwds)
+
+class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+    ...
+    middleware = [my_middleware]
+
+
+```
+
+For more information about GraphQL middleware please take a look at the
+[relevant section in the Graphene
+documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
 
 ## Alternatives
 

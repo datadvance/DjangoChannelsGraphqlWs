@@ -45,7 +45,7 @@ import functools
 import logging
 import traceback
 import types
-from typing import Callable, List
+from typing import Callable, List, Sequence
 import weakref
 
 import asgiref.sync
@@ -126,6 +126,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # notifications. You may change this to avoid name clashes in the
     # ASGI backend, e.g. in the Redis.
     group_name_prefix = "GRAPHQL_WS_SUBSCRIPTION"
+
+    # GraphQL middleware.
+    # Typically a list of functions (callables) like:
+    # ```python
+    # def my_middleware(next_middleware, root, info, *args, **kwds):
+    #     return next_middleware(root, info, *args, **kwds)
+    # ```
+    # For more information read:
+    # https://docs.graphene-python.org/en/latest/execution/middleware/#middleware
+    middleware: Sequence = []
 
     async def on_connect(self, payload):
         """Client connection handler.
@@ -535,7 +545,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels.
-            context = types.SimpleNamespace(**self.scope)
+            context = types.SimpleNamespace(scope=self.scope)
 
             # The `register` will be called from the worker thread
             # (spawned for a GraphQL processing) when a client
@@ -544,9 +554,32 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # thread with the eventloop which serves this consumer. This
             # assures that IO operations is performed within a single
             # eventloop.
-            context.register = asgiref.sync.async_to_sync(
+            register_subscription = asgiref.sync.async_to_sync(
                 functools.partial(self._register_subscription, operation_id)
             )
+
+            def register_middleware(next_middleware, root, info, *args, **kwds):
+                """Transfers registration function to the `_subscribe`.
+
+                Check that `next_middleware` is precisely a subscription
+                handler `Subscription._subscribe` and hack it's `root`
+                to deliver the subscription registration function.
+                """
+                from .subscription import Subscription
+
+                # We do not expose `Subscription._subscribe` because
+                # `Subscription` is a public interface class. So it OK
+                # to get `Subscription._subscribe` here - we are tightly
+                # coupled anyway.
+                # pylint: disable=protected-access
+                if (
+                    getattr(next_middleware, "__func__", None)
+                    is Subscription._subscribe.__func__
+                ):
+                    root = types.SimpleNamespace(
+                        real_root=root, register_subscription=register_subscription
+                    )
+                return next_middleware(root, info, *args, **kwds)
 
             # Process the request with Graphene/GraphQL.
 
@@ -566,6 +599,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     operation_name=op_name,
                     variables=variables,
                     context=context,
+                    # NOTE: Wrap with `wrap_in_promise=False`, otherwise
+                    # it raises `GraphQLError` with message:
+                    # "Subscription must return Async Iterable or
+                    # Observable. Received: <Promise...". I do not get
+                    # why it wraps it in promise by default.
+                    middleware=graphql.middlewares(
+                        register_middleware, *self.middleware, wrap_in_promise=False
+                    ),
                     allow_subscriptions=True,
                     executor=graphql.execution.executors.asyncio.AsyncioExecutor(),
                 )
