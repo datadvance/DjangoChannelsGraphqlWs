@@ -27,5 +27,6 @@ subscriptions.
 """
 
 from .client import GraphqlWsClient, GraphqlWsResponseError
-from .graphql_ws import GraphqlWsConsumer, Subscription
+from .graphql_ws_consumer import GraphqlWsConsumer
+from .subscription import Subscription
 from .transport import GraphqlWsTransportAiohttp

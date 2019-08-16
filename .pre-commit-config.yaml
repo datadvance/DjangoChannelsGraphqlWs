@@ -28,10 +28,11 @@ repos:
             entry: black
             id: black
             language_version: python3.7
-            language: python
+            language: python_venv
             name: black
             require_serial: true
             types: [python]
+            additional_dependencies: ["black"]
 
     # Isort: Sort Python imports.
     # https://github.com/timothycrosley/isort
@@ -41,7 +42,8 @@ repos:
             entry: isort
             id: isort
             language_version: python3.7
-            language: python
+            language: python_venv
             name: isort
             require_serial: false
             types: [python]
+            additional_dependencies: ["isort[pyproject]"]
