@@ -44,6 +44,7 @@ ipython
 iscoroutinefunction
 isfunction
 isort
+iterable
 itertools
 json
 keepalive
