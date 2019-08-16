@@ -42,6 +42,7 @@ init
 inmemory
 ipython
 iscoroutinefunction
+isfunction
 isort
 itertools
 json
@@ -59,6 +60,7 @@ namespace
 nodeid
 ok
 operaion
+packb
 processexecutionerror
 prokhorov
 protocoltyperouter
@@ -73,6 +75,7 @@ rcfile
 redis
 repo
 resolvers
+serializer
 sessionid
 sid
 skipif
@@ -91,6 +94,7 @@ timestamps
 traceback
 tuple
 uid
+unpackb
 unsubscribe
 unsubscribed
 unsubscribes
