@@ -22,6 +22,8 @@
 ## Features
 
 - WebSocket-based GraphQL server implemented on the Django Channels.
+- WebSocket protocol is compatible with
+  [Apollo GraphQL](https://github.com/apollographql) client.
 - Graphene-like subscriptions.
 - All GraphQL requests are processed concurrently (in parallel).
 - Subscription notifications delivered in the order they were issued.
