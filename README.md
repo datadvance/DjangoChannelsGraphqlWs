@@ -14,6 +14,7 @@
     - [The client](#the-client)
     - [Testing](#testing)
     - [Subscription activation confirmation](#subscription-activation-confirmation)
+    - [GraphQL middleware](#graphql-middleware)
   - [Alternatives](#alternatives)
   - [Development](#development)
   - [Contributing](#contributing)
