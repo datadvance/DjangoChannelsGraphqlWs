@@ -92,14 +92,7 @@ def test_mypy(src_dir):
             print("\nMyPy:", result)
 
 
-# There is an issue in Pydocstyle that it crashes on nested async def:
-# https://github.com/PyCQA/pydocstyle/issues/370. We have such things in
-# `tests/` so mark them as xfail.
-@pytest.mark.parametrize(
-    "src_dir",
-    [d for d in SOURCE_DIRS if d != "tests/"]
-    + [pytest.param("tests/", marks=pytest.mark.xfail(reason="Pydocstyle issue #370"))],
-)
+@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
 def test_pydocstyle(src_dir):
     """Run Pydocstyle."""
 
