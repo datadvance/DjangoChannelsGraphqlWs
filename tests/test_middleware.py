@@ -93,7 +93,7 @@ async def test_middleware_called_in_mutation(gql):
 
 @pytest.mark.asyncio
 async def test_middleware_called_in_subscription(gql):
-    """Check that middleware called during subscription procesing.
+    """Check that middleware called during subscription processing.
 
     Middleware expected to be called two times: during subscribing to
     the subscription and during a notification.

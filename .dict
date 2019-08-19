@@ -29,6 +29,7 @@ dict
 django
 docstring
 docstrings
+dsl
 enqueue
 eventloop
 func
