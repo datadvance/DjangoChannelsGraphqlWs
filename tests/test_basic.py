@@ -217,7 +217,9 @@ async def test_subscribe_unsubscribe(gql):
 
 @pytest.mark.asyncio
 async def test_subscription_groups(gql):
-    """Test notifications and subscriptions behavior depending on the
+    """Test notifications behavior with different subscription group.
+
+    Test notifications and subscriptions behavior depending on the
     different subscription groups.
 
     0. Subscribe to the group1: messages for Alice.
@@ -241,8 +243,8 @@ async def test_subscription_groups(gql):
         Returns:
             sub_id: Subscription uid.
             client: Client, instance of the `WebsocketCommunicator`.
-        """
 
+        """
         client = gql(
             query=Query,
             mutation=Mutation,
@@ -279,6 +281,7 @@ async def test_subscription_groups(gql):
             client: Client, instance of WebsocketCommunicator.
             user_id: User ID for `send_chat_message` mutation.
             message: Any string message.
+
         """
         msg_id = await client.send(
             msg_type="start",
@@ -306,6 +309,7 @@ async def test_subscription_groups(gql):
         Args:
             user_id: Expected user ID.
             message: Expected message string.
+
         """
         event = resp["data"]["on_chat_message_sent"]["event"]
         assert json.loads(event) == {

@@ -36,7 +36,8 @@ import channels_graphql_ws
 
 @pytest.mark.asyncio
 async def test_broadcast(gql):
-    """Test that the asynchronous 'broadcast()' call works correctly
+    """Test that the asynchronous 'broadcast()' call works correctly.
+
     Because we cannot use sync 'broadcasts()' method in the thread
     which has running event loop.
 
@@ -139,8 +140,7 @@ async def test_broadcast(gql):
 
 
 class SendMessage(graphene.Mutation, name="SendMessagePayload"):
-    """Test mutation that simply sends message by `OnMessageSent`
-    subscription."""
+    """Test mutation to send message to `OnMessageSent` subscription."""
 
     class Arguments:
         """That is how mutation arguments are defined."""
@@ -151,8 +151,7 @@ class SendMessage(graphene.Mutation, name="SendMessagePayload"):
 
     @staticmethod
     async def mutate(root, info, message):
-        """Send notification and complete the mutation with
-        `success` status."""
+        """Send notification and return `success` status."""
         del root, info
 
         await OnMessageSent.broadcast(payload={"message": message})

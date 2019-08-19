@@ -321,9 +321,7 @@ async def test_subscribe_and_many_unsubscribes(
     flag = asyncio.Event()
 
     async def subscribe_unsubscribe(client, user_id, op_id: str):
-        """Subscribe to GraphQL subscription. And spam server with the
-        'stop' messages while the flag is not set.
-        """
+        """Subscribe and spam with 'stop' until stop-flag is set."""
 
         sub_id = await client.send(
             msg_type="start",
@@ -490,9 +488,8 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     await client.connect_and_init()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe to GraphQL subscription. And spam server with the
-        'stop' messages.
-        """
+        """Subscribe and spam with 'stop'."""
+
         sub_id = await client.send(
             msg_type="start",
             payload={
@@ -608,10 +605,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     await client_spamer.connect_and_init()
 
     async def subscribe_unsubscribe(iteration: int):
-        """Subscribe to GraphQL subscription. Spam server with
-        the 'broadcast' messages by mutations from different
-        clients.
-        """
+        """Subscribe and spam notifications from 2 different clients."""
 
         sub_id = await client.send(
             msg_type="start",
@@ -766,9 +760,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     pool = concurrent.futures.ThreadPoolExecutor()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe to GraphQL subscription. And spam server with the
-        'stop' messages using sync 'unsubscribe' method.
-        """
+        """Subscribe and spam with 'stop' by the sync 'unsubscribe'."""
 
         # Just subscribe.
         sub_id = await client.send(
