@@ -1,6 +1,12 @@
 
 # Changelog
 
+## [0.4.1] - 2010-08-20
+
+### Changed
+
+- Better error message when Channels channel layer is not available.
+
 ## [0.4.0] - 2010-08-20
 
 ### Changed

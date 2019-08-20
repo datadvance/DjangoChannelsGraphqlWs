@@ -196,7 +196,7 @@ class Subscription(graphene.ObjectType):
 
         # Send the message to the Channels group.
         group = cls._group_name(group)
-        group_send = channels.layers.get_channel_layer().group_send
+        group_send = cls._channel_layer().group_send
         await group_send(
             group=group,
             message={
@@ -215,9 +215,7 @@ class Subscription(graphene.ObjectType):
 
         # Send the message to the Channels group.
         group = cls._group_name(group)
-        group_send = asgiref.sync.async_to_sync(
-            channels.layers.get_channel_layer().group_send
-        )
+        group_send = asgiref.sync.async_to_sync(cls._channel_layer().group_send)
         group_send(
             group=group,
             message={
@@ -263,7 +261,7 @@ class Subscription(graphene.ObjectType):
         """Unsubscribe, asynchronous version."""
         # Send the 'unsubscribe' message to the Channels group.
         group = cls._group_name(group)
-        await channels.layers.get_channel_layer().group_send(
+        await cls._channel_layer().group_send(
             group=group, message={"type": "unsubscribe", "group": group}
         )
 
@@ -272,9 +270,7 @@ class Subscription(graphene.ObjectType):
         """Unsubscribe, synchronous version."""
         # Send the message to the Channels group.
         group = cls._group_name(group)
-        group_send = asgiref.sync.async_to_sync(
-            channels.layers.get_channel_layer().group_send
-        )
+        group_send = asgiref.sync.async_to_sync(cls._channel_layer().group_send)
         group_send(group=group, message={"type": "unsubscribe", "group": group})
 
     @classmethod
@@ -470,6 +466,15 @@ class Subscription(graphene.ObjectType):
             return bool(frame.f_back.f_back.f_code.co_flags & coroutine_function_flags)
         finally:
             del frame
+
+    @classmethod
+    def _channel_layer(cls):
+        """Channel layer."""
+        # We cannot simply check existence of channel layer in the
+        # consumer constructor, so we added this property.
+        channel_layer = channels.layers.get_channel_layer()
+        assert channel_layer is not None, "Channel layer is not configured!"
+        return channel_layer
 
 
 class SubscriptionOptions(graphene.types.objecttype.ObjectTypeOptions):

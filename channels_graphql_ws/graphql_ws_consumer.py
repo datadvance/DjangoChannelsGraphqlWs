@@ -265,7 +265,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Unsubscribe from the Channels groups.
         waitlist += [
-            self.channel_layer.group_discard(group, self.channel_name)
+            self._channel_layer.group_discard(group, self.channel_name)
             for group in self._sids_by_group
         ]
 
@@ -733,7 +733,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         waitlist = []
         for group in groups:
             self._sids_by_group.setdefault(group, []).append(operation_id)
-            waitlist.append(self.channel_layer.group_add(group, self.channel_name))
+            waitlist.append(self._channel_layer.group_add(group, self.channel_name))
         notifier_task = self._spawn_background_task(notifier())
         self._subscriptions[operation_id] = self._SubInf(
             groups=groups,
@@ -788,7 +788,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             if not self._sids_by_group[group]:
                 del self._sids_by_group[group]
                 waitlist.append(
-                    self.channel_layer.group_discard(group, self.channel_name)
+                    self._channel_layer.group_discard(group, self.channel_name)
                 )
         await asyncio.wait(waitlist)
 
@@ -947,3 +947,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._background_tasks.add(background_task)
 
         return background_task
+
+    @property
+    def _channel_layer(self):
+        """Channel layer."""
+        # We cannot simply check existence of channel layer in the
+        # consumer constructor, so we added this property.
+        assert self.channel_layer is not None, "Channel layer is not configured!"
+        return self.channel_layer
