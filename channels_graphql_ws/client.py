@@ -146,8 +146,7 @@ class GraphqlWsClient:
 
         payload = response.get("payload", None)
         if payload is not None and "errors" in payload:
-            message = f"Response contains errors!\n{response}"
-            raise GraphqlWsResponseError(message, payload)
+            raise GraphqlWsResponseError(response)
         if not raw_response:
             return payload
         return response
@@ -267,9 +266,12 @@ class GraphqlWsClient:
 class GraphqlWsResponseError(Exception):
     """Errors data from the GraphQL response."""
 
-    def __init__(self, message, response):
+    def __init__(self, response, message=None):
         """Exception constructor."""
-        super().__init__(self, message)
-        assert "errors" in response, "Response must contain errors!"
+        super().__init__(self)
+        self.message = message
         self.response = response
-        self.errors = response["errors"]
+
+    def __str__(self):
+        """Nice string representation."""
+        return f"{self.message or 'Error in GraphQL response'}: {self.response}!"
