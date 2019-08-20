@@ -32,6 +32,7 @@ docstrings
 dsl
 enqueue
 eventloop
+fortytwo
 func
 gql
 graphene
