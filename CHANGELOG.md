@@ -1,6 +1,19 @@
 
 # Changelog
 
+## [0.4.0] - 2010-08-20
+
+### Changed
+
+- Context (`info.context` in resolvers) lifetime has changed. It is now
+  an object-like wrapper around [Channels
+  scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope)
+  typically available as `self.scope` in the Channels consumers. So you
+  can access Channels scope as `info.context`. Modifications made in
+  `info.context` are stored in the Channels scope, so they are persisted
+  as long as WebSocket connection lives. You can work with
+  `info.context` both as with `dict` or as with `SimpleNamespace`.
+
 ## [0.3.0] - 2019-08-17
 
 ### Added
