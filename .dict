@@ -2,6 +2,7 @@ addfinalizer
 aiohttp
 api
 args
+asdict
 asgi
 asgiref
 async
