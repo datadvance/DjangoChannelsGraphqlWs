@@ -94,11 +94,12 @@ class Login(graphene.Mutation, name="LoginPayload"):
             return Login(ok=False)
 
         # Use Channels to login, in other words to put proper data to
-        # the session stored in the scope. The `info.context.scope` is
-        # practically a Channel `self.scope`.
-        asgiref.sync.async_to_sync(channels.auth.login)(info.context.scope, user)
-        # Save the session,cause `channels.auth.login` does not do this.
-        info.context.scope["session"].save()
+        # the session stored in the scope. The `info.context` is
+        # practically just a wrapper around Channel `self.scope`, but
+        # the `login` method requires dict, so use `_asdict`.
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context._asdict(), user)
+        # Save the session, `channels.auth.login` does not do this.
+        info.context.session.save()
 
         return Login(ok=True)
 
@@ -119,8 +120,8 @@ class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):
 
         # Use the username from the connection scope if authorized.
         username = (
-            info.context.scope["user"].username
-            if info.context.scope["user"].is_authenticated
+            info.context.user.username
+            if info.context.user.is_authenticated
             else "Anonymous"
         )
 
@@ -177,8 +178,8 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
 
         # Avoid self-notifications.
         if (
-            info.context.scope["user"].is_authenticated
-            and new_msg_sender == info.context.scope["user"].username
+            info.context.user.is_authenticated
+            and new_msg_sender == info.context.user.username
         ):
             return OnNewChatMessage.SKIP
 

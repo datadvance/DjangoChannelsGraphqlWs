@@ -10,6 +10,7 @@
   - [Details](#details)
     - [Automatic Django model serialization](#automatic-django-model-serialization)
     - [Execution](#execution)
+    - [Context](#context)
     - [Authentication](#authentication)
     - [The client](#the-client)
     - [Testing](#testing)
@@ -282,6 +283,23 @@ the the Django's guide [Serializing Django objects](https://docs.djangoproject.c
 - All subscription notifications are delivered in the order they were
   issued.
 
+### Context
+
+The context object (`info.context` in resolvers) is an object-like
+wrapper around [Channels
+scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope)
+typically available as `self.scope` in the Channels consumers. So you
+can access Channels scope as `info.context`. Modifications made in
+`info.context` are stored in the Channels scope, so they are persisted
+as long as WebSocket connection lives. You can work with `info.context`
+both as with `dict` or as with `SimpleNamespace`:
+
+```python
+def resolve_something(self, info):
+    info.context.fortytwo = 42
+    assert info.context["fortytwo"] == 42
+```
+
 ### Authentication
 
 To enable authentication it is typically enough to wrap your ASGI
@@ -297,7 +315,7 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-This gives you a Django user `info.context.scope["user"]` in all the
+This gives you a Django user `info.context.user` in all the
 resolvers. To authenticate user you can create a `Login` mutation like
 the following:
 
@@ -322,11 +340,12 @@ class Login(graphene.Mutation, name="LoginPayload"):
             return Login(ok=False)
 
         # Use Channels to login, in other words to put proper data to
-        # the session stored in the scope. The `info.context.scope` is
-        # practically a Channel `self.scope`.
-        asgiref.sync.async_to_sync(channels.auth.login)(info.context.scope, user)
+        # the session stored in the scope. The `info.context` is
+        # practically just a wrapper around Channel `self.scope`, but
+        # the `login` method requires dict, so use `_asdict`.
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context._asdict(), user)
         # Save the session,cause `channels.auth.login` does not do this.
-        info.context.scope["session"].save()
+        info.context.session.save()
 
         return Login(ok=True)
 ```

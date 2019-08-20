@@ -58,6 +58,7 @@ import graphql.execution.executors.asyncio
 import promise
 import rx
 
+from .scope_as_context import ScopeAsContext
 from .serializer import Serializer
 
 
@@ -545,7 +546,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels.
-            context = types.SimpleNamespace(scope=self.scope)
+            context = ScopeAsContext(self.scope)
 
             # The `register` will be called from the worker thread
             # (spawned for a GraphQL processing) when a client
