@@ -199,3 +199,9 @@ def synchronize_inmemory_channel_layer():
             attr_name,
             wrap(getattr(channels.layers.InMemoryChannelLayer, attr_name)),
         )
+
+
+@pytest.fixture(scope="function", autouse=True)
+def extra_print_in_the_beginning():
+    """Improve output of `pytest -s` by adding EOL in the beginning."""
+    print()

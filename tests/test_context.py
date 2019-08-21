@@ -31,19 +31,25 @@ import channels_graphql_ws.scope_as_context
 
 def test_scope_as_context():
     """Make sure `ScopeAsContext` behaves as a correct dict wrapper."""
+    print("Construct a context as a wrapper of dict scope.")
     scope = {}
     context = channels_graphql_ws.scope_as_context.ScopeAsContext(scope)
 
+    print("Add records and check they propagate in both directions.")
     context.marker1 = 1
     assert scope["marker1"] == context["marker1"] == context.marker1 == 1
     assert "marker1" in context
-
     scope["marker2"] = 2
     assert scope["marker2"] == context["marker2"] == context.marker2 == 2
     assert "marker2" in context
 
+    print("Check string context representation equals to dict one.")
     assert context.__str__() == scope.__str__()
 
+    print("Make sure `_asdict` returns underlying scope.")
+    assert id(context._asdict()) == id(scope)
+
+    print("Remove records and check they propagate in both directions.")
     del scope["marker1"]
     assert "marker1" not in context
     assert "marker1" not in scope
@@ -51,7 +57,6 @@ def test_scope_as_context():
         _ = context["marker1"]
     with pytest.raises(AttributeError):
         _ = context.marker1
-
     del context["marker2"]
     assert "marker2" not in context
     assert "marker2" not in scope
