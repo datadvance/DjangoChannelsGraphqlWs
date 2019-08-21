@@ -37,11 +37,11 @@ def test_scope_as_context():
 
     print("Add records and check they propagate in both directions.")
     context.marker1 = 1
-    assert scope["marker1"] == context["marker1"] == context.marker1 == 1
     assert "marker1" in context
+    assert scope["marker1"] == context["marker1"] == context.marker1 == 1
     scope["marker2"] = 2
-    assert scope["marker2"] == context["marker2"] == context.marker2 == 2
     assert "marker2" in context
+    assert scope["marker2"] == context["marker2"] == context.marker2 == 2
 
     print("Check string context representation equals to dict one.")
     assert context.__str__() == scope.__str__()
