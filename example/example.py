@@ -32,6 +32,7 @@ import django
 import django.contrib.admin
 import django.contrib.auth
 import graphene
+import graphene_django.types
 
 import channels_graphql_ws
 
@@ -44,7 +45,7 @@ import channels_graphql_ws
 chats: DefaultDict[str, List[str]] = defaultdict(list)
 
 
-# ------------------------------------------------------------------------------ QUERIES
+# ---------------------------------------------------------------------- TYPES & QUERIES
 
 
 class Message(
@@ -57,15 +58,31 @@ class Message(
     sender = graphene.String()
 
 
+class User(graphene_django.types.DjangoObjectType):
+    """User model to show how to use 'info.context.user'."""
+
+    class Meta:
+        """Wrap Django user model."""
+
+        model = django.contrib.auth.get_user_model()
+
+
 class Query(graphene.ObjectType):
     """Root GraphQL query."""
 
     history = graphene.List(Message, chatroom=graphene.String())
+    user = graphene.Field(User)
 
     def resolve_history(self, info, chatroom):
         """Return chat history."""
         del info
         return chats[chatroom] if chatroom in chats else []
+
+    def resolve_user(self, info):
+        """Provide currently logged in user."""
+        if info.context.user.is_authenticated:
+            return info.context.user
+        return None
 
 
 # ---------------------------------------------------------------------------- MUTATIONS
@@ -233,6 +250,20 @@ def demo_middleware(next_middleware, root, info, *args, **kwds):
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
+
+    async def on_connect(self, payload):
+        """Handle WebSocket connection event."""
+
+        # Use auxiliary Channels function `get_user` to replace an
+        # instance of `channels.auth.UserLazyObject` with a native
+        # Django user object (user model instance or `AnonymousUser`)
+        # It is not necessary, but it helps to keep resolver code
+        # simpler. Cause in both HTTP/WebSocket requests they can use
+        # `info.context.user`, but not a wrapper. For example objects of
+        # type Graphene Django type `DjangoObjectType` does not accept
+        # `channels.auth.UserLazyObject` instances.
+        # https://github.com/datadvance/DjangoChannelsGraphqlWs/issues/23
+        self.scope["user"] = await channels.auth.get_user(self.scope)
 
     schema = graphene.Schema(query=Query, mutation=Mutation, subscription=Subscription)
     middleware = [demo_middleware]
