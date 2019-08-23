@@ -29,6 +29,7 @@ import asgiref
 import channels
 import channels.auth
 import django
+import django.contrib.admin
 import django.contrib.auth
 import graphene
 
@@ -261,4 +262,7 @@ def graphiql(request):
         return django.http.response.HttpResponse(f.read())
 
 
-urlpatterns = [django.urls.path("", graphiql)]
+urlpatterns = [
+    django.urls.path("", graphiql),
+    django.urls.path("admin", django.contrib.admin.site.urls),
+]

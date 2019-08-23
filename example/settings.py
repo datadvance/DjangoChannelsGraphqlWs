@@ -9,7 +9,8 @@
 # the following conditions:
 #
 # The above copyright notice and this permission notice shall be
-# included in all copies or substantial portions of the Software.
+# included in all copies or sub
+# ntial portions of the Software.
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 # EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -33,15 +34,35 @@ import uuid
 BASE_DIR = pathlib.Path(__file__).absolute().parent.parent
 SECRET_KEY = str(uuid.uuid4())
 DEBUG = True
+MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+]
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.contrib.messages.context_processors.messages",
+                "django.contrib.auth.context_processors.auth",
+            ]
+        },
+    }
+]
 INSTALLED_APPS: List[str] = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.auth",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.admin",
     "channels",
 ]
 ALLOWED_HOSTS = "*"
-
-
+STATIC_URL = "/static/"
+STATICFILES_FINDERS = ["django.contrib.staticfiles.finders.AppDirectoriesFinder"]
 # In this simple example we use in-process in-memory Channel layer.
 # In a real-life cases you need Redis or something familiar.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
