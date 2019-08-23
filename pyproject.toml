@@ -62,6 +62,7 @@ bandit = "*"
 black = { version = "*", allows-prereleases = true }
 channels-redis = "*"
 coverage = "*"
+graphene-django = "*"
 ipython = "*"
 isort = {version = "*", extras = ["pyproject"]}
 mypy = "*"
