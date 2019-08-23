@@ -1,6 +1,12 @@
 
 # Changelog
 
+## [0.4.2] - 2010-08-23
+
+### Added
+
+- Example improved to show how to handle HTTP auth (#23).
+
 ## [0.4.1] - 2010-08-20
 
 ### Changed
