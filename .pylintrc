@@ -30,7 +30,7 @@
 
 [MASTER]
 
-jobs=0  # Work in paralel.
+jobs=0  # Work in parallel.
 load-plugins=pylint_quotes,pylint_django
 persistent=no  # Do not store results of previous runs.
 unsafe-load-any-extension=yes  # Allow to load C extension modules.

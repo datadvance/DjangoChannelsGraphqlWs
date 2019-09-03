@@ -19,6 +19,9 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# The Pre-commit configuration.
+# https://pre-commit.com
+
 repos:
     # The Black: Python code formatter.
     # https://black.readthedocs.io/
