@@ -350,7 +350,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         else:
             task = self._send_gql_error(
-                content["id"], f"Message of unknown type '{msg_type}' received!"
+                content["id"] if "id" in content else -1,
+                f"Message of unknown type '{msg_type}' received!",
             )
 
         # If strict ordering is required then simply wait until the
