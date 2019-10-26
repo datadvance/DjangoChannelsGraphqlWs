@@ -12,7 +12,8 @@
     - [Execution](#execution)
     - [Context](#context)
     - [Authentication](#authentication)
-    - [The client](#the-client)
+    - [The Python client](#the-python-client)
+    - [The GraphiQL client](#the-graphiql-client)
     - [Testing](#testing)
     - [Subscription activation confirmation](#subscription-activation-confirmation)
     - [GraphQL middleware](#graphql-middleware)
@@ -154,7 +155,7 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-Notify clients when some event happens using the `broadcast()`
+Notify<sup>[1](#redis-layer)</sup> clients when some event happens using the `broadcast()`
 or `broadcast_sync()` method from the OS thread where
 there is no running event loop:
 
@@ -167,7 +168,7 @@ MySubscription.broadcast(
 )
 ```
 
-Notify clients in an coroutine function using the `broadcast()`
+Notify<sup>[1](#redis-layer)</sup> clients in an coroutine function using the `broadcast()`
 or `broadcast_async()` method:
 
 ```python
@@ -178,6 +179,10 @@ await MySubscription.broadcast(
     payload={},
 )
 ```
+
+<a name="redis-layer">1</a>: in case you are testing your client code
+by notifying it from the Django Shell, you have to setup a [channel layer](https://channels.readthedocs.io/en/latest/topics/channel_layers.html#configuration) in order for the two instance of
+your application. The same applies in production with workers.
 
 ## Example
 
@@ -355,7 +360,7 @@ Check [the Channels
 documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
 Also take a look at the example in the [example](example/) directory.
 
-### The client
+### The Python client
 
 There is the `GraphqlWsClient` which implements GraphQL client working
 over the WebSockets. The client needs a transport instance which
@@ -377,6 +382,13 @@ await client.finalize()
 ```
 
 See the `GraphqlWsClient` class docstring for the details.
+
+### The GraphiQL client
+
+The GraphiQL provided by Graphene doesn't connect to your GraphQL endpoint
+via WebSocket ; instead you should use a modified GraphiQL template under
+`graphene/graphiql.html` which will take precedence over the one of Graphene.
+One such modified GraphiQL is provided in the [example](example/) directory.
 
 ### Testing
 
