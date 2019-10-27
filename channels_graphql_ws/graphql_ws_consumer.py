@@ -45,7 +45,7 @@ import functools
 import logging
 import traceback
 import types
-from typing import Callable, List, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 import weakref
 
 import asgiref.sync
@@ -478,7 +478,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
         except Exception as ex:  # pylint: disable=broad-except
-            await self._send_gql_connection_error(self._format_error(ex))
+            await self._send_gql_connection_error(ex)
             # Close the connection.
             # NOTE: We use the 4000 code because there are two reasons:
             # A) We can not use codes greater than 1000 and less than
@@ -807,21 +807,40 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._assert_thread()
         await self.send_json({"type": "connection_ack"})
 
-    async def _send_gql_connection_error(self, error):
+    async def _send_gql_connection_error(self, error: Exception):
         """Connection error sent in reply to the `connection_init`."""
         self._assert_thread()
-        await self.send_json({"type": "connection_error", "payload": error})
+        await self.send_json(
+            {"type": "connection_error", "payload": self._format_error(error)}
+        )
 
-    async def _send_gql_data(self, operation_id, data, errors):
+    async def _send_gql_data(
+        self, operation_id, data: dict, errors: Optional[Sequence[Exception]]
+    ):
         """Send GraphQL `data` message to the client.
 
         Args:
             data: Dict with GraphQL query response.
-            errors: List with exceptions occurred during processing the
-                GraphQL query. (Errors happened in the resolvers.)
+            errors: List of exceptions occurred during processing the
+                GraphQL query. (Errors happened in resolvers.)
 
         """
         self._assert_thread()
+        # Log errors with tracebacks so we can understand what happened
+        # in a failed resolver.
+        for ex in errors or []:
+            # Typical exception here is `GraphQLLocatedError` which has
+            # reference to the original error raised from a resolver.
+            tb = ex.__traceback__
+            if isinstance(ex, graphql.error.located_error.GraphQLLocatedError):
+                tb = ex.stack
+                ex = ex.original_error
+            LOG.error(
+                "GraphQL resolver failed on operation with id=%s:\n%s",
+                operation_id,
+                "".join(traceback.format_exception(type(ex), ex, tb)).strip(),
+            )
+
         await self.send_json(
             {
                 "type": "data",
@@ -837,7 +856,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def _send_gql_error(self, operation_id, error):
+    async def _send_gql_error(self, operation_id, error: str):
         """Tell client there is a query processing error.
 
         Server sends this message upon a failing operation.
@@ -852,6 +871,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         """
         self._assert_thread()
+        LOG.error("GraphQL query processing error: %s", error)
         await self.send_json(
             {"type": "error", "id": operation_id, "payload": {"errors": [error]}}
         )
@@ -874,11 +894,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # ------------------------------------------------------------------------ AUXILIARY
 
     @staticmethod
-    def _format_error(error):
-        """Format exception `error` to send over a network."""
-
+    def _format_error(error: Exception) -> Dict[str, Any]:
+        """Format given exception `error` to send over a network."""
         if isinstance(error, graphql.error.GraphQLError):
-            return graphql.error.format_error(error)
+            return dict(graphql.error.format_error(error))
 
         return {"message": f"{type(error).__name__}: {str(error)}"}
 
