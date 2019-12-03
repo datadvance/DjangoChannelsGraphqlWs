@@ -50,17 +50,18 @@ jobs:
               - python3 -m poetry --no-interaction build
           script:
               - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
-        - name: "Python 3.8 on Windows"
-          env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+        - name: "Python 3.7 on Windows"
+          env: PATH=/c/Python37:/c/Python38/Scripts:$PATH
           os: windows # Windows 10.0.17134 N/A Build 17134
           language: shell # 'Language: python' gives error here.
           before_install:
-              - choco install python --version 3.8.0
+              - choco install python --version 3.7.5
               - python -m pip install --upgrade pip
           install:
-              - pip3 install --upgrade pip
-              - pip3 install --progress-bar off poetry
-              - poetry --no-interaction install
-              - poetry --no-interaction build
+              - python --version
+              - python -m pip install --upgrade pip
+              - python -m pip install --progress-bar off poetry
+              - python -m poetry --no-interaction install
+              - python -m poetry --no-interaction build
           script:
-              - poetry run pytest -n 8 --cov-report=term --cov-report=html
+              - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
