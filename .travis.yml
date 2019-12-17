@@ -34,8 +34,8 @@ jobs:
           install:
               - pip3 install --upgrade pip
               - pip3 install --progress-bar off poetry
-              - python3 -m poetry --no-interaction install
-              - python3 -m poetry --no-interaction build
+              - python3 -m poetry install --no-interaction
+              - python3 -m poetry build --no-interaction
           script:
               - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         - name: "Python 3.7 on macOS"
@@ -46,8 +46,8 @@ jobs:
           install:
               - pip3 install --upgrade pip
               - pip3 install --progress-bar off poetry
-              - python3 -m poetry --no-interaction install
-              - python3 -m poetry --no-interaction build
+              - python3 -m poetry install --no-interaction
+              - python3 -m poetry build --no-interaction
           script:
               - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         - name: "Python 3.7 on Windows"
@@ -61,7 +61,7 @@ jobs:
               - python --version
               - python -m pip install --upgrade pip
               - python -m pip install --progress-bar off poetry
-              - python -m poetry --no-interaction install
-              - python -m poetry --no-interaction build
+              - python -m poetry install --no-interaction 
+              - python -m poetry build --no-interaction
           script:
               - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
