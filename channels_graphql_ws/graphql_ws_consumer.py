@@ -567,7 +567,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 handler `Subscription._subscribe` and hack it's `root`
                 to deliver the subscription registration function.
                 """
-                from .subscription import Subscription
+                from .subscription import Subscription  # pylint: disable=C0415
 
                 # We do not expose `Subscription._subscribe` because
                 # `Subscription` is a public interface class. So it OK
