@@ -50,3 +50,5 @@
 
 # Local temporary files (to store useful BS in there).
 /tmp/
+
+.coverage*
