@@ -48,10 +48,13 @@ chats: DefaultDict[str, List[str]] = defaultdict(list)
 # ---------------------------------------------------------------------- TYPES & QUERIES
 
 
-class Message(
-    graphene.ObjectType, default_resolver=graphene.types.resolver.dict_resolver
-):
+class Message(graphene.ObjectType):
     """Message GraphQL type."""
+
+    class Meta:
+        """Override default resolver."""
+
+        default_resolver = graphene.types.resolver.dict_resolver
 
     chatroom = graphene.String()
     text = graphene.String()
@@ -88,7 +91,7 @@ class Query(graphene.ObjectType):
 # ---------------------------------------------------------------------------- MUTATIONS
 
 
-class Login(graphene.Mutation, name="LoginPayload"):
+class Login(graphene.Mutation):
     """Login mutation.
 
     Login implementation, following the Channels guide:
@@ -102,6 +105,11 @@ class Login(graphene.Mutation, name="LoginPayload"):
 
         username = graphene.String(required=True)
         password = graphene.String(required=True)
+
+    class Meta:
+        """Override name of GraphQL type."""
+
+        name = "LoginPayload"
 
     def mutate(self, info, username, password):
         """Login request."""
@@ -122,7 +130,7 @@ class Login(graphene.Mutation, name="LoginPayload"):
         return Login(ok=True)
 
 
-class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):
+class SendChatMessage(graphene.Mutation):
     """Send chat message."""
 
     ok = graphene.Boolean()
@@ -132,6 +140,11 @@ class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):
 
         chatroom = graphene.String()
         text = graphene.String()
+
+    class Meta:
+        """Override name of GraphQL type."""
+
+        name = "SendChatMessagePayload"
 
     def mutate(self, info, chatroom, text):
         """Mutation "resolver" - store and broadcast a message."""
