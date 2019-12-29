@@ -139,8 +139,13 @@ async def test_broadcast(gql):
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP
 
 
-class SendMessage(graphene.Mutation, name="SendMessagePayload"):
+class SendMessage(graphene.Mutation):
     """Test mutation to send message to `OnMessageSent` subscription."""
+
+    class Meta:
+        """Override GraphQL type name."""
+
+        name = "SendMessagePayload"
 
     class Arguments:
         """That is how mutation arguments are defined."""
@@ -159,7 +164,7 @@ class SendMessage(graphene.Mutation, name="SendMessagePayload"):
         return SendMessage(success=True)
 
 
-class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):
+class SendTimestamps(graphene.Mutation):
     """Send monotonic timestamps by `OnMessageSent` subscription.
 
     Broadcast messages contains timestamp and publish delay, while
@@ -168,6 +173,11 @@ class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):
     publish callback on server, and if server does not preserve messages
     order client will get timestamps in the wrong order.
     """
+
+    class Meta:
+        """Override GraphQL type name."""
+
+        name = "SendTimestampsPayload"
 
     class Arguments:
         """That is how mutation arguments are defined."""
