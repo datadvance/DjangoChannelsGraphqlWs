@@ -671,7 +671,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 await self._send_gql_complete(operation_id)
 
     async def _register_subscription(
-        self, operation_id, groups, publish_callback, unsubscribed_callback
+        self,
+        operation_id,
+        groups,
+        publish_callback,
+        unsubscribed_callback,
+        initial_payload,
     ):
         """Register a new subscription when client subscribes.
 
@@ -709,6 +714,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             maxsize=self.subscription_notification_queue_limit
         )
 
+        # Enqueue the initial payload.
+        if initial_payload is not self.SKIP:
+            notification_queue.put_nowait(Serializer.serialize(initial_payload))
+
         # Start an endless task which listens the `notification_queue`
         # and invokes subscription "resolver" on new notifications.
         async def notifier():
@@ -716,6 +725,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Assert we run in a proper thread.
             self._assert_thread()
+
+            # Dirty hack to partially workaround the race between:
+            #  1) call to `result.subscribe` in `_on_gql_start`; and
+            #  2) call to `trigger.on_next` below in this function.
+            # The first call must be earlier. Otherwise, first one or more notifications
+            # may be lost.
+            await asyncio.sleep(1)
+
             while True:
                 serialized_payload = await notification_queue.get()
 
