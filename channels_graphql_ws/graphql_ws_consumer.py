@@ -717,15 +717,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Assert we run in a proper thread.
             self._assert_thread()
             while True:
-                payload = await notification_queue.get()
+                serialized_payload = await notification_queue.get()
+
                 # Run a subscription's `publish` method (invoked by the
                 # `trigger.on_next` function) within the threadpool used
                 # for processing other GraphQL resolver functions.
-                # NOTE: `lambda` is important to run the deserialization
+                # NOTE: it is important to run the deserialization
                 # in the worker thread as well.
-                await self._run_in_worker(
-                    lambda: trigger.on_next(Serializer.deserialize(payload))
-                )
+                def workload():
+                    try:
+                        payload = Serializer.deserialize(serialized_payload)
+                    except Exception as ex:  # pylint: disable=broad-except
+                        trigger.on_error(f"Cannot deserialize payload. {ex}")
+                    else:
+                        trigger.on_next(payload)
+
+                await self._run_in_worker(workload)
+
                 # Message processed. This allows `Queue.join` to work.
                 notification_queue.task_done()
 
@@ -735,23 +743,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             lambda publish_returned: publish_returned is not self.SKIP
         )
 
-        # Start listening for broadcasts (subscribe to the Channels
-        # groups), spawn the notification processing task and put
-        # subscription information into the registry.
-        # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
-        # atomic i.e. without `awaits` in between.
+            # Start listening for broadcasts (subscribe to the Channels
+            # groups), spawn the notification processing task and put
+            # subscription information into the registry.
+            # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
+            # atomic i.e. without `awaits` in between.
         waitlist = []
-        for group in groups:
-            self._sids_by_group.setdefault(group, []).append(operation_id)
+            for group in groups:
+                self._sids_by_group.setdefault(group, []).append(operation_id)
             waitlist.append(self._channel_layer.group_add(group, self.channel_name))
         notifier_task = self._spawn_background_task(notifier())
-        self._subscriptions[operation_id] = self._SubInf(
-            groups=groups,
-            sid=operation_id,
-            unsubscribed_callback=unsubscribed_callback,
-            notification_queue=notification_queue,
-            notifier_task=notifier_task,
-        )
+            self._subscriptions[operation_id] = self._SubInf(
+                groups=groups,
+                sid=operation_id,
+                unsubscribed_callback=unsubscribed_callback,
+                notification_queue=notification_queue,
+                notifier_task=notifier_task,
+            )
 
         await asyncio.wait(waitlist)
 
