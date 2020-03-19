@@ -25,7 +25,7 @@
 class ScopeAsContext:
     """Wrapper to make Channels `scope` appear as an `info.context`."""
 
-    def __init__(self, scope):
+    def __init__(self, scope: dict):
         """Remember given `scope`."""
         self._scope = scope
 

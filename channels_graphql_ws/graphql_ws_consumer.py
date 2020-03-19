@@ -58,7 +58,7 @@ import graphql.execution.executors.asyncio
 import promise
 import rx
 
-from .scope_as_context import ScopeAsContext
+from .operation_context import OperationContext
 from .serializer import Serializer
 
 # Module logger.
@@ -547,7 +547,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels.
-            context = ScopeAsContext(self.scope)
+            context = OperationContext(self.scope)
 
             # Adding channel name to the context because it seems to be
             # useful for some use cases, take a loot at the issue from
