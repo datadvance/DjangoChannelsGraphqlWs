@@ -732,9 +732,9 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     'complete' message.
     """
 
-    NUMBER_OF_UNSUBSCRIBE_CALLS = 50  # pylint: disable=invalid-name
+    NUMBER_OF_UNSUBSCRIBE_CALLS = 100  # pylint: disable=invalid-name
     # Delay in seconds.
-    DELAY_BETWEEN_UNSUBSCRIBE_CALLS = 0.01  # pylint: disable=invalid-name
+    DELAY_BETWEEN_UNSUBSCRIBE_CALLS = 0.02  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
 
