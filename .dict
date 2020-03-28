@@ -32,6 +32,7 @@ docstring
 docstrings
 dsl
 enqueue
+envlist
 eol
 eventloop
 fortytwo
@@ -94,6 +95,7 @@ sublicense
 subprotocol
 subprotocols
 superclass
+testenv
 threadpool
 timeouterror
 timestamp
