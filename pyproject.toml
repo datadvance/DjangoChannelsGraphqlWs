@@ -20,13 +20,13 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # We use Poetry to manage the Python project:
-# https://poetry.eustace.io/docs/
+# https://python-poetry.org/docs/
 #
 # File format description on the Poetry site:
-# https://poetry.eustace.io/docs/pyproject/
+# https://python-poetry.org/docs/pyproject/
 #
 # Version specification documentation:
-# https://poetry.eustace.io/docs/versions/
+# https://python-poetry.org/docs/versions/
 #
 # File format is STANDARDIZED in the PEP 518:
 # https://www.python.org/dev/peps/pep-0518/
