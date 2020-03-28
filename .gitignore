@@ -19,7 +19,6 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 # Settings. Selected files can be added manually if necessary.
 **/.vscode
 
@@ -27,7 +26,7 @@
 **/__pycache__
 **/.cache
 **/.cache
-**/.coverage
+**/.coverage*
 **/.egg-info
 **/.eggs
 **/.eggs
