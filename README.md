@@ -428,15 +428,13 @@ processing. For that define `middleware` setting of your
 
 ```python
 def my_middleware(next_middleware, root, info, *args, **kwds):
-    """My custome GraphQL middleware."""
+    """My custom GraphQL middleware."""
     # Invoke next middleware.
     return next_middleware(root, info, *args, **kwds)
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     ...
     middleware = [my_middleware]
-
-
 ```
 
 For more information about GraphQL middleware please take a look at the
@@ -459,15 +457,31 @@ WebSocket transport with subscriptions one day.
 
 Just a reminder of how to setup an environment for the development:
 
-```bash
-> python3 -m venv .venv
-> direnv allow
-> pip install --upgrade pip
-> pip install poetry
-> poetry install
-> pre-commit install
-> pytest
-```
+1. Install Poetry to the system Python.
+   ```bash
+   $ wget https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py
+   $ python3.x get-poetry.py  # ← Replace 'x' with proper Python version.
+   $ rm get-poetry.py
+   ```
+   It is important to install Poetry in the system Python. For details
+   see Poetry docs: https://python-poetry.org/docs/#installation
+2. Create local virtualenv in `.venv`, install all project dependencies
+   (from `pyproject.toml`), and upgrade pip.:
+   ```bash
+   $ poetry install --no-root
+   $ pip install --upgrade pip
+   ```
+3. Tell Direvn you trust local `.envrc` file (if you use Direnv):
+   ```bash
+   $ direnv allow
+   ```
+4. Install pre-commit hooks to check code style automatically:
+   ```bash
+   $ pre-commit install
+5. Run tests:
+   ```bash
+   $ pytest
+   ```
 
 Use:
 

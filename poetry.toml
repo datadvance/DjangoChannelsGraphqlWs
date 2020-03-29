@@ -19,20 +19,11 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# Poetry local (for the current project) configuration file.
+# Docs: https://python-poetry.org/docs/configuration/
 
-[pytest]
-
-# pytest-pythonpath:
-# Set up paths to the projects.
-python_paths = example .
-
-# pytest-django:
-DJANGO_SETTINGS_MODULE = settings
-
-# Test files to explore.
-python_files = **/test_*.py
-
-# Default command-line arguments:
-#   - Enable coverage measurement and set config file.
-#   - Force verbose output: output list of tests by default.
-addopts = --cov --cov-config=pytestcov.ini --verbose
+[virtualenvs]
+# Make Poetry create virtualenvs in the project directory, so all other
+# tools can easily find it. In particular VS Code will easily find and
+# use this virtualenv.
+in-project = true
