@@ -19,15 +19,14 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Gitignore docs: https://git-scm.com/docs/gitignore
+# Gitignore - specifies intentionally untracked files to ignore.
+# Docs: https://git-scm.com/docs/gitignore
 
 .DS_Store
 **/__pycache__
 **/.cache
-**/.cache
 **/.coverage*
 **/.egg-info
-**/.eggs
 **/.eggs
 **/.mypy_cache
 **/.pytest_cache
