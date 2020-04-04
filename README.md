@@ -1,3 +1,26 @@
+<!--
+Copyright (C) DATADVANCE, 2010-2020
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
 # Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
 
 [![PyPI](https://img.shields.io/pypi/v/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black) [![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs) [![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
@@ -20,6 +43,7 @@
   - [Alternatives](#alternatives)
   - [Development](#development)
     - [Bootstrap](#bootstrap)
+    - [Making release](#making-release)
   - [Contributing](#contributing)
   - [Acknowledgements](#acknowledgements)
 
@@ -511,6 +535,20 @@ _A reminder of how to run tests._
    ```bash
    $ poetry run pytest
    ```
+
+### Making release
+
+_A reminder of how to make and publish a new release._
+
+1. Update version: `poetry version minor`.
+2. Update [CHANGELOG.md](./CHANGELOG.md).
+3. Update [README.md](./README.md) (if needed).
+4. Commit changes made above.
+5. Git tag: `git tag vX.X.X && git push --tags`.
+6. Publish release to PyPI: `poetry publish`.
+7. Update
+   [release notes](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
+   on GitHub.
 
 ## Contributing
 
