@@ -29,6 +29,7 @@ jobs:
           dist: xenial
           language: python
           before_install:
+              - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
           install:
@@ -43,6 +44,7 @@ jobs:
           dist: xenial
           language: python
           before_install:
+              - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
           install:
@@ -57,6 +59,7 @@ jobs:
           dist: xenial
           language: python
           before_install:
+              - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
           install:
@@ -71,11 +74,12 @@ jobs:
           python: "3.7"
           language: shell # 'Language: python' gives error here.
           before_install:
-              - python -m pip install --upgrade pip
-              - python -m pip install poetry
+              - python3 --version
+              - python3 -m pip install --upgrade pip
+              - python3 -m pip install poetry
           install:
-              - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
+              - python3 -m poetry install --no-interaction --verbose
+              - python3 -m pip install tox-travis
           script:
               - tox
 
@@ -85,12 +89,13 @@ jobs:
           env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
           before_install:
               - choco install python --version 3.7.7
+              - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
           script:
-              - tox
+              - python -m tox
 
         - name: "Python 3.8.2 on Windows"
           os: windows # Windows 10.0.17134 N/A Build 17134
@@ -98,10 +103,11 @@ jobs:
           env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
           before_install:
               - choco install python --version 3.8.2
+              - python --version
               - python -m python -m pip install --upgrade pip
               - python -m python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
               - python -m pip install tox-travis
           script:
-              - tox
+              - python -m tox
