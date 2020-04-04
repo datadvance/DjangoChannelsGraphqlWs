@@ -1,19 +1,19 @@
 
 # Changelog
 
-## [0.4.2] - 2010-08-23
+## [0.4.2] - 2019-08-23
 
 ### Added
 
 - Example improved to show how to handle HTTP auth (#23).
 
-## [0.4.1] - 2010-08-20
+## [0.4.1] - 2019-08-20
 
 ### Changed
 
 - Better error message when Channels channel layer is not available.
 
-## [0.4.0] - 2010-08-20
+## [0.4.0] - 2019-08-20
 
 ### Changed
 
