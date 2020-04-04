@@ -30,12 +30,13 @@ jobs:
           language: python
           before_install:
               - pip install --upgrade pip
-              - pip install --progress-bar off poetry
+              - pip install poetry
           install:
               - poetry install --no-interaction --verbose
               - pip install tox-travis
           script:
               - tox
+
         - name: "Python 3.7 on Xenial Linux"
           os: linux
           python: "3.7"
@@ -43,12 +44,13 @@ jobs:
           language: python
           before_install:
               - pip install --upgrade pip
-              - pip install --progress-bar off poetry
+              - pip install poetry
           install:
               - poetry install --no-interaction --verbose
               - pip install tox-travis
           script:
               - tox
+
         - name: "Python 3.8 on Xenial Linux"
           os: linux
           python: "3.8"
@@ -56,37 +58,50 @@ jobs:
           language: python
           before_install:
               - pip install --upgrade pip
-              - pip install --progress-bar off poetry
+              - pip install poetry
           install:
               - poetry install --no-interaction --verbose
               - pip install tox-travis
           script:
               - tox
+
         - name: "Python 3.7 on macOS"
           os: osx
           osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3.
           python: "3.7"
           language: shell # 'Language: python' gives error here.
           before_install:
-              - pip install --upgrade pip
-              - pip install --progress-bar off poetry
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
           install:
-              - poetry install --no-interaction --verbose
-              - pip install tox-travis
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
           script:
               - tox
-        # - name: "Python 3.7 on Windows"
-        #   env: PATH=/c/Python37:/c/Python38/Scripts:$PATH
-        #   os: windows # Windows 10.0.17134 N/A Build 17134
-        #   language: shell # 'Language: python' gives error here.
-        #   before_install:
-        #       - choco install python --version 3.7.5
-        #       - python -m pip install --upgrade pip
-        #   install:
-        #       - python --version
-        #       - python -m pip install --upgrade pip
-        #       - python -m pip install --progress-bar off poetry
-        #       - python -m poetry --no-interaction install
-        #       - python -m poetry --no-interaction build
-        #   script:
-        #       - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
+
+        - name: "Python 3.7.7 on Windows"
+          os: windows # Windows 10.0.17134 N/A Build 17134
+          language: shell # A 'python' value gives error here.
+          env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
+          before_install:
+              - choco install python --version 3.7.7
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
+          install:
+              - python -m poetry install --no-interaction --verbose
+          script:
+              - tox
+
+        - name: "Python 3.8.2 on Windows"
+          os: windows # Windows 10.0.17134 N/A Build 17134
+          language: shell # A 'python' value gives error here.
+          env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+          before_install:
+              - choco install python --version 3.8.2
+              - python -m python -m pip install --upgrade pip
+              - python -m python -m pip install poetry
+          install:
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
+          script:
+              - tox
