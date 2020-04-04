@@ -54,7 +54,7 @@ channels = "^2.2"
 dataclasses = {version = "^0.7", python = "~3.6"}
 django = ">=2.2"
 graphene = "^2.1"
-graphql-core = "^2.2"
+graphql-core = ">=2.2"
 msgpack = "^0.6.1"
 [tool.poetry.dev-dependencies]
 # Development dependencies.
