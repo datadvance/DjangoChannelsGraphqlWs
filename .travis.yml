@@ -23,9 +23,13 @@
 
 jobs:
     include:
-        - name: "Python 3.7 on Xenial Linux"
+        - name: "Python 3.6, 3.7, and 3.8 on Xenial Linux"
           os: linux
-          python: "3.7" # Works in Linux, ignored in macOS and Windows.
+          # Works in Linux, ignored in macOS and Windows.
+          python:
+              - "3.6"
+              - "3.7"
+              - "3.8"
           dist: xenial
           language: python
           before_install:
@@ -33,35 +37,36 @@ jobs:
               - sudo apt-get install -y enchant
           install:
               - pip3 install --upgrade pip
-              - pip3 install --progress-bar off poetry
+              - pip3 install --progress-bar off poetry tox-travis
               - python3 -m poetry --no-interaction install
               - python3 -m poetry --no-interaction build
           script:
-              - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
-        - name: "Python 3.7 on macOS"
-          os: osx
-          osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3.
-          python: "3.7"
-          language: shell # 'Language: python' gives error here.
-          install:
-              - pip3 install --upgrade pip
-              - pip3 install --progress-bar off poetry
-              - python3 -m poetry --no-interaction install
-              - python3 -m poetry --no-interaction build
-          script:
-              - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
-        - name: "Python 3.7 on Windows"
-          env: PATH=/c/Python37:/c/Python38/Scripts:$PATH
-          os: windows # Windows 10.0.17134 N/A Build 17134
-          language: shell # 'Language: python' gives error here.
-          before_install:
-              - choco install python --version 3.7.5
-              - python -m pip install --upgrade pip
-          install:
-              - python --version
-              - python -m pip install --upgrade pip
-              - python -m pip install --progress-bar off poetry
-              - python -m poetry --no-interaction install
-              - python -m poetry --no-interaction build
-          script:
-              - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
+              - python3 -m poetry run tox -n 8 --cov-report=term --cov-report=html
+              # - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
+        # - name: "Python 3.7 on macOS"
+        #   os: osx
+        #   osx_image: xcode10.2 # Python 3.7.2 running on macOS 10.14.3.
+        #   python: "3.7"
+        #   language: shell # 'Language: python' gives error here.
+        #   install:
+        #       - pip3 install --upgrade pip
+        #       - pip3 install --progress-bar off poetry
+        #       - python3 -m poetry --no-interaction install
+        #       - python3 -m poetry --no-interaction build
+        #   script:
+        #       - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
+        # - name: "Python 3.7 on Windows"
+        #   env: PATH=/c/Python37:/c/Python38/Scripts:$PATH
+        #   os: windows # Windows 10.0.17134 N/A Build 17134
+        #   language: shell # 'Language: python' gives error here.
+        #   before_install:
+        #       - choco install python --version 3.7.5
+        #       - python -m pip install --upgrade pip
+        #   install:
+        #       - python --version
+        #       - python -m pip install --upgrade pip
+        #       - python -m pip install --progress-bar off poetry
+        #       - python -m poetry --no-interaction install
+        #       - python -m poetry --no-interaction build
+        #   script:
+        #       - python -m poetry run pytest -n 8 --cov-report=term --cov-report=html
