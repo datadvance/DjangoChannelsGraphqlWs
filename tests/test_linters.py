@@ -22,8 +22,6 @@
 """Check code by running different linters and code style checkers."""
 
 import pathlib
-import sys
-import textwrap
 
 import plumbum
 import pytest
@@ -33,24 +31,6 @@ SOURCE_DIRS = ["channels_graphql_ws/", "tests/", "example/"]
 PROJECT_ROOT_DIR = pathlib.Path(__file__).absolute().parent.parent
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason=textwrap.dedent(
-        """
-        I could not manage this to work in Windows:
-        1. I had to disable spelling on Windows cause Pyenchant which
-           does the spellcheking job for Pylint cannot be simply
-           installed with `pip install` in Windows. Unfortunately it is
-           not enough to tell Pylint `--disable=spelling`, cause it
-           still complains about `spelling-dict=en_US`, so I wiped out
-           spelling from its configuration file manually here.
-        2. Even then, I could not run it cause in Travis I've got
-           permission denied error for both standard temp directory, and
-           for CWD. I just tired trying fixing this. Not a big deal, we
-           run linters in Linux and Mac anyway.
-        """
-    ),
-)
 @pytest.mark.parametrize("src_dir", SOURCE_DIRS)
 def test_pylint(src_dir):
     """Run Pylint."""
@@ -101,13 +81,3 @@ def test_pydocstyle(src_dir):
         result = pydocstyle(src_dir)
         if result:
             print("\nPydocstyle:", result)
-
-
-@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
-def test_bandit(src_dir):
-    """Run Bandit."""
-    bandit = plumbum.local["bandit"]
-    with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = bandit("-ll", "-r", src_dir)
-        if result:
-            print("\nBandit:", result)

@@ -77,7 +77,7 @@
     "editor.rulers": [72, 88],
     "editor.tabSize": 4,
     "git.ignoreLimitWarning": true,
-    "python.linting.banditEnabled": true,
+    "python.linting.banditEnabled": false,
     "python.linting.mypyEnabled": true,
     "python.linting.pydocstyleEnabled": true,
     "python.linting.pylintEnabled": true,

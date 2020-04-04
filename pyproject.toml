@@ -58,7 +58,6 @@ msgpack = "^0.6.1"
 [tool.poetry.dev-dependencies]
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/versions/
-bandit = "*"
 black = { version = "*", allow-prereleases = true }
 channels-redis = "*"
 coverage = "*"
@@ -88,15 +87,15 @@ target-version = ['py36', 'py37', 'py38']
 
 # ---------------------------------------------------------------- ISORT
 # Isort configuration.
-# https://github.com/timothycrosley/isort/wiki/isort-Settings
-# NOTE: Isort treats paths relative to the current working directory,
-# so if you run it not from the directory `venv` resides it will not be
+# - Docs: https://github.com/timothycrosley/isort/wiki/isort-Settings
+# - Tune Isort to correspond to the Black style guide:
+#   https://black.readthedocs.io/en/stable/the_black_code_style.html
+#
+# NOTE: Isort treats paths relative to the current working directory, so
+# if you run it not from the directory `.venv` resides it will not be
 # able to properly detect thirdparty modules. Here is the bug report:
-# https://github.com/timothycrosley/isort/issues/659
-# Current workaround is to provide `--virtual-env` from the command
-# line.
-# Tune Isort to correspond to the Black style guide:
-# https://black.readthedocs.io/en/stable/the_black_code_style.html
+# https://github.com/timothycrosley/isort/issues/659. Current workaround
+# is to provide `--virtual-env` from the command line.
 [tool.isort]
 balanced_wrapping = "True"
 combine_as_imports = "True"
@@ -112,56 +111,6 @@ not_skip = "__init__.py"
 skip_glob = [".venv"]
 use_parentheses = "True"
 virtual_env = "./.venv/"
-
-
-# --------------------------------------------------------------- PYLINT
-# Pylint code checker configuration
-# RTFM:
-# - Pylint docs:
-#   https://pylint.readthedocs.io/en/latest/
-# - Configuration reference:
-#   http://pylint.pycqa.org/en/latest/technical_reference/features.html
-[tool.pylint.master]
-# Work in parallel.
-jobs=0
-load-plugins = "pylint_quotes,pylint_django"
-# Do not store results of previous runs.
-persistent = "no"
-# Allow to load C extension modules.
-unsafe-load-any-extension = "yes"
-[tool.pylint.messages_control]
-# bad-continuation: Black does the job, no need to check.
-# design: Do not count lines, members, ..., no use.
-# similarities: Duplication does not mean bad design by itself.
-disable = "bad-continuation,design,similarities"
-enable = "c-extension-no-member"
-[tool.pylint.basic]
-# It is OK to have 2-letters identifiers, e.g. 'id' or 'ok'. Also allow
-# long identifiers, cause there is a strong line length limitation which
-# will force engineers to thing twice before giving too long names.
-argument-rgx = "[a-z_][a-z0-9_]{1,64}$"
-attr-rgx = "[a-z_][a-z0-9_]{1,64}$"
-bad-names = "foo,bar,baz,toto,tutu,tata,responce,pathes"
-class-attribute-rgx = "([A-Za-z_][A-Za-z0-9_]{1,64}|(__.*__))$"
-function-rgx = "[a-z_][a-z0-9_]{1,64}$"
-good-names = "i,j,k,ex,Run,_"
-method-rgx = "[a-z_][a-z0-9_]{1,64}$"
-# Docstrings are needed everywhere.
-no-docstring-rgx = "^$"
-variable-rgx = "[a-z_][a-z0-9_]{1,64}$"
-[tool.pylint.format]
-max-line-length=88
-max-module-lines=9000  # Right, over nine thousand!
-[tool.pylint.string_quotes]
-docstring-quote = "double"
-string-quote = "double-avoid-escape"
-triple-quote = "double"
-[tool.pylint.refactoring]
-# We have line length 88, no need to check.
-max-nested-blocks = "9000"
-[tool.pylint.reports]
-reports = "no"
-score = "no"
 
 # ------------------------------------------------------------- COVERAGE
 # Coverage.py configuration reference:
@@ -183,7 +132,7 @@ omit = ["**/test_*.py"]
 legacy_tox_ini = """
 [tox]
 isolated_build = true
-envlist = py37
+envlist = py36,py37,py38
 [testenv]
 whitelist_externals = poetry
 commands =
