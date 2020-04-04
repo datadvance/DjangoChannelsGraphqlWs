@@ -545,7 +545,7 @@ _A reminder of how to make and publish a new release._
 3. Update [README.md](./README.md) (if needed).
 4. Commit changes made above.
 5. Git tag: `git tag vX.X.X && git push --tags`.
-6. Publish release to PyPI: `poetry publish`.
+6. Publish release to PyPI: `poetry publish --build`.
 7. Update
    [release notes](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
    on GitHub.
