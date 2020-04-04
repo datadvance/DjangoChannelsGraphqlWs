@@ -94,6 +94,7 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
+              - python3 -m pip install tox-travis
           script:
               - python -m tox
 
@@ -104,8 +105,8 @@ jobs:
           before_install:
               - choco install python --version 3.8.2
               - python --version
-              - python -m python -m pip install --upgrade pip
-              - python -m python -m pip install poetry
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
               - python -m pip install tox-travis
