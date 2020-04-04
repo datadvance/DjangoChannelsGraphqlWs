@@ -29,11 +29,11 @@ jobs:
           dist: xenial
           language: python
           before_install:
-              - pip install --upgrade pip
-              - pip install poetry
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
           install:
-              - poetry install --no-interaction --verbose
-              - pip install tox-travis
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
           script:
               - tox
 
@@ -43,11 +43,11 @@ jobs:
           dist: xenial
           language: python
           before_install:
-              - pip install --upgrade pip
-              - pip install poetry
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
           install:
-              - poetry install --no-interaction --verbose
-              - pip install tox-travis
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
           script:
               - tox
 
@@ -57,11 +57,11 @@ jobs:
           dist: xenial
           language: python
           before_install:
-              - pip install --upgrade pip
-              - pip install poetry
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
           install:
-              - poetry install --no-interaction --verbose
-              - pip install tox-travis
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
           script:
               - tox
 
