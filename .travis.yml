@@ -21,15 +21,14 @@
 
 # Travis CI configuration.
 
+python:
+    - "3.6"
+    - "3.7"
+    - "3.8"
 jobs:
     include:
-        - name: "Python 3.6, 3.7, and 3.8 on Xenial Linux"
+        - name: "Python on Xenial Linux"
           os: linux
-          # Works in Linux, ignored in macOS and Windows.
-          python:
-              - "3.6"
-              - "3.7"
-              - "3.8"
           dist: xenial
           language: python
           before_install:
