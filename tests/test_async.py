@@ -139,7 +139,7 @@ async def test_broadcast(gql):
 # ---------------------------------------------------------------- GRAPHQL BACKEND SETUP
 
 
-class SendMessage(graphene.Mutation, name="SendMessagePayload"):
+class SendMessage(graphene.Mutation, name="SendMessagePayload"):  # type: ignore
     """Test mutation to send message to `OnMessageSent` subscription."""
 
     class Arguments:
@@ -159,7 +159,7 @@ class SendMessage(graphene.Mutation, name="SendMessagePayload"):
         return SendMessage(success=True)
 
 
-class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):
+class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):  # type: ignore
     """Send monotonic timestamps by `OnMessageSent` subscription.
 
     Broadcast messages contains timestamp and publish delay, while

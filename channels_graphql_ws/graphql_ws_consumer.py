@@ -567,6 +567,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 handler `Subscription._subscribe` and hack it's `root`
                 to deliver the subscription registration function.
                 """
+
+                # Avoid circular imports with local import.
+                # pylint: disable=import-outside-toplevel
                 from .subscription import Subscription
 
                 # We do not expose `Subscription._subscribe` because
@@ -832,7 +835,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Typical exception here is `GraphQLLocatedError` which has
             # reference to the original error raised from a resolver.
             tb = ex.__traceback__
-            if isinstance(ex, graphql.error.located_error.GraphQLLocatedError):
+            if (
+                isinstance(ex, graphql.error.located_error.GraphQLLocatedError)
+                and ex.original_error is not None
+            ):
                 tb = ex.stack
                 ex = ex.original_error
             LOG.error(

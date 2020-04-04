@@ -832,7 +832,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 WAKEUP = threading.Event()
 
 
-class LongMutation(graphene.Mutation, name="LongMutationPayload"):
+class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: ignore
     """Test mutation which simply hangs until event `WAKEUP` is set."""
 
     is_ok = graphene.Boolean()

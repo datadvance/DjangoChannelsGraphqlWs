@@ -48,7 +48,7 @@ chats: DefaultDict[str, List[str]] = defaultdict(list)
 # ---------------------------------------------------------------------- TYPES & QUERIES
 
 
-class Message(
+class Message(  # type: ignore
     graphene.ObjectType, default_resolver=graphene.types.resolver.dict_resolver
 ):
     """Message GraphQL type."""
@@ -88,7 +88,7 @@ class Query(graphene.ObjectType):
 # ---------------------------------------------------------------------------- MUTATIONS
 
 
-class Login(graphene.Mutation, name="LoginPayload"):
+class Login(graphene.Mutation, name="LoginPayload"):  # type: ignore
     """Login mutation.
 
     Login implementation, following the Channels guide:
@@ -122,7 +122,7 @@ class Login(graphene.Mutation, name="LoginPayload"):
         return Login(ok=True)
 
 
-class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):
+class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):  # type: ignore
     """Send chat message."""
 
     ok = graphene.Boolean()
