@@ -167,7 +167,7 @@ class Subscription(graphene.ObjectType):
 
         """
         try:
-            event_loop = asyncio.get_running_loop()
+            event_loop = asyncio.get_event_loop()
         except RuntimeError:
             pass
         else:
@@ -240,7 +240,7 @@ class Subscription(graphene.ObjectType):
 
         """
         try:
-            event_loop = asyncio.get_running_loop()
+            event_loop = asyncio.get_event_loop()
         except RuntimeError:
             pass
         else:

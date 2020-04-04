@@ -331,6 +331,15 @@ version = ">=18.7"
 tests = ["hypothesis (4.23)", "pytest (>=3.10,<4.0)", "pytest-asyncio (>=0.8,<1.0)"]
 
 [[package]]
+category = "main"
+description = "A backport of the dataclasses module for Python 3.6"
+marker = "python_version >= \"3.6\" and python_version < \"3.7\""
+name = "dataclasses"
+optional = false
+python-versions = ">=3.6, <3.7"
+version = "0.7"
+
+[[package]]
 category = "dev"
 description = "Decorators for Humans"
 name = "decorator"
@@ -1365,7 +1374,7 @@ test = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 
 [metadata]
-content-hash = "ce9f63f034a7e886ef119c0452c65aa0b291fd9082401fd7d5b4e5688c53ba81"
+content-hash = "af5f48586d5b2a2cfd37e171fc9751c4e294cbf7eef3286b691392f010afb7b3"
 python-versions = "^3.6.0"
 
 [metadata.files]
@@ -1556,6 +1565,10 @@ cryptography = [
 daphne = [
     {file = "daphne-2.4.1-py2.py3-none-any.whl", hash = "sha256:47d792aea2c6c957d352ad5ace3a1c4232e223ef65202b27aceb0743346d6b68"},
     {file = "daphne-2.4.1.tar.gz", hash = "sha256:1e41d02d78da373c1f8504835cdca6d447b5d64c2941661d4bd968d412b6c383"},
+]
+dataclasses = [
+    {file = "dataclasses-0.7-py3-none-any.whl", hash = "sha256:3459118f7ede7c8bea0fe795bff7c6c2ce287d01dd226202f7c9ebc0610a7836"},
+    {file = "dataclasses-0.7.tar.gz", hash = "sha256:494a6dcae3b8bcf80848eea2ef64c0cc5cd307ffc263e17cdf42f3e5420808e6"},
 ]
 decorator = [
     {file = "decorator-4.4.2-py2.py3-none-any.whl", hash = "sha256:41fa54c2a0cc4ba648be4fd43cff00aedf5b9465c9bf18d64325bc225f08f760"},

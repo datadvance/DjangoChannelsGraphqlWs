@@ -19,6 +19,7 @@
     - [GraphQL middleware](#graphql-middleware)
   - [Alternatives](#alternatives)
   - [Development](#development)
+    - [Bootstrap](#bootstrap)
   - [Contributing](#contributing)
   - [Acknowledgements](#acknowledgements)
 
@@ -60,6 +61,7 @@
     - AIOHTTP-based client.
     - Client for unit test based on the Django Channels testing
       communicator.
+- Supported Python 3.6 and newer (tests run on 3.6, 3.7, and 3.8).
 
 ## Installation
 
@@ -455,7 +457,9 @@ WebSocket transport with subscriptions one day.
 
 ## Development
 
-Just a reminder of how to setup an environment for the development:
+### Bootstrap
+
+_A reminder of how to setup an environment for the development._
 
 1. Install Poetry to the system Python.
    ```bash
@@ -478,10 +482,6 @@ Just a reminder of how to setup an environment for the development:
 4. Install pre-commit hooks to check code style automatically:
    ```bash
    $ pre-commit install
-5. Run tests:
-   ```bash
-   $ pytest
-   ```
 
 Use:
 
@@ -490,6 +490,27 @@ Use:
 )](
     https://github.com/ambv/black
 )
+
+### Running tests
+
+_A reminder of how to run tests._
+
+- Run all tests on all supported Python versions:
+   ```bash
+   $ tox
+   ```
+- Run all tests on a single Python version, e.g on Python 3.7:
+   ```bash
+   $ tox -e py37
+   ```
+- Example of running a single test:
+   ```bash
+   $ tox -e py36 -- tests/test_basic.py::test_main_usecase
+   ```
+- Running on currently active Python directly with Pytest:
+   ```bash
+   $ poetry run pytest
+   ```
 
 ## Contributing
 

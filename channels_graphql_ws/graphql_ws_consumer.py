@@ -203,9 +203,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # We use weak collection so finished task will be autoremoved.
         self._background_tasks = weakref.WeakSet()
 
-        # remember current eventloop so we can check it further in
+        # Remember current eventloop so we can check it further in
         # `_assert_thread` method.
-        self._eventloop = asyncio.get_running_loop()
+        self._eventloop = asyncio.get_event_loop()
 
         # Crafty weak collection with per-operation locks. It holds a
         # mapping from the operaion id (protocol message id) to the
@@ -502,7 +502,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         await asyncio.sleep(self.send_keepalive_every)
                         await self._send_gql_connection_keep_alive()
 
-                self._keepalive_task = asyncio.create_task(keepalive_sender())
+                self._keepalive_task = asyncio.ensure_future(keepalive_sender())
                 # Immediately send keepalive message cause it is
                 # required by the protocol description.
                 await self._send_gql_connection_keep_alive()
@@ -946,14 +946,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # the `channels.db.database_sync_to_async`.
                 django.db.close_old_connections()
 
-        return await asyncio.get_running_loop().run_in_executor(
+        return await asyncio.get_event_loop().run_in_executor(
             self._workers, thread_func
         )
 
     def _assert_thread(self):
         """Assert called from our thread with the eventloop."""
 
-        assert asyncio.get_running_loop() == self._eventloop, (
+        assert asyncio.get_event_loop() == self._eventloop, (
             "Function is called from an inappropriate thread! This"
             " function must be called from the thread where the"
             " eventloop serving the consumer is running."
@@ -969,7 +969,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             A started `asyncio.Task` instance.
 
         """
-        background_task = asyncio.create_task(awaitable)
+        background_task = asyncio.ensure_future(awaitable)
         self._background_tasks.add(background_task)
 
         return background_task

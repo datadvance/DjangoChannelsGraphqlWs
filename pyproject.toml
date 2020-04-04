@@ -51,6 +51,7 @@ python = "^3.6.0"
 aiohttp = "^3.5"
 asgiref = "^3.2"
 channels = "^2.2"
+dataclasses = {version = "^0.7", python = "~3.6"}
 django = ">=2.2"
 graphene = "^2.1"
 graphql-core = "^2.2"
@@ -135,7 +136,6 @@ isolated_build = true
 envlist = py36,py37,py38
 [testenv]
 whitelist_externals = poetry
-commands =
-    poetry install -v
-    poetry run pytest
+commands_pre = poetry install -v
+commands = poetry run pytest {posargs}
 """
