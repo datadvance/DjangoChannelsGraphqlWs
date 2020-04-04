@@ -83,6 +83,21 @@ jobs:
           script:
               - tox
 
+        - name: "Python 3.6.10 on Windows"
+          os: windows # Windows 10.0.17134 N/A Build 17134
+          language: shell # A 'python' value gives error here.
+          env: PATH=/c/Python36:/c/Python36/Scripts:$PATH
+          before_install:
+              - choco install python --version 3.6.10
+              - python --version
+              - python -m pip install --upgrade pip
+              - python -m pip install poetry
+          install:
+              - python -m poetry install --no-interaction --verbose
+              - python -m pip install tox-travis
+          script:
+              - python -m tox
+
         - name: "Python 3.7.7 on Windows"
           os: windows # Windows 10.0.17134 N/A Build 17134
           language: shell # A 'python' value gives error here.
