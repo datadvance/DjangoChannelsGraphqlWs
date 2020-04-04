@@ -32,9 +32,9 @@ jobs:
               - "3.8"
           dist: xenial
           language: python
-          before_install:
-              - sudo apt-get update
-              - sudo apt-get install -y enchant
+          #   before_install:
+          #       - sudo apt-get update
+          #       - sudo apt-get install -y enchant
           install:
               - pip3 install --upgrade pip
               - pip3 install --progress-bar off poetry tox-travis
