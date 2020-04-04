@@ -32,16 +32,15 @@ jobs:
               - "3.8"
           dist: xenial
           language: python
-          #   before_install:
-          #       - sudo apt-get update
-          #       - sudo apt-get install -y enchant
-          install:
+          before_install:
               - pip3 install --upgrade pip
-              - pip3 install --progress-bar off poetry tox-travis
-              - python3 -m poetry --no-interaction install
-              - python3 -m poetry --no-interaction build
+              - pip install --progress-bar off poetry
+          install:
+              - poetry install --no-interaction --verbose
+              - pip install tox-travis
           script:
-              - python3 -m poetry run tox -- -n 8 --cov-report=term --cov-report=html
+              - tox
+              # - python3 -m poetry run tox -- -n 8 --cov-report=term --cov-report=html
               # - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         # - name: "Python 3.7 on macOS"
         #   os: osx
