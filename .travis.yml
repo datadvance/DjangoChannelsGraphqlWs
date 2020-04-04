@@ -21,14 +21,37 @@
 
 # Travis CI configuration.
 
-python:
-    - "3.6"
-    - "3.7"
-    - "3.8"
 jobs:
     include:
-        - name: "Python on Xenial Linux"
+        - name: "Python 3.6 on Xenial Linux"
           os: linux
+          python: "3.6" # Works in Linux, ignored in macOS and Windows.
+          dist: xenial
+          language: python
+          before_install:
+              - pip install --upgrade pip
+              - pip install --progress-bar off poetry
+          install:
+              - poetry install --no-interaction --verbose
+              - pip install tox-travis
+          script:
+              - tox
+        - name: "Python 3.7 on Xenial Linux"
+          os: linux
+          python: "3.7" # Works in Linux, ignored in macOS and Windows.
+          dist: xenial
+          language: python
+          before_install:
+              - pip install --upgrade pip
+              - pip install --progress-bar off poetry
+          install:
+              - poetry install --no-interaction --verbose
+              - pip install tox-travis
+          script:
+              - tox
+        - name: "Python 3.8 on Xenial Linux"
+          os: linux
+          python: "3.8" # Works in Linux, ignored in macOS and Windows.
           dist: xenial
           language: python
           before_install:
