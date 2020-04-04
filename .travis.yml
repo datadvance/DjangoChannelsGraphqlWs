@@ -94,7 +94,7 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python3 -m pip install tox-travis
+              - python -m pip install tox-travis
           script:
               - python -m tox
 
