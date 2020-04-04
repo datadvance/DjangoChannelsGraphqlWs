@@ -468,7 +468,7 @@ Just a reminder of how to setup an environment for the development:
 2. Create local virtualenv in `.venv`, install all project dependencies
    (from `pyproject.toml`), and upgrade pip.:
    ```bash
-   $ poetry install --no-root
+   $ poetry install
    $ pip install --upgrade pip
    ```
 3. Tell Direvn you trust local `.envrc` file (if you use Direnv):
