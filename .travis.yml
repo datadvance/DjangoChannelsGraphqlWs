@@ -38,7 +38,7 @@ jobs:
               - poetry install --no-interaction --verbose
               - pip install tox-travis
           script:
-              - tox -- -n 8 --cov-report=term --cov-report=html
+              - tox
               # - python3 -m poetry run tox -- -n 8 --cov-report=term --cov-report=html
               # - python3 -m poetry run pytest -n 8 --cov-report=term --cov-report=html
         # - name: "Python 3.7 on macOS"
