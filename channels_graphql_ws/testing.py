@@ -48,7 +48,7 @@ class GraphqlWsClient(client.GraphqlWsClient):
         for _ in range(attempts):
             try:
                 # Be sure internal timeout in `receive` will not expire,
-                # it it is expired then transport stops working by some
+                # if it is expired then transport stops working by some
                 # reason and only raises CancellerError messages.
                 received = await asyncio.wait_for(
                     self.transport.receive(timeout=10 * approx_execution_time),
