@@ -23,7 +23,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Django Channels based WebSocket GraphQL server with Graphene-like subscriptions
 
-[![PyPI](https://img.shields.io/pypi/v/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/) [![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black) [![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs) [![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/)
+[![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs)
+[![GitHub Actions Tests](https://github.com/datadvance/DjangoChannelsGraphqlWs/workflows/Tests/badge.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/actions?query=workflow%3ATests)
+[![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black)
+[![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
 
 - [Django Channels based WebSocket GraphQL server with Graphene-like subscriptions](#django-channels-based-websocket-graphql-server-with-graphene-like-subscriptions)
   - [Features](#features)
