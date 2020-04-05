@@ -21,7 +21,9 @@
 
 """Auxiliary fixtures to simplify testing."""
 
+import asyncio
 import inspect
+import sys
 import threading
 
 import channels
@@ -31,6 +33,21 @@ import pytest
 
 import channels_graphql_ws
 import channels_graphql_ws.testing
+
+
+@pytest.fixture
+def event_loop(request):
+    """Overwrite `pytest_asyncio` eventloop to fix Windows issue.
+
+    Default implementation causes `NotImplementedError` on Windows with
+    Python 3.8, because they changed default eventloop in 3.8.
+    """
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture
