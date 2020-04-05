@@ -21,9 +21,7 @@
 
 """Auxiliary fixtures to simplify testing."""
 
-import asyncio
 import inspect
-import sys
 import threading
 
 import channels
