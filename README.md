@@ -49,20 +49,22 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Features
 
-- WebSocket-based GraphQL server implemented on the Django Channels.
+- WebSocket-based GraphQL server implemented on the
+  [Django Channels v2](https://github.com/django/channels).
 - WebSocket protocol is compatible with
   [Apollo GraphQL](https://github.com/apollographql) client.
-- Graphene-like subscriptions.
+- [Graphene](https://github.com/graphql-python/graphene)-like
+  subscriptions.
 - All GraphQL requests are processed concurrently (in parallel).
 - Subscription notifications delivered in the order they were issued.
-- Optional subscription activation message can be sent to a client.
-  Sometimes this is necessary to avoid race conditions on the client
-  side. Consider the case when client subscribes to some subscription
-  and immediately invokes a mutations which triggers this subscription.
-  In such case the subscription notification can be lost, cause these
-  subscription and mutation requests are processed concurrently. To
-  avoid this client shall wait for the subscription activation before
-  sending such mutation request.
+- Optional subscription activation message can be sent to a client. This
+  is useful to avoid race conditions on the client side. Consider the
+  case when client subscribes to some subscription and immediately
+  invokes a mutations which triggers this subscription. In such case the
+  subscription notification can be lost, cause these subscription and
+  mutation requests are processed concurrently. To avoid this client
+  shall wait for the subscription activation message before sending such
+  mutation request.
 - Customizable notification strategies:
     - A subscription can be put to one or many subscription groups. This
       allows to granularly notify only selected clients, or, looking
@@ -86,6 +88,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     - Client for unit test based on the Django Channels testing
       communicator.
 - Supported Python 3.6 and newer (tests run on 3.6, 3.7, and 3.8).
+- Works on Linux, macOS, and Windows.
 
 ## Installation
 
