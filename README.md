@@ -469,6 +469,7 @@ with two keys `"data"` and `"errors"`. By default it is set to
 
 It is possible to inject middleware into the GraphQL operation
 processing. For that define `middleware` setting of your
+`GraphqlWsConsumer` subclass, like this:
 
 ```python
 def my_middleware(next_middleware, root, info, *args, **kwds):
