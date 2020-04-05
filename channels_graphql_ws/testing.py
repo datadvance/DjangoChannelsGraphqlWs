@@ -33,7 +33,7 @@ class GraphqlWsClient(client.GraphqlWsClient):
     """Add functions useful for testing purposes."""
 
     # Time in seconds to wait to ensure the queue of messages is empty.
-    RECEIVE_NOTHING_ATTEMPTS = 100
+    RECEIVE_NOTHING_ATTEMPTS = 10
     # Number of seconds to wait for another check for new events.
     RECEIVE_NOTHING_INTERVAL = 0.1
 
