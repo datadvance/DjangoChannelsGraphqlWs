@@ -83,7 +83,7 @@ jobs:
           language: shell
           env: PATH=/c/Python37:/c/Python37/Scripts:$PATH
           before_install:
-              - choco install python --version 3.7.7
+              - choco install python --version 3.7.7 --no-progress
               - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
@@ -97,7 +97,7 @@ jobs:
           language: shell
           env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
           before_install:
-              - choco install python --version 3.8.2
+              - choco install python --version 3.8.2 --no-progress
               - python --version
               - python -m pip install --upgrade pip
               - python -m pip install poetry
