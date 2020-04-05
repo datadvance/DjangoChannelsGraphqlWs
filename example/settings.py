@@ -25,9 +25,16 @@
 # This is super-minimal configuration which is just enough for unit
 # tests and to illustrate main principles in the `example.py`.
 
+import asyncio
 import pathlib
 from typing import List
 import uuid
+
+
+if sys.platform == "win32" and sys.version_info.minor >= 8:
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()  # type: ignore
+    )
 
 
 BASE_DIR = pathlib.Path(__file__).absolute().parent.parent
