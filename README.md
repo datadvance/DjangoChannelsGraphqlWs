@@ -50,6 +50,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   - [Alternatives](#alternatives)
   - [Development](#development)
     - [Bootstrap](#bootstrap)
+    - [Running tests](#running-tests)
     - [Making release](#making-release)
   - [Contributing](#contributing)
   - [Acknowledgements](#acknowledgements)
@@ -511,21 +512,22 @@ _A reminder of how to setup an environment for the development._
    $ python3.x get-poetry.py  # ← Replace 'x' with proper Python version.
    $ rm get-poetry.py
    ```
-   It is important to install Poetry in the system Python. For details
+   It is important to install Poetry into the system Python. For details
    see Poetry docs: https://python-poetry.org/docs/#installation
 2. Create local virtualenv in `.venv`, install all project dependencies
-   (from `pyproject.toml`), and upgrade pip.:
+   (from `pyproject.toml`), and upgrade pip:
    ```bash
    $ poetry install
    $ pip install --upgrade pip
    ```
-3. Tell Direvn you trust local `.envrc` file (if you use Direnv):
+3. Optionally tell Direvn you trust the local `.envrc` file:
    ```bash
    $ direnv allow
    ```
 4. Install pre-commit hooks to check code style automatically:
    ```bash
    $ pre-commit install
+   ```
 
 Use:
 
