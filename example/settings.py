@@ -56,7 +56,7 @@ import uuid
 # ```
 if sys.platform == "win32" and sys.version_info.minor >= 8:
     asyncio.set_event_loop_policy(
-        asyncio.WindowsSelectorEventLoopPolicy()  # type: ignore
+        asyncio.WindowsSelectorEventLoopPolicy()  # pylint: disable=no-member
     )
 
 
