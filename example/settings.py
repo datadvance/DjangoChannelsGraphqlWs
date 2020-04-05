@@ -54,6 +54,9 @@ import uuid
 # File "C:\Python38\lib\asyncio\events.py", line 501, in add_reader
 #   raise NotImplementedError
 # ```
+# NOTE: Actually this is already done in the `event_loop` fixture in the
+# `conftest.py` file, but this file imports earlier by the Pytest plugin
+# `pytest_django`. So we do this here as well.
 if sys.platform == "win32" and sys.version_info.minor >= 8:
     asyncio.set_event_loop_policy(
         asyncio.WindowsSelectorEventLoopPolicy()  # pylint: disable=no-member
