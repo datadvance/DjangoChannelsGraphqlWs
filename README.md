@@ -191,8 +191,8 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-Notify<sup>[1](#redis-layer)</sup> clients when some event happens using the `broadcast()`
-or `broadcast_sync()` method from the OS thread where
+Notify<sup>[﹡](#redis-layer)</sup> clients when some event happens using
+the `broadcast()` or `broadcast_sync()` method from the OS thread where
 there is no running event loop:
 
 ```python
@@ -204,8 +204,8 @@ MySubscription.broadcast(
 )
 ```
 
-Notify<sup>[1](#redis-layer)</sup> clients in an coroutine function using the `broadcast()`
-or `broadcast_async()` method:
+Notify<sup>[﹡](#redis-layer)</sup> clients in an coroutine function
+using the `broadcast()` or `broadcast_async()` method:
 
 ```python
 await MySubscription.broadcast(
@@ -216,9 +216,11 @@ await MySubscription.broadcast(
 )
 ```
 
-<a name="redis-layer">1</a>: in case you are testing your client code
-by notifying it from the Django Shell, you have to setup a [channel layer](https://channels.readthedocs.io/en/latest/topics/channel_layers.html#configuration) in order for the two instance of
-your application. The same applies in production with workers.
+<a name="redis-layer">﹡)</a> In case you are testing your client code by
+notifying it from the Django Shell, you have to setup a
+[channel layer](https://channels.readthedocs.io/en/latest/topics/channel_layers.html#configuration)
+in order for the two instance of your application. The same applies in
+production with workers.
 
 ## Example
 
@@ -293,18 +295,22 @@ recommended to have a look the documentation of these great projects:
 The implemented WebSocket-based protocol was taken from the library
 [subscription-transport-ws](https://github.com/apollographql/subscriptions-transport-ws)
 which is used by the [Apollo GraphQL](https://github.com/apollographql).
-Check the [protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
+Check the
+[protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
 for details.
 
 ### Automatic Django model serialization
 
 The `Subscription.broadcast` uses Channels groups to deliver a message
-to the `Subscription`'s `publish` method. [ASGI specification](https://github.com/django/asgiref/blob/master/specs/asgi.rst#events)
+to the `Subscription`'s `publish` method.
+[ASGI specification](https://github.com/django/asgiref/blob/master/specs/asgi.rst#events)
 clearly states what can be sent over a channel, and Django models are
 not in the list. Since it is common to notify clients about Django
-models changes we manually serialize the `payload` using [MessagePack](https://github.com/msgpack/msgpack-python)
+models changes we manually serialize the `payload` using
+[MessagePack](https://github.com/msgpack/msgpack-python)
 and hack the process to automatically serialize Django models following
-the the Django's guide [Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
+the the Django's guide
+[Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
 
 ### Execution
 
@@ -392,8 +398,8 @@ class Login(graphene.Mutation, name="LoginPayload"):
 ```
 
 The authentication is based on the Channels authentication mechanisms.
-Check [the Channels
-documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
+Check
+[the Channels documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
 Also take a look at the example in the [example](example/) directory.
 
 ### The Python client
@@ -428,8 +434,8 @@ One such modified GraphiQL is provided in the [example](example/) directory.
 
 ### Testing
 
-To test GraphQL WebSocket API read the [appropriate page in the Channels
-documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
+To test GraphQL WebSocket API read the
+[appropriate page in the Channels documentation](https://channels.readthedocs.io/en/latest/topics/testing.html).
 
 In order to simplify unit testing there is a `GraphqlWsTransport`
 implementation based on the Django Channels testing communicator:
@@ -441,8 +447,10 @@ and take a look at the [tests](/tests) to see how to use it.
 The original Apollo's protocol does not allow client to know when a
 subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
-when this leads to serious issues. [Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
-in the [`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
+when this leads to serious issues.
+[Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
+in the
+[`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
 tracker.
 
 To solve this problem, there is the `GraphqlWsConsumer` setting
@@ -474,16 +482,17 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
 ```
 
 For more information about GraphQL middleware please take a look at the
-[relevant section in the Graphene
-documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
+[relevant section in the Graphene documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
 
 ## Alternatives
 
 There is a [Tomáš Ehrlich](https://gist.github.com/tricoder42)
-GitHubGist [GraphQL Subscription with django-channels](https://gist.github.com/tricoder42/af3d0337c1b33d82c1b32d12bd0265ec)
+GitHubGist
+[GraphQL Subscription with django-channels](https://gist.github.com/tricoder42/af3d0337c1b33d82c1b32d12bd0265ec)
 which this implementation was initially based on.
 
-There is a promising [GraphQL WS](https://github.com/graphql-python/graphql-ws)
+There is a promising
+[GraphQL WS](https://github.com/graphql-python/graphql-ws)
 library by the Graphene authors. In particular
 [this pull request](https://github.com/graphql-python/graphql-ws/pull/9)
 gives a hope that there will be native Graphene implementation of the
