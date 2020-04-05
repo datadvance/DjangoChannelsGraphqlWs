@@ -34,9 +34,8 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.7 on Xenial Linux"
           os: linux
@@ -49,9 +48,8 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.8 on Xenial Linux"
           os: linux
@@ -64,9 +62,8 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.7.4 on MacOS"
           os: osx
@@ -78,9 +75,8 @@ jobs:
               - python3 -m pip install poetry
           install:
               - python3 -m poetry install --no-interaction --verbose
-              - python3 -m pip install tox-travis
           script:
-              - tox
+              - python3 -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.6.10 on Windows"
           os: windows
@@ -93,9 +89,8 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - python -m tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.7.7 on Windows"
           os: windows
@@ -108,9 +103,8 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - python -m tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
 
         - name: "Python 3.8.2 on Windows"
           os: windows
@@ -123,6 +117,5 @@ jobs:
               - python -m pip install poetry
           install:
               - python -m poetry install --no-interaction --verbose
-              - python -m pip install tox-travis
           script:
-              - python -m tox
+              - python -m poetry run pytest --cov-report=term --cov-report=html
