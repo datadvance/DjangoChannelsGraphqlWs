@@ -43,8 +43,10 @@ def event_loop(request):
     Python 3.8, because they changed default eventloop in 3.8.
     """
 
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if sys.platform == "win32" and sys.version_info.minor >= 8:
+        asyncio.set_event_loop_policy(
+            asyncio.WindowsSelectorEventLoopPolicy()  # type: ignore
+        )
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
