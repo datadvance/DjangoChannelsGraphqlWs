@@ -115,7 +115,7 @@ class Login(graphene.Mutation, name="LoginPayload"):  # type: ignore
         # the session stored in the scope. The `info.context` is
         # practically just a wrapper around Channel `self.scope`, but
         # the `login` method requires dict, so use `_asdict`.
-        asgiref.sync.async_to_sync(channels.auth.login)(info.context._asdict(), user)
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context.__dict__, user)
         # Save the session, `channels.auth.login` does not do this.
         info.context.session.save()
 
