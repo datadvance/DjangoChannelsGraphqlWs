@@ -347,10 +347,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             task = on_stop()
 
         else:
+            error_msg = f"Message of unknown type '{msg_type}' received!"
             task = self._send_gql_error(
-                content["id"] if "id" in content else -1,
-                f"Message of unknown type '{msg_type}' received!",
+                content["id"] if "id" in content else -1, error_msg,
             )
+            LOG.warning("GraphQL WS Client error: %s", error_msg)
 
         # If strict ordering is required then simply wait until the
         # message processing is finished. Otherwise spawn a task so
@@ -487,6 +488,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # So mozilla offers us the following codes:
             # 4000–4999 - Available for use by applications.
             await self.close(code=4000)
+            LOG.error(str(ex))
         else:
             # Send CONNECTION_ACK message.
             await self._send_gql_connection_ack()
