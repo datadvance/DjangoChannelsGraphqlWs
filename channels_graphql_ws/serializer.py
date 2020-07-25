@@ -21,6 +21,7 @@
 
 """Serializer to support Django models as subscription events."""
 
+import datetime
 import logging
 
 import django.core.serializers
@@ -50,28 +51,51 @@ class Serializer:
     def serialize(data):
         """Serialize the `data`."""
 
-        def encode_django_model(obj):
-            """MessagePack hook to serialize the Django model."""
+        def encode_extra_types(obj):
+            """MessagePack hook to serialize extra types.
 
+            The recipe took from the MessagePack for Python docs:
+            https://github.com/msgpack/msgpack-python#packingunpacking-of-custom-data-type
+
+            Supported types:
+            - Django models (through `django.core.serializers`).
+            - Python `datetime` types:
+              - `datetime.datetime`
+              - `datetime.date`
+              - `datetime.time`
+
+            """
             if isinstance(obj, django.db.models.Model):
                 return {
                     "__djangomodel__": True,
                     "as_str": django.core.serializers.serialize("json", [obj]),
                 }
+            if isinstance(obj, datetime.datetime):
+                return {"__datetime__": True, "as_str": obj.isoformat()}
+            if isinstance(obj, datetime.date):
+                return {"__date__": True, "as_str": obj.isoformat()}
+            if isinstance(obj, datetime.time):
+                return {"__time__": True, "as_str": obj.isoformat()}
             return obj
 
-        return msgpack.packb(data, default=encode_django_model, use_bin_type=True)
+        return msgpack.packb(data, default=encode_extra_types, use_bin_type=True)
 
     @staticmethod
     def deserialize(data):
         """Deserialize the `data`."""
 
-        def decode_django_model(obj):
-            """MessagePack hook to deserialize the Django model."""
+        def decode_extra_types(obj):
+            """MessagePack hook to deserialize extra types."""
             if "__djangomodel__" in obj:
                 obj = next(
                     django.core.serializers.deserialize("json", obj["as_str"])
                 ).object
+            elif "__datetime__" in obj:
+                obj = datetime.datetime.fromisoformat(obj["as_str"])
+            elif "__date__" in obj:
+                obj = datetime.date.fromisoformat(obj["as_str"])
+            elif "__time__" in obj:
+                obj = datetime.time.fromisoformat(obj["as_str"])
             return obj
 
-        return msgpack.unpackb(data, object_hook=decode_django_model, raw=False)
+        return msgpack.unpackb(data, object_hook=decode_extra_types, raw=False)

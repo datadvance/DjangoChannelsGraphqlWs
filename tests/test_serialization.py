@@ -21,6 +21,7 @@
 
 """Test the Django model automatic serialization."""
 
+import datetime
 import random
 import textwrap
 import uuid
@@ -33,7 +34,7 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_serialization(gql, transactional_db):
+async def test_models_serialization(gql, transactional_db):
     """Test serialization of the Django model inside the `payload`."""
     del transactional_db
 
@@ -49,7 +50,7 @@ async def test_serialization(gql, transactional_db):
     print("Prepare the test setup: GraphQL backend classes.")
 
     class SendModels(graphene.Mutation):
-        """Send models to the subscriptions `OnModelsReceived`."""
+        """Send models to the subscriptions OnModelsReceived."""
 
         is_ok = graphene.Boolean()
 
@@ -148,3 +149,120 @@ async def test_serialization(gql, transactional_db):
     assert models_info["user2_typename"] == str(User)
 
     await client.finalize()
+
+
+@pytest.mark.asyncio
+async def test_timestamps_serialization(gql, transactional_db):
+    """Test serialization of timestamps inside the `payload`.
+
+    Check that instances of `datetime.date`, `datetime.time`, and
+    `datetime.datetime` serializes properly inside the notification
+    payload.
+
+    """
+    del transactional_db
+
+    # Used to verify serialization correctness in the end of the test.
+    now = datetime.datetime.utcnow()
+
+    print("Prepare the test setup: GraphQL backend classes.")
+
+    class SendTimestamps(graphene.Mutation):
+        """Send timestamps to the subscriptions OnTimestampsReceived."""
+
+        is_ok = graphene.Boolean()
+
+        @staticmethod
+        def mutate(root, info):
+            """Send timestamps the `payload` to the `publish` method."""
+            del root, info
+            # Broadcast timestamp objects inside a dictionary.
+            OnTimestampsReceived.broadcast(
+                payload={
+                    "now_date": now.date(),
+                    "now_datetime": now,
+                    "now_time": now.time(),
+                }
+            )
+            return SendTimestamps(is_ok=True)
+
+    class OnTimestampsReceived(channels_graphql_ws.Subscription):
+        """Receive the timestamps and extract info from it."""
+
+        now_date = graphene.String()
+        now_date_typename = graphene.String()
+        now_datetime = graphene.String()
+        now_datetime_typename = graphene.String()
+        now_time = graphene.String()
+        now_time_typename = graphene.String()
+
+        @staticmethod
+        def publish(payload, info):
+            """Publish timestamps info so test can check it."""
+            del info
+            return OnTimestampsReceived(
+                now_date_typename=type(payload["now_date"]).__name__,
+                now_date=payload["now_date"],
+                now_datetime_typename=type(payload["now_datetime"]).__name__,
+                now_datetime=payload["now_datetime"],
+                now_time_typename=type(payload["now_time"]).__name__,
+                now_time=payload["now_time"],
+            )
+
+    class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
+        on_timestamps_received = OnTimestampsReceived.Field()
+
+    class Mutation(graphene.ObjectType):
+        """Root mutation."""
+
+        send_timestamps = SendTimestamps.Field()
+
+    print("Establish & initialize WebSocket GraphQL connections.")
+
+    client = gql(
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={"strict_ordering": True},
+    )
+    await client.connect_and_init()
+
+    print("Subscribe to receive subscription notifications.")
+
+    sub_id = await client.send(
+        msg_type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                subscription {
+                    on_timestamps_received {
+                        now_date
+                        now_date_typename
+                        now_datetime
+                        now_datetime_typename
+                        now_time
+                        now_time_typename
+                    }
+                }
+                """
+            )
+        },
+    )
+
+    print("Invoke mutation which sends timestamps to the subscription.")
+
+    await client.execute("mutation { send_timestamps { is_ok } }")
+
+    print("Receive subscription notification with timestamps info and check it.")
+
+    timestamps_info = await client.receive(assert_id=sub_id)
+    await client.finalize()
+
+    timestamps_info = timestamps_info["data"]["on_timestamps_received"]
+    assert timestamps_info["now_date_typename"] == "date"
+    assert timestamps_info["now_date"] == str(now.date())
+    assert timestamps_info["now_datetime_typename"] == "datetime"
+    assert timestamps_info["now_datetime"] == str(now)
+    assert timestamps_info["now_time_typename"] == "time"
+    assert timestamps_info["now_time"] == str(now.time())
