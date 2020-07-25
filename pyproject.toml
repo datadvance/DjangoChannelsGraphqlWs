@@ -52,10 +52,10 @@ aiohttp = "^3.5"
 asgiref = "^3.2"
 channels = "^2.2"
 dataclasses = {version = "^0.7", python = "~3.6"}
-django = ">=2.2"
+django = ">=2.2, <4"
 graphene = "^2.1"
 graphql-core = ">=2.2"
-msgpack = "^0.6.1"
+msgpack = ">=0.6.1, <2"
 [tool.poetry.dev-dependencies]
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/versions/
