@@ -23,6 +23,17 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.7.2] - 2020-07-26
+
+- Quadratic growth of threads number has stopped. The problem was
+  observer on Python 3.6 and 3.7 and was not on 3.8, because starting
+  with 3.8 `ThreadPoolExecutor` does not spawn new thread if there are
+  idle threads in the pool already. The issue was in the fact that for
+  each of worker thread we run an event loop which default executor is
+  the `ThreadPoolExecutor` with default (by Python) number of threads.
+  All this eventually ended up in hundreds of thread created for each
+  `GraphqlWsConsumer` subclass.
+
 ## [0.7.1] - 2020-07-25
 
 - Python 3.6 compatibility brought back.
