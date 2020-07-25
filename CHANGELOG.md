@@ -23,6 +23,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.7.0] - 2020-07-25
+
+- Subscription `payload` now properly serializes the following Python
+  `datetime` types:
+  - `datetime.datetime`
+  - `datetime.date`
+  - `datetime.time`
+
 ## [0.6.0] - 2020-07-25
 
 - Allow `msgpack v1.*` in the dependencies requirements.
