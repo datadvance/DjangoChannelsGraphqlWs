@@ -519,9 +519,9 @@ _A reminder of how to setup an environment for the development._
    It is important to install Poetry into the system Python, NOT in your
    virtual environment. For details see Poetry docs: https://python-poetry.org/docs/#installation
 4. Create local virtualenv in `.venv`, install all project dependencies
-   (from `pyproject.toml`):
+   (from `pyproject.toml`) except the project itself.
    ```shell
-   $ poetry install
+   $ poetry install --no-root
    ```
 5. Activate virtualenv
    There are options:
