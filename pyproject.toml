@@ -125,6 +125,9 @@ virtual_env = "./.venv/"
 [tool.pylint.MASTER]
 # Work in parallel.
 jobs = "0"
+# pylint-django disabled due to a bug. Here is the ticket:
+# https://github.com/PyCQA/pylint-django/issues/276
+#load-plugins = "pylint_quotes,pylint_django"
 load-plugins = "pylint_quotes"
 # Do not store results of previous runs.
 persistent = "no"
