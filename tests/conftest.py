@@ -48,6 +48,7 @@ def event_loop(request):
     keep the proper solution here as well.
 
     """
+    del request
     if sys.platform == "win32" and sys.version_info.minor >= 8:
         asyncio.set_event_loop_policy(
             asyncio.WindowsSelectorEventLoopPolicy()  # pylint: disable=no-member

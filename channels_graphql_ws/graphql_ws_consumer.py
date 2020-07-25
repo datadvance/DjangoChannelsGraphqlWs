@@ -725,7 +725,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Enqueue the `publish` method execution. But do not notify
         # clients when `publish` returns `SKIP`.
-        stream = trigger.map(publish_callback).filter(
+        stream = trigger.map(publish_callback).filter(  # pylint: disable=no-member
             lambda publish_returned: publish_returned is not self.SKIP
         )
 
