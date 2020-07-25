@@ -23,6 +23,7 @@
 
 import datetime
 import random
+import sys
 import textwrap
 import uuid
 
@@ -31,6 +32,14 @@ import graphene
 import pytest
 
 import channels_graphql_ws
+
+
+# Use `backports-datetime-fromisoformat` to monkeypatch `datetime` cause
+# in Python 3.6 it does not have `fromisoformat` we use below.
+if sys.version_info < (3, 7):
+    import backports.datetime_fromisoformat  # pylint: disable=import-error
+
+    backports.datetime_fromisoformat.MonkeyPatch.patch_fromisoformat()
 
 
 @pytest.mark.asyncio
