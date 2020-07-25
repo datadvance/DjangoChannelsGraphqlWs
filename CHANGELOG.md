@@ -23,6 +23,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.7.3] - 2020-07-26
+
+- Logging slightly improved. Thanks to @edouardtheron.
+
 ## [0.7.2] - 2020-07-26
 
 - Quadratic growth of threads number has stopped. The problem was
