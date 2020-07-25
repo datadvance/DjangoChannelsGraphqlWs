@@ -111,10 +111,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     subscription_confirmation_message = {"data": None, "errors": None}
 
     # The maximum number of threads designated for GraphQL requests
-    # processing. `None` means that default value is used. According to
-    # the Python documentation it is "the number of processors on the
-    # machine, multiplied by 5". See the `ThreadPoolExecutor` docs for
-    # details:
+    # processing. `None` means that default value is used. Default
+    # value depends on the Python version, check its documentation:
     # https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
     max_worker_threads = None
 
