@@ -928,11 +928,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             """Wrap the `func` to init eventloop and to cleanup."""
             # Create an eventloop if this worker thread does not have
             # one yet. Eventually each worker will have its own
-            # eventloop for `func` can use it.
+            # eventloop so `func` can use it.
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
+                # Force the event loop of the worker thread have a
+                # single-threaded default executor, otherwise the total
+                # number of threads may (and will) grow up to the value
+                # of `default_max_workers * default_max_workers` for
+                # each `GraphqlWsConsumer` subclass!
+                loop.set_default_executor(
+                    concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                )
                 asyncio.set_event_loop(loop)
 
             # Run a given function in a thread.
