@@ -23,6 +23,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.6.0] - 2020-07-25
+
+- Allow `msgpack v1.*` in the dependencies requirements.
+- Windows support improved: tests fixed, example fixed.
+- Development instructions updated in the `README.md`.
+- Removed `graphql-core` version lock, it is hold by `graphene` anyway.
+- Many CI-related fixes.
+
 ## [0.5.0] - 2020-04-05
 
 - Added support for Python 3.6.
