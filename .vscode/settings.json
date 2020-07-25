@@ -84,7 +84,6 @@
     "python.linting.pydocstyleEnabled": true,
     "python.linting.pylintEnabled": true,
     "python.linting.pylintUseMinimalCheckers": false,
-    "python.pythonPath": ".venv/bin/python",
     "python.sortImports.args": ["--virtual-env", "${workspaceFolder}/.venv"],
     "python.testing.autoTestDiscoverOnSaveEnabled": true,
     "python.testing.nosetestsEnabled": false,
