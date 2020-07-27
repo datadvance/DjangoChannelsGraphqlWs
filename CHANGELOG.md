@@ -23,6 +23,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.7.4] - 2020-07-27
+
+- Client method 'execute' consumes 'complete' message in case of error.
+
 ## [0.7.3] - 2020-07-26
 
 - Logging slightly improved. Thanks to @edouardtheron.
