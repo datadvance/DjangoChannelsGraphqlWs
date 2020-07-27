@@ -163,9 +163,11 @@ class GraphqlWsClient:
 
         """
         msg_id = await self.start(query, variables=variables)
-        resp = await self.receive(wait_id=msg_id)
-        # Consume 'complete' message.
-        await self.receive(wait_id=msg_id)
+        try:
+            resp = await self.receive(wait_id=msg_id)
+        finally:
+            # Consume 'complete' message.
+            await self.receive(wait_id=msg_id)
         return resp
 
     async def subscribe(self, query, *, variables=None, wait_confirmation=True):
