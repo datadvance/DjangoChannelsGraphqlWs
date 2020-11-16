@@ -349,7 +349,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         else:
             error_msg = f"Message of unknown type '{msg_type}' received!"
             task = self._send_gql_error(
-                content["id"] if "id" in content else -1, error_msg,
+                content["id"] if "id" in content else -1,
+                error_msg,
             )
             LOG.warning("GraphQL WS Client error: %s", error_msg)
 
@@ -846,6 +847,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 operation_id,
                 "".join(traceback.format_exception(type(ex), ex, tb)).strip(),
             )
+
+        if data and isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, promise.Promise):
+                    data[key] = value.value
 
         await self.send_json(
             {
