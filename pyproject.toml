@@ -125,11 +125,11 @@ virtual_env = "./.venv/"
 #   http://pylint.pycqa.org/en/latest/technical_reference/features.html
 [tool.pylint.MASTER]
 # Work in parallel.
-jobs = "0"
-# pylint-django disabled due to a bug. Here is the ticket:
+# Parallel work disabled due to a bug in the pylint-django:
 # https://github.com/PyCQA/pylint-django/issues/276
-#load-plugins = "pylint_quotes,pylint_django"
-load-plugins = "pylint_quotes"
+#jobs = "0"
+jobs = "1"
+load-plugins = "pylint_quotes,pylint_django"
 # Do not store results of previous runs.
 persistent = "no"
 # Allow to load C extension modules.
