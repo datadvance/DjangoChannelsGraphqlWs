@@ -24,7 +24,6 @@
 
 {
     "cSpell.enabled": true,
-    "cSpell.version": "0.1",
     "cSpell.allowCompoundWords": true,
     "cSpell.words": [
         "addfinalizer",
@@ -89,5 +88,6 @@
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestArgs": ["-n8"],
     "python.testing.pytestEnabled": true,
-    "python.testing.unittestEnabled": false
+    "python.testing.unittestEnabled": false,
+    "python.pythonPath": ".venv/bin/python3"
 }
