@@ -349,7 +349,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         else:
             error_msg = f"Message of unknown type '{msg_type}' received!"
             task = self._send_gql_error(
-                content["id"] if "id" in content else -1, error_msg,
+                content["id"] if "id" in content else -1,
+                error_msg,
             )
             LOG.warning("GraphQL WS Client error: %s", error_msg)
 
@@ -569,7 +570,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 """
 
                 # Avoid circular imports with local import.
-                # pylint: disable=import-outside-toplevel
+                # pylint: disable=import-outside-toplevel,cyclic-import
                 from .subscription import Subscription
 
                 # We do not expose `Subscription._subscribe` because

@@ -41,11 +41,11 @@ if __name__ == "__main__":
         # other exceptions on Python 2.
         try:
             import django  # pylint: disable=unused-import
-        except ImportError:
+        except ImportError as ex:
             raise ImportError(
                 "Could not import Django. Are you sure it is installed and "
                 "available on your PYTHONPATH environment variable? Did you "
                 "forget to activate a virtual environment?"
-            )
+            ) from ex
         raise
     execute_from_command_line(sys.argv)
