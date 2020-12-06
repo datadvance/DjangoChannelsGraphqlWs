@@ -23,6 +23,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.7.5] - 2020-12-06
+
+- Django channel name added to the context as the `channel_name` record.
+- Python dependencies updated.
+
 ## [0.7.4] - 2020-07-27
 
 - Client method 'execute' consumes 'complete' message in case of error.
