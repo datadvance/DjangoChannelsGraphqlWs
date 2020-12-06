@@ -550,6 +550,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # from the dict-like one provided by the Channels.
             context = ScopeAsContext(self.scope)
 
+            # Adding channel name to the context because it seems to be
+            # useful for some use cases, take a loot at the issue from
+            # more details:
+            # https://github.com/datadvance/DjangoChannelsGraphqlWs/issues/41#issuecomment-663951595
+            context["channel_name"] = self.channel_name
+
             # The `register` will be called from the worker thread
             # (spawned for a GraphQL processing) when a client
             # subscribes. So we "synchronize" it with `async_to_sync`.
