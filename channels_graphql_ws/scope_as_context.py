@@ -69,3 +69,7 @@ class ScopeAsContext:
     def __str__(self):
         """Wrap dict method."""
         return self._scope.__str__()
+
+    def __repr__(self):
+        """Wrap dict method."""
+        return self._scope.__repr__()
