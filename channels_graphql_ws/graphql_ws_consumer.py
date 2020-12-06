@@ -45,8 +45,8 @@ import functools
 import logging
 import traceback
 import types
-from typing import Any, Callable, Dict, List, Optional, Sequence
 import weakref
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import asgiref.sync
 import channels.generic.websocket as ch_websocket
@@ -60,7 +60,6 @@ import rx
 
 from .scope_as_context import ScopeAsContext
 from .serializer import Serializer
-
 
 # Module logger.
 LOG = logging.getLogger(__name__)

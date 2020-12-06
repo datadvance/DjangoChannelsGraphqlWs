@@ -43,7 +43,6 @@ import graphene.utils.props
 from .graphql_ws_consumer import GraphqlWsConsumer
 from .serializer import Serializer
 
-
 # Module logger.
 LOG = logging.getLogger(__name__)
 

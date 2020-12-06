@@ -27,7 +27,6 @@ import os
 import pathlib
 import sys
 
-
 # Append directory where `channels_graphqlws` package resides.
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 

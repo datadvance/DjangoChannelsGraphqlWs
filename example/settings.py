@@ -28,9 +28,8 @@
 import asyncio
 import pathlib
 import sys
-from typing import List
 import uuid
-
+from typing import List
 
 # NOTE: On Windows with Python 3.8 enable selector back (default seems
 # to be changed in Python 3.8), otherwise we get `NotImplementedError`

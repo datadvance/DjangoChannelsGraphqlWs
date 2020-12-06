@@ -23,10 +23,10 @@
 
 # NOTE: The GraphQL schema is defined at the end of the file.
 
-from datetime import datetime
 import textwrap
 import time
 import uuid
+from datetime import datetime
 
 import graphene
 import pytest

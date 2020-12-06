@@ -28,7 +28,6 @@ import django.core.serializers
 import django.db
 import msgpack
 
-
 # Module logger.
 LOG = logging.getLogger(__name__)
 

@@ -26,7 +26,6 @@ import pathlib
 import plumbum
 import pytest
 
-
 SOURCE_DIRS = ["channels_graphql_ws/", "tests/", "example/"]
 PROJECT_ROOT_DIR = pathlib.Path(__file__).absolute().parent.parent
 

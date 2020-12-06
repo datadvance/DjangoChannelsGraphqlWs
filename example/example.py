@@ -21,8 +21,8 @@
 
 """Simple example of the DjangoChannelsGraphqlWs."""
 
-from collections import defaultdict
 import pathlib
+from collections import defaultdict
 from typing import DefaultDict, List
 
 import asgiref
@@ -35,7 +35,6 @@ import graphene
 import graphene_django.types
 
 import channels_graphql_ws
-
 
 # It is OK, Graphene works this way.
 # pylint: disable=no-self-use,unsubscriptable-object,invalid-name
