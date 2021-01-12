@@ -47,7 +47,7 @@ packages = [
 [tool.poetry.dependencies]
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/versions/
-python = "^3.8"
+python = "^3.6"
 aiohttp = "^3.7"
 asgiref = "^3.2"
 backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
