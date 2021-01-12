@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2020
+# Copyright (C) DATADVANCE, 2010-2021
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -18,7 +18,6 @@
 # CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 
 """Django settings for the test project `example`."""
 
@@ -60,7 +59,6 @@ if sys.platform == "win32" and sys.version_info.minor >= 8:
     asyncio.set_event_loop_policy(
         asyncio.WindowsSelectorEventLoopPolicy()  # pylint: disable=no-member
     )
-
 
 BASE_DIR = pathlib.Path(__file__).absolute().parent.parent
 SECRET_KEY = str(uuid.uuid4())

@@ -1,5 +1,5 @@
 <!--
-Copyright (C) DATADVANCE, 2010-2020
+Copyright (C) DATADVANCE, 2010-2021
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the
@@ -22,6 +22,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -->
 
 # Changelog
+
+## [0.8.0] - 2021-01-12
+
+- Channels upgrade from ^2.4 to ^3.0
+- Year changed `2020` -> `2021`
 
 ## [0.7.5] - 2020-12-06
 

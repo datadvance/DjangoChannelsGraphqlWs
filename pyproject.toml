@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2020
+# Copyright (C) DATADVANCE, 2010-2021
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -26,7 +26,7 @@
 
 # --------------------------------------------------------- BUILD-SYSTEM
 [build-system]
-requires = ["poetry>=0.12"]
+requires = ["poetry>=1.1.4"]
 build-backend = "poetry.masonry.api"
 
 # --------------------------------------------------------------- POETRY
@@ -34,7 +34,7 @@ build-backend = "poetry.masonry.api"
 # Docs: https://python-poetry.org/docs/
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.7.5"
+version = "0.8.0"
 description = """Django Channels based WebSocket GraphQL server with \
                  Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
@@ -47,15 +47,15 @@ packages = [
 [tool.poetry.dependencies]
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/versions/
-python = "^3.6.0"
-aiohttp = "^3.5"
+python = "^3.8"
+aiohttp = "^3.7"
 asgiref = "^3.2"
 backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
-channels = "^2.2"
-dataclasses = {version = "^0.7", python = "~3.6"}
-django = ">=2.2, <4"
+channels = "^3"
+dataclasses = {version = "^0.8", python = "~3.6"}
+django = ">=3.1.5, <4"
 graphene = "^2.1"
-graphql-core = ">=2.2"
+graphql-core = ">=2.3"
 msgpack = ">=0.6.1, <2"
 [tool.poetry.dev-dependencies]
 # Development dependencies.

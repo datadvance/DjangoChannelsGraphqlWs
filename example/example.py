@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2020
+# Copyright (C) DATADVANCE, 2010-2021
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -275,15 +275,18 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
 # https://channels.readthedocs.io/en/latest/topics/authentication.html
 application = channels.routing.ProtocolTypeRouter(
     {
+        "http": django.core.asgi.get_asgi_application(),
         "websocket": channels.auth.AuthMiddlewareStack(
             channels.routing.URLRouter(
-                [django.urls.path("graphql/", MyGraphqlWsConsumer)]
+                [django.urls.path("graphql/", MyGraphqlWsConsumer.as_asgi())]
             )
-        )
+        ),
     }
 )
 
 # -------------------------------------------------------------------- URL CONFIGURATION
+
+
 def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
     del request
