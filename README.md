@@ -530,10 +530,6 @@ _A reminder of how to setup an environment for the development._
      ```shell
      $ poetry shell
      ```
-   - Using DirEnv:
-     ```shell
-     $ direnv allow && cd .. && cd -
-     ```
    - Manually:
      ```shell
      $ source .venv/bin/activate
