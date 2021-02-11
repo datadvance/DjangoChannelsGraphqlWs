@@ -137,6 +137,11 @@ max-module-lines="9000" # Right, over nine thousand!
 docstring-quote = "double"
 string-quote = "double-avoid-escape"
 triple-quote = "double"
+[tool.pylint.PYLINT_DJANGO]
+# NOTE: When Pytest runs Pylint this setting is overwritten by the
+# environment variable `DJANGO_SETTINGS_MODULE` set by `pytest-django`.
+# Anyway, the setting is still useful when VS Code runs Pylint directly.
+django-settings-module = "example.settings"
 [tool.pylint.REFACTORING]
 # We have line length 88, no need to check.
 max-nested-blocks = "9000"

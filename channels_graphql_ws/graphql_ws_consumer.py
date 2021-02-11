@@ -860,7 +860,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 "payload": {
                     "data": data,
                     **(
-                        {"errors": [self._format_error(e) for e in errors]}
+                        {
+                            "errors": [  # type: ignore
+                                self._format_error(e) for e in errors
+                            ]
+                        }
                         if errors
                         else {}
                     ),
