@@ -128,7 +128,7 @@ class MySubscription(channels_graphql_ws.Subscription):
         """Called when user subscribes."""
 
         # Return the list of subscription group names.
-        return ['group42']
+        return ["group42"]
 
     @staticmethod
     def publish(payload, info, arg1, arg2):
@@ -140,7 +140,7 @@ class MySubscription(channels_graphql_ws.Subscription):
         # client. For example, this allows to avoid notifications for
         # the actions made by this particular client.
 
-        return MySubscription(event='Something has happened!')
+        return MySubscription(event="Something has happened!")
 
 class Query(graphene.ObjectType):
     """Root GraphQL query."""
@@ -186,8 +186,8 @@ Setup Django Channels routing:
 
 ```python
 application = channels.routing.ProtocolTypeRouter({
-    'websocket': channels.routing.URLRouter([
-        django.urls.path('graphql/', MyGraphqlWsConsumer),
+    "websocket": channels.routing.URLRouter([
+        django.urls.path("graphql/", MyGraphqlWsConsumer.as_asgi()),
     ])
 })
 ```
@@ -199,7 +199,7 @@ there is no running event loop:
 ```python
 MySubscription.broadcast(
     # Subscription group to notify clients in.
-    group='group42',
+    group="group42",
     # Dict delivered to the `publish` method.
     payload={},
 )
@@ -211,14 +211,14 @@ using the `broadcast()` or `broadcast_async()` method:
 ```python
 await MySubscription.broadcast(
     # Subscription group to notify clients in.
-    group='group42',
+    group="group42",
     # Dict delivered to the `publish` method.
     payload={},
 )
 ```
 
-<a name="redis-layer">﹡)</a> In case you are testing your client code by
-notifying it from the Django Shell, you have to setup a
+<a name="redis-layer">﹡)</a> In case you are testing your client code
+by notifying it from the Django Shell, you have to setup a
 [channel layer](https://channels.readthedocs.io/en/latest/topics/channel_layers.html#configuration)
 in order for the two instance of your application. The same applies in
 production with workers.
@@ -232,7 +232,7 @@ Run:
 cd example/
 # Initialize database.
 ./manage.py migrate
-# Create 'user' with password 'user'.
+# Create "user" with password "user".
 ./manage.py createsuperuser
 # Run development server.
 ./manage.py runserver
@@ -355,9 +355,9 @@ application into the  `channels.auth.AuthMiddlewareStack`:
 
 ```python
 application = channels.routing.ProtocolTypeRouter({
-    'websocket': channels.auth.AuthMiddlewareStack(
+    "websocket": channels.auth.AuthMiddlewareStack(
         channels.routing.URLRouter([
-            django.urls.path('graphql/', MyGraphqlWsConsumer),
+            django.urls.path("graphql/", MyGraphqlWsConsumer),
         ])
     ),
 })
@@ -428,10 +428,11 @@ See the `GraphqlWsClient` class docstring for the details.
 
 ### The GraphiQL client
 
-The GraphiQL provided by Graphene doesn't connect to your GraphQL endpoint
-via WebSocket ; instead you should use a modified GraphiQL template under
-`graphene/graphiql.html` which will take precedence over the one of Graphene.
-One such modified GraphiQL is provided in the [example](example/) directory.
+The GraphiQL provided by Graphene doesn't connect to your GraphQL
+endpoint via WebSocket ; instead you should use a modified GraphiQL
+template under `graphene/graphiql.html` which will take precedence over
+the one of Graphene. One such modified GraphiQL is provided in the
+[example](example/) directory.
 
 ### Testing
 

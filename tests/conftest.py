@@ -143,7 +143,7 @@ def gql(db, request):
         application = channels.routing.ProtocolTypeRouter(
             {
                 "websocket": channels.routing.URLRouter(
-                    [django.urls.path("graphql/", ChannelsConsumer)]
+                    [django.urls.path("graphql/", ChannelsConsumer.as_asgi())]
                 )
             }
         )

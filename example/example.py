@@ -31,6 +31,7 @@ import channels.auth
 import django
 import django.contrib.admin
 import django.contrib.auth
+import django.core.asgi
 import graphene
 import graphene_django.types
 
@@ -275,11 +276,12 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
 # https://channels.readthedocs.io/en/latest/topics/authentication.html
 application = channels.routing.ProtocolTypeRouter(
     {
+        "http": django.core.asgi.get_asgi_application(),
         "websocket": channels.auth.AuthMiddlewareStack(
             channels.routing.URLRouter(
-                [django.urls.path("graphql/", MyGraphqlWsConsumer)]
+                [django.urls.path("graphql/", MyGraphqlWsConsumer.as_asgi())]
             )
-        )
+        ),
     }
 )
 

@@ -48,12 +48,12 @@ packages = [
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/versions/
 python = "^3.6.0"
-aiohttp = "^3.5"
-asgiref = "^3.2"
+aiohttp = "^3"
+asgiref = "^3"
 backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
-channels = "^2.2"
+channels = "^3"
 dataclasses = {version = "^0.7", python = "~3.6"}
-django = ">=2.2, <4"
+Django = "^3"
 graphene = "^2.1"
 graphql-core = ">=2.2"
 msgpack = ">=0.6.1, <2"
