@@ -23,6 +23,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.8.0] - 2021-02-12
+
+- Switched to Channels 3.
+- Python dependencies updated.
+
 ## [0.7.5] - 2020-12-06
 
 - Django channel name added to the context as the `channel_name` record.
