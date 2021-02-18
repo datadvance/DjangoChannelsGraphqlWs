@@ -356,6 +356,7 @@ class Subscription(graphene.ObjectType):
         _meta.subscribe = get_function(subscribe)
         _meta.publish = get_function(publish)
         _meta.unsubscribed = get_function(unsubscribed)
+        _meta.initial_payload = options.get("initial_payload", cls.SKIP)
 
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
@@ -422,7 +423,9 @@ class Subscription(graphene.ObjectType):
             # `subscribe`.
             return result
 
-        return register_subscription(groups, publish_callback, unsubscribed_callback)
+        return register_subscription(
+            groups, publish_callback, unsubscribed_callback, cls._meta.initial_payload
+        )
 
     @classmethod
     def _group_name(cls, group=None):

@@ -58,7 +58,7 @@ import graphql.execution.executors.asyncio
 import promise
 import rx
 
-from .scope_as_context import ScopeAsContext
+from .operation_context import OperationContext
 from .serializer import Serializer
 
 # Module logger.
@@ -547,7 +547,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Create object-like context (like in `Query` or `Mutation`)
             # from the dict-like one provided by the Channels.
-            context = ScopeAsContext(self.scope)
+            context = OperationContext(self.scope)
 
             # Adding channel name to the context because it seems to be
             # useful for some use cases, take a loot at the issue from
@@ -671,7 +671,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 await self._send_gql_complete(operation_id)
 
     async def _register_subscription(
-        self, operation_id, groups, publish_callback, unsubscribed_callback
+        self,
+        operation_id,
+        groups,
+        publish_callback,
+        unsubscribed_callback,
+        initial_payload,
     ):
         """Register a new subscription when client subscribes.
 
@@ -701,61 +706,74 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # `_sids_by_group` without any locks.
         self._assert_thread()
 
-        # The subject we will trigger on the `broadcast` message.
-        trigger = rx.subjects.Subject()
-
         # The subscription notification queue.
         notification_queue = asyncio.Queue(
             maxsize=self.subscription_notification_queue_limit
         )
 
+        # Enqueue the initial payload.
+        if initial_payload is not self.SKIP:
+            notification_queue.put_nowait(Serializer.serialize(initial_payload))
+
         # Start an endless task which listens the `notification_queue`
         # and invokes subscription "resolver" on new notifications.
-        async def notifier():
+        async def notifier(observer: rx.Observer):
             """Watch the notification queue and notify clients."""
 
             # Assert we run in a proper thread.
             self._assert_thread()
             while True:
-                payload = await notification_queue.get()
+                serialized_payload = await notification_queue.get()
+
                 # Run a subscription's `publish` method (invoked by the
-                # `trigger.on_next` function) within the threadpool used
+                # `observer.on_next` function) within the threadpool used
                 # for processing other GraphQL resolver functions.
-                # NOTE: `lambda` is important to run the deserialization
+                # NOTE: it is important to run the deserialization
                 # in the worker thread as well.
-                await self._run_in_worker(
-                    lambda: trigger.on_next(Serializer.deserialize(payload))
-                )
+                def workload():
+                    try:
+                        payload = Serializer.deserialize(serialized_payload)
+                    except Exception as ex:  # pylint: disable=broad-except
+                        observer.on_error(f"Cannot deserialize payload. {ex}")
+                    else:
+                        observer.on_next(payload)
+
+                await self._run_in_worker(workload)
+
                 # Message processed. This allows `Queue.join` to work.
                 notification_queue.task_done()
 
+        def push_payloads(observer: rx.Observer):
+            # Start listening for broadcasts (subscribe to the Channels
+            # groups), spawn the notification processing task and put
+            # subscription information into the registry.
+            # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
+            # atomic i.e. without `awaits` in between.
+            for group in groups:
+                self._sids_by_group.setdefault(group, []).append(operation_id)
+            notifier_task = self._spawn_background_task(notifier(observer))
+            self._subscriptions[operation_id] = self._SubInf(
+                groups=groups,
+                sid=operation_id,
+                unsubscribed_callback=unsubscribed_callback,
+                notification_queue=notification_queue,
+                notifier_task=notifier_task,
+            )
+
+        await asyncio.wait(
+            [
+                self._channel_layer.group_add(group, self.channel_name)
+                for group in groups
+            ]
+        )
+
         # Enqueue the `publish` method execution. But do not notify
         # clients when `publish` returns `SKIP`.
-        stream = trigger.map(publish_callback).filter(  # pylint: disable=no-member
-            lambda publish_returned: publish_returned is not self.SKIP
+        return (
+            rx.Observable.create(push_payloads)  # pylint: disable=no-member
+            .map(publish_callback)
+            .filter(lambda publish_returned: publish_returned is not self.SKIP)
         )
-
-        # Start listening for broadcasts (subscribe to the Channels
-        # groups), spawn the notification processing task and put
-        # subscription information into the registry.
-        # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
-        # atomic i.e. without `awaits` in between.
-        waitlist = []
-        for group in groups:
-            self._sids_by_group.setdefault(group, []).append(operation_id)
-            waitlist.append(self._channel_layer.group_add(group, self.channel_name))
-        notifier_task = self._spawn_background_task(notifier())
-        self._subscriptions[operation_id] = self._SubInf(
-            groups=groups,
-            sid=operation_id,
-            unsubscribed_callback=unsubscribed_callback,
-            notification_queue=notification_queue,
-            notifier_task=notifier_task,
-        )
-
-        await asyncio.wait(waitlist)
-
-        return stream
 
     async def _on_gql_stop(self, operation_id):
         """Process the STOP message.
