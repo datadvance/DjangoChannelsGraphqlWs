@@ -46,7 +46,7 @@ packages = [
 ]
 [tool.poetry.dependencies]
 # Production dependencies.
-# Version syntax: https://python-poetry.org/docs/versions/
+# Version syntax: https://python-poetry.org/docs/dependency-specification/
 python = "^3.6.0"
 aiohttp = "^3"
 asgiref = "^3"
@@ -59,7 +59,7 @@ graphql-core = ">=2.2"
 msgpack = ">=0.6.1, <2"
 [tool.poetry.dev-dependencies]
 # Development dependencies.
-# Version syntax: https://python-poetry.org/docs/versions/
+# Version syntax: https://python-poetry.org/docs/dependency-specification/
 black = { version = "*", allow-prereleases = true }
 channels-redis = "*"
 coverage = "*"
@@ -80,6 +80,7 @@ pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
 tox = "*"
+types-dataclasses = {version = "*", python = "~3.6"}
 
 # ---------------------------------------------------------------- BLACK
 # Black - the uncompromising code formatter.
@@ -169,7 +170,7 @@ omit = ["**/test_*.py"]
 legacy_tox_ini = """
 [tox]
 isolated_build = true
-envlist = py36,py37,py38
+envlist = py36,py37,py38,py39
 [testenv]
 whitelist_externals = poetry
 commands_pre = poetry install -v
