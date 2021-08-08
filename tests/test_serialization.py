@@ -38,7 +38,7 @@ import channels_graphql_ws
 if sys.version_info < (3, 7):
     import backports.datetime_fromisoformat  # pylint: disable=import-error
 
-    backports.datetime_fromisoformat.MonkeyPatch.patch_fromisoformat()
+    backports.datetime_fromisoformat.MonkeyPatch.patch_fromisoformat()  # pylint: disable=no-member
 
 
 @pytest.mark.asyncio
