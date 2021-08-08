@@ -27,7 +27,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-channels-graphql-ws.svg)](https://pypi.org/project/django-channels-graphql-ws/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/django-channels-graphql-ws)](https://pypi.org/project/django-channels-graphql-ws/)
 [![GitHub Release Date](https://img.shields.io/github/release-date/datadvance/DjangoChannelsGraphqlWs)](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
-[![Travis CI Build Status](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs.svg?branch=master)](https://travis-ci.org/datadvance/DjangoChannelsGraphqlWs)
+[![Travis CI Build Status](https://travis-ci.com/datadvance/DjangoChannelsJobmanager.svg?branch=master)](https://travis-ci.com/datadvance/DjangoChannelsJobmanager)
 [![GitHub Actions Tests](https://github.com/datadvance/DjangoChannelsGraphqlWs/workflows/Tests/badge.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/actions?query=workflow%3ATests)
 [![Code style](https://img.shields.io/badge/code%20style-black-black.svg)](https://github.com/ambv/black)
 [![PyPI - License](https://img.shields.io/pypi/l/django-channels-graphql-ws.svg)](https://github.com/datadvance/DjangoChannelsGraphqlWs/blob/master/LICENSE)
@@ -515,7 +515,7 @@ _A reminder of how to setup an environment for the development._
    ```
 3. Install Poetry to the system Python.
    ```shell
-   $ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
+   $ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
    ```
    It is important to install Poetry into the system Python, NOT in your
    virtual environment. For details see Poetry docs: https://python-poetry.org/docs/#installation
