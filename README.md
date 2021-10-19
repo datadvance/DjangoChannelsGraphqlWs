@@ -115,6 +115,9 @@ import graphene
 class MySubscription(channels_graphql_ws.Subscription):
     """Simple GraphQL subscription."""
 
+    # Leave only latest 64 messages in the server queue.
+    notification_queue_limit = 64
+
     # Subscription payload.
     event = graphene.String()
 

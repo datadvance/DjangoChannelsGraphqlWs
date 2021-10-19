@@ -421,11 +421,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 except asyncio.QueueFull:
                     # The queue is full - issue a warning and throw away
                     # the oldest item from the queue.
-                    LOG.warning(
-                        "Subscription notification dropped!"
-                        " Subscription operation id: %s.",
-                        sid,
-                    )
+                    # NOTE: Queue with the size 1 means that it is safe
+                    # to drop intermediate notifications.
+                    if subinf.notification_queue.maxsize != 1:
+                        LOG.warning(
+                            "Subscription notification dropped!"
+                            " Subscription operation id: %s.",
+                            sid,
+                        )
                     subinf.notification_queue.get_nowait()
 
     async def unsubscribe(self, message):
@@ -671,7 +674,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 await self._send_gql_complete(operation_id)
 
     async def _register_subscription(
-        self, operation_id, groups, publish_callback, unsubscribed_callback
+        self,
+        operation_id,
+        groups,
+        publish_callback,
+        unsubscribed_callback,
+        notification_queue_limit=None,
     ):
         """Register a new subscription when client subscribes.
 
@@ -689,6 +697,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 subscription groups current subscription belongs to.
             unsubscribed_callback: Called to notify when a client
                 unsubscribes.
+            notification_queue_limit: LImit for the subscribtion
+                notification queue. Default is used if not set.
 
         """
         # NOTE: It is important to invoke `group_add` from an
@@ -705,9 +715,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         trigger = rx.subjects.Subject()
 
         # The subscription notification queue.
-        notification_queue = asyncio.Queue(
-            maxsize=self.subscription_notification_queue_limit
-        )
+        queue_size = notification_queue_limit
+        if not queue_size or queue_size < 0:
+            queue_size = self.subscription_notification_queue_limit
+        notification_queue = asyncio.Queue(maxsize=queue_size)
 
         # Start an endless task which listens the `notification_queue`
         # and invokes subscription "resolver" on new notifications.
