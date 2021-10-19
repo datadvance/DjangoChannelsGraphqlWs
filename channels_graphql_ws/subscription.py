@@ -148,6 +148,15 @@ class Subscription(graphene.ObjectType):
     # Return this from the `publish` to suppress the notification.
     SKIP = GraphqlWsConsumer.SKIP
 
+    # Subscription notifications queue limit. Set this to control the
+    # amount of notifications server keeps in queue when notifications
+    # come faster than server processing them. Set this limit to 1 drops
+    # all notifications in queue except the latest one. Use this only if
+    # you are sure that subscription always returns all required state
+    # to the client and client does not loose information when
+    # intermediate notification is missed.
+    notification_queue_limit = None
+
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
@@ -422,7 +431,12 @@ class Subscription(graphene.ObjectType):
             # `subscribe`.
             return result
 
-        return register_subscription(groups, publish_callback, unsubscribed_callback)
+        return register_subscription(
+            groups,
+            publish_callback,
+            unsubscribed_callback,
+            cls.notification_queue_limit,
+        )
 
     @classmethod
     def _group_name(cls, group=None):
