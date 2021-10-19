@@ -582,13 +582,14 @@ _A reminder of how to run tests._
 
 _A reminder of how to make and publish a new release._
 
-1. Update version: `poetry version minor`.
-2. Update [CHANGELOG.md](./CHANGELOG.md).
-3. Update [README.md](./README.md) (if needed).
-4. Commit changes made above.
-5. Git tag: `git tag vX.X.X && git push --tags`.
-6. Publish release to PyPI: `poetry publish --build`.
-7. Update
+1. Merge all changes to the master branch and switch to it.
+2. Update version: `poetry version minor`.
+3. Update [CHANGELOG.md](./CHANGELOG.md).
+4. Update [README.md](./README.md) (if needed).
+5. Commit changes made above.
+6. Git tag: `git tag vX.X.X && git push --tags`.
+7. Publish release to PyPI: `poetry publish --build`.
+8. Update
    [release notes](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
    on GitHub.
 

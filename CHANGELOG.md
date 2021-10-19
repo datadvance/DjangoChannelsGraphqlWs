@@ -23,6 +23,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [0.9.0] - 2021-10-19
+
+- Ability to configure server notification queue limit per subscribtion.
+
 ## [0.8.0] - 2021-02-12
 
 - Switched to Channels 3.
