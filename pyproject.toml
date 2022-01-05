@@ -49,9 +49,9 @@ packages = [
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 python = ">=3.8.0"
 aiohttp = "^3"
-asgiref = "^3"
+asgiref = "*"
 channels = "^3"
-Django = "^3"
+Django = "*"
 graphene = "^2.1"
 graphql-core = ">=2.2"
 msgpack = ">=0.6.1, <2"
