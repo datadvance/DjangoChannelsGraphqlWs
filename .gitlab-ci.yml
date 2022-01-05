@@ -70,4 +70,4 @@ pages:
     only:
         - master
     tags:
-        - python3.7
+        - python3.10
