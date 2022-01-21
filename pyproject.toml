@@ -47,7 +47,7 @@ packages = [
 [tool.poetry.dependencies]
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
-python = "^3.6.0"
+python = "^3.6.2"
 aiohttp = "^3"
 asgiref = "^3"
 backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
@@ -57,6 +57,7 @@ Django = "^3"
 graphene = "^2.1"
 graphql-core = ">=2.2"
 msgpack = ">=0.6.1, <2"
+black = "^21.12b0"
 [tool.poetry.dev-dependencies]
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
