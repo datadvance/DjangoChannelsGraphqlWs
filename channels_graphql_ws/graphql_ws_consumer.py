@@ -480,6 +480,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
         except Exception as ex:  # pylint: disable=broad-except
+            LOG.error(str(ex))
             await self._send_gql_connection_error(ex)
             # Close the connection.
             # NOTE: We use the 4000 code because there are two reasons:
@@ -491,7 +492,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # So mozilla offers us the following codes:
             # 4000–4999 - Available for use by applications.
             await self.close(code=4000)
-            LOG.error(str(ex))
         else:
             # Send CONNECTION_ACK message.
             await self._send_gql_connection_ack()
