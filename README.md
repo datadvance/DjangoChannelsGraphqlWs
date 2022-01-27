@@ -1,5 +1,5 @@
 <!--
-Copyright (C) DATADVANCE, 2010-2021
+Copyright (C) DATADVANCE, 2010-2022
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the
@@ -512,10 +512,19 @@ _A reminder of how to setup an environment for the development._
 
 1. Install PyEnv to be able to work with many Python versions at once
    [PyEnv→Installation](https://github.com/pyenv/pyenv#installation).
-2. Install Python versions needed:
+2. Install Python versions needed. The command should be executed in the project's directory:
    ```shell
    $ pyenv local | xargs -L1 pyenv install
    ```
+3. Check that pyenv works correctly. The command:
+   ```shell
+   $ pyenv versions
+   ```
+   should show python versions enlisted in [.python-version](.python-version).
+   If everything is set up correctly pyenv will switch version of python when
+   you enter and leave the project's directory. Inside the directory `pyenv which
+   python` should show you a python installed in pyenv, outside the dir it
+   should be the system python.
 3. Install Poetry to the system Python.
    ```shell
    $ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
