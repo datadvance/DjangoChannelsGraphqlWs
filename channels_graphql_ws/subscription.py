@@ -148,6 +148,11 @@ class Subscription(graphene.ObjectType):
     # Return this from the `publish` to suppress the notification.
     SKIP = GraphqlWsConsumer.SKIP
 
+    # Initial payload. Set it to send an "initial" response with this
+    # payload to a client as soon as it is subscribed (before any call
+    # to `Subscription.broadcast`).
+    initial_payload = GraphqlWsConsumer.SKIP
+
     # Subscription notifications queue limit. Set this to control the
     # amount of notifications server keeps in queue when notifications
     # come faster than server processing them. Set this limit to 1 drops
@@ -435,6 +440,7 @@ class Subscription(graphene.ObjectType):
             groups,
             publish_callback,
             unsubscribed_callback,
+            cls.initial_payload,
             cls.notification_queue_limit,
         )
 
