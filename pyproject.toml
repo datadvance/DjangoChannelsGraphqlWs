@@ -53,7 +53,7 @@ asgiref = "^3"
 backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
 channels = "^3"
 dataclasses = {version = "^0.7", python = "~3.6"}
-Django = "^3"
+Django = ">=2.2"
 graphene = "^2.1"
 graphql-core = ">=2.2"
 msgpack = ">=0.6.1, <2"
