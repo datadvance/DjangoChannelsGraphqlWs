@@ -367,11 +367,11 @@ python-versions = "*"
 
 [[package]]
 name = "django"
-version = "3.2.6"
+version = "4.0"
 description = "A high-level Python Web framework that encourages rapid development and clean, pragmatic design."
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.10"
 
 [package.dependencies]
 asgiref = ">=3.3.2,<4"
