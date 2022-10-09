@@ -91,7 +91,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.admin",
     "channels",
 ]
-ALLOWED_HOSTS = "*"
+ALLOWED_HOSTS = ["*"]
 STATIC_URL = "/static/"
 STATICFILES_FINDERS = ["django.contrib.staticfiles.finders.AppDirectoriesFinder"]
 # In this simple example we use in-process in-memory Channel layer.
