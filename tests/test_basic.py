@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -32,6 +32,8 @@ import graphene
 import pytest
 
 import channels_graphql_ws
+
+from .utils import CustomJSONString
 
 
 @pytest.mark.asyncio
@@ -100,13 +102,14 @@ async def test_main_usecase(gql):
     # Mutation response.
     resp = await client.receive(assert_id=msg_id, assert_type="data")
     assert resp["data"] == {"send_chat_message": {"message": message}}
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    resp = await client.receive(assert_id=msg_id, assert_type="complete")
 
+    print("Check that subscription notification were sent.")
     # Subscription notification.
     resp = await client.receive(assert_id=sub_id, assert_type="data")
     event = resp["data"]["on_chat_message_sent"]["event"]
     assert json.loads(event) == {
-        "user_id": UserId.ALICE,
+        "user_id": UserId.ALICE.value,  # pylint: disable=no-member
         "payload": message,
     }, "Subscription notification contains wrong data!"
 
@@ -197,7 +200,7 @@ async def test_subscribe_unsubscribe(gql):
                 }
                 """
             ),
-            "variables": "",
+            "variables": {},
             "operationName": "op_name",
         },
     )
@@ -404,7 +407,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = graphene.JSONString()
+    event = CustomJSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""

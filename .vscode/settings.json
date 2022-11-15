@@ -60,6 +60,7 @@
         "pylintrc",
         "pyproject",
         "pytest",
+        "rabbitmq",
         "rcfile",
         "repos",
         "sessionid",

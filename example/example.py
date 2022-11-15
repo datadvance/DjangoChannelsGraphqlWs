@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -38,7 +38,7 @@ import graphene_django.types
 import channels_graphql_ws
 
 # It is OK, Graphene works this way.
-# pylint: disable=no-self-use,unsubscriptable-object,invalid-name
+# pylint: disable=unsubscriptable-object,invalid-name
 
 # Fake storage for the chat history. Do not do this in production, it
 # lives only in memory of the running server and does not persist.
@@ -214,7 +214,7 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
         That allows to consider a structure of the `payload` as an
         implementation details.
         """
-        cls.broadcast(
+        cls.broadcast_sync(
             group=chatroom,
             payload={"chatroom": chatroom, "text": text, "sender": sender},
         )
@@ -229,7 +229,7 @@ class Subscription(graphene.ObjectType):
 # ----------------------------------------------------------- GRAPHQL WEBSOCKET CONSUMER
 
 
-def demo_middleware(next_middleware, root, info, *args, **kwds):
+async def demo_middleware(next_middleware, root, info, *args, **kwds):
     """Demo GraphQL middleware.
 
     For more information read:
@@ -241,17 +241,19 @@ def demo_middleware(next_middleware, root, info, *args, **kwds):
         and info.operation.name.value != "IntrospectionQuery"
     ):
         print("Demo middleware report")
-        print("    operation :", info.operation.operation)
-        print("    name      :", info.operation.name.value)
+        print("    operation    :", info.operation.operation)
+        print("    name         :", info.operation.name.value)
 
     # Invoke next middleware.
-    return next_middleware(root, info, *args, **kwds)
+    return await next_middleware(root, info, *args, **kwds)
 
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
-    async def on_connect(self, payload):
+    send_keepalive_every = 1
+
+    async def on_connect(self, user, payload):
         """Handle WebSocket connection event."""
 
         # Use auxiliary Channels function `get_user` to replace an
@@ -290,7 +292,7 @@ def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
     del request
     graphiql_filepath = pathlib.Path(__file__).absolute().parent / "graphiql.html"
-    with open(graphiql_filepath) as f:
+    with open(graphiql_filepath, "r", encoding="utf-8") as f:
         return django.http.response.HttpResponse(f.read())
 
 

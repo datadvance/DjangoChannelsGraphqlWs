@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -34,7 +34,7 @@ build-backend = "poetry.masonry.api"
 # Docs: https://python-poetry.org/docs/
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.9.1"
+version = "1.0.0rc1"
 description = """Django Channels based WebSocket GraphQL server with \
                  Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
@@ -47,24 +47,24 @@ packages = [
 [tool.poetry.dependencies]
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
-python = "^3.6.0"
+python = "^3.8.0"
 aiohttp = "^3"
 asgiref = "^3"
-backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
 channels = "^3"
-dataclasses = {version = "^0.7", python = "~3.6"}
-Django = "^3"
-graphene = "^2.1"
+Django = ">=4.0.0"
+graphene = ">=3"
 graphql-core = ">=2.2"
-msgpack = ">=0.6.1, <2"
+msgpack = ">=0.6.1"
+black = "^22.6.0"
+Rx = "^3.2.0"
+
 [tool.poetry.dev-dependencies]
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 black = { version = "*", allow-prereleases = true }
 channels-redis = "*"
 coverage = "*"
-graphene-django = "*"
-ipython = "*"
+graphene-django = ">=3"
 isort = {version = "*", extras = ["pyproject"]}
 mypy = "*"
 plumbum = "*"
@@ -80,13 +80,12 @@ pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
 tox = "*"
-types-dataclasses = {version = "*", python = "~3.6"}
 
 # ---------------------------------------------------------------- BLACK
 # Black - the uncompromising code formatter.
 # https://black.readthedocs.io/en/stable/index.html
 [tool.black]
-target-version = ['py36', 'py37', 'py38']
+target-version = ['py37', 'py38', 'py39', 'py310']
 
 # ---------------------------------------------------------------- ISORT
 # Isort configuration.
@@ -106,16 +105,15 @@ profile="black"
 # https://github.com/PyCQA/pylint-django/issues/276
 #jobs = "0"
 jobs = "1"
-load-plugins = "pylint_quotes,pylint_django"
+load-plugins = "pylint_quotes"
 # Do not store results of previous runs.
 persistent = "no"
 # Allow to load C extension modules.
 unsafe-load-any-extension = "yes"
 [tool.pylint."MESSAGES CONTROL"]
-# bad-continuation: Black does the job, no need to check.
 # design: Do not count lines, members, ..., no use.
 # similarities: Duplication does not mean bad design by itself.
-disable = "bad-continuation,design,similarities"
+disable = "design,similarities"
 enable = "c-extension-no-member"
 [tool.pylint.BASIC]
 # It is OK to have 2-letters identifiers, e.g. 'id' or 'ok'. Also allow
@@ -142,7 +140,7 @@ triple-quote = "double"
 # NOTE: When Pytest runs Pylint this setting is overwritten by the
 # environment variable `DJANGO_SETTINGS_MODULE` set by `pytest-django`.
 # Anyway, the setting is still useful when VS Code runs Pylint directly.
-django-settings-module = "example.settings"
+# django-settings-module = "example.settings"
 [tool.pylint.REFACTORING]
 # We have line length 88, no need to check.
 max-nested-blocks = "9000"
@@ -170,7 +168,7 @@ omit = ["**/test_*.py"]
 legacy_tox_ini = """
 [tox]
 isolated_build = true
-envlist = py36,py37,py38,py39
+envlist = py38,py39,py310
 [testenv]
 whitelist_externals = poetry
 commands_pre = poetry install -v

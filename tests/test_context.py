@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -44,7 +44,7 @@ def test_scope_as_context():
     assert scope["marker2"] == context["marker2"] == context.marker2 == 2
 
     print("Check string context representation equals to dict one.")
-    assert context.__str__() == scope.__str__()
+    assert str(context) == str(scope)
 
     print("Make sure `_asdict` returns underlying scope.")
     assert id(context._asdict()) == id(scope)
@@ -75,7 +75,6 @@ async def test_context_lifetime(gql):
 
     print("Setup GraphQL backend and initialize GraphQL client.")
 
-    # pylint: disable=no-self-use
     class Query(graphene.ObjectType):
         """Root GraphQL query."""
 

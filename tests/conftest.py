@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -56,6 +56,17 @@ def event_loop(request):
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+class DummyQuery(graphene.ObjectType):
+    """Dummy query to use if no query supplied."""
+
+    value = graphene.String()
+
+    def resolve_value(self):
+        """Resolver to return predefined value which can be tested."""
+        del self
+        return "test"
 
 
 @pytest.fixture
@@ -124,9 +135,13 @@ def gql(db, request):
         communicator_kwds=None,
     ):
         """Setup GraphQL consumer and the communicator for tests."""
+        if query is None:
+            query = DummyQuery
 
         class ChannelsConsumer(channels_graphql_ws.GraphqlWsConsumer):
             """Channels WebSocket consumer for GraphQL API."""
+
+            group_name_prefix = "TEST"
 
             schema = graphene.Schema(
                 query=query,

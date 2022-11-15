@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -21,7 +21,10 @@
 
 """Test GraphQL middleware."""
 
+import time
+
 import graphene
+import graphql.pyutils
 import pytest
 
 import channels_graphql_ws
@@ -95,15 +98,23 @@ async def test_middleware_called_in_mutation(gql):
 async def test_middleware_called_in_subscription(gql):
     """Check that middleware called during subscription processing.
 
-    Middleware expected to be called two times: during subscribing to
-    the subscription and during a notification.
+    Middleware expected to be called four times:
+    - during subscribing to the subscription;
+    - during a notification;
+    - ???
+    - ???
     """
     middleware_call_counter = 0
 
-    def middleware(next_middleware, root, info, *args, **kwds):
+    async def middleware(next_middleware, root, info, *args, **kwds):
+        start_time = time.time()
         nonlocal middleware_call_counter
         middleware_call_counter += 1
-        return next_middleware(root, info, *args, **kwds)
+        result = next_middleware(root, info, *args, **kwds)
+        if graphql.pyutils.is_awaitable(result):
+            result = await result
+        print("local middleware execution time", time.time() - start_time)
+        return result
 
     print("Initialize WebSocket GraphQL connection with middleware enabled.")
     client = gql(
@@ -132,8 +143,8 @@ async def test_middleware_called_in_subscription(gql):
     await client.receive(assert_id=sub_id, assert_type="data")
 
     assert (
-        middleware_call_counter == 2
-    ), "Middleware is not called two times for subscription!"
+        middleware_call_counter == 4
+    ), "Middleware is not called four times for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.finalize()
@@ -180,7 +191,7 @@ async def test_middleware_invocation_order(gql):
 
 
 # Mute Pytest for the Graphene DSL for the GraphQL setup.
-# pylint: disable=arguments-differ,no-self-use
+# pylint: disable=arguments-differ
 
 
 class OnTrigger(channels_graphql_ws.Subscription):

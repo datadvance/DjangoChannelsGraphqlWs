@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -23,11 +23,15 @@
 
 
 import asyncio
+import logging
+import os
 import textwrap
 import time
 import uuid
 
 from .transport import GraphqlWsTransport
+
+LOG = logging.getLogger(__name__)
 
 
 class GraphqlWsClient:
@@ -51,7 +55,6 @@ class GraphqlWsClient:
     Args:
         transport: The `GraphqlWsTransport` instance used to send and
             receive messages over the WebSocket connection.
-
     """
 
     def __init__(self, transport: GraphqlWsTransport):
@@ -78,6 +81,8 @@ class GraphqlWsClient:
         1. Establish WebSocket connection.
         2. Initialize GraphQL connection. Skipped if connect_only=True.
         """
+        if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
+            LOG.debug("Connect to websocket.")
         await self._transport.connect()
         if not connect_only:
             await self._transport.send({"type": "connection_init", "payload": ""})
@@ -108,6 +113,8 @@ class GraphqlWsClient:
         message.update({"id": msg_id} if msg_id is not None else {})
         message.update({"type": msg_type} if msg_type is not None else {})
         message.update({"payload": payload} if payload is not None else {})
+        if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
+            LOG.debug("Send %s", message)
         await self._transport.send(message)
         return msg_id
 
@@ -131,6 +138,8 @@ class GraphqlWsClient:
         """
         while True:
             response = await self._transport.receive()
+            if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
+                LOG.debug("Receive %s", response)
             if self._is_keep_alive_response(response):
                 continue
             if wait_id is None or response["id"] == wait_id:

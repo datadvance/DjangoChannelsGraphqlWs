@@ -23,6 +23,16 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc1] - 2022-11-16
+
+- Updated to use newer dependencies:
+  - Django 4.x
+  - channels 3.x
+  - graphene 3.x
+- Implementation changed to rely on
+  `channels.db.database_sync_to_async` function and thread pool from
+  `asgiref` library.
+
 ## [0.9.1] - 2022-01-27
 
 - Minor fix in logging.

@@ -19,7 +19,35 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""Tests GraphQL over WebSockets with subscriptions.
+"""Custom JSON encoders for tests."""
 
-Here we test `Subscription` and `GraphqlWsConsumer` classes.
-"""
+import json
+
+import graphene
+
+
+class EnumEnabledJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder.
+
+    We need to put UserId to the `graphene.JSONString` field. Default
+    encoder will fail.
+    """
+
+    def default(self, o):
+        """Override the default method."""
+        if o.__class__.__name__ == "EnumMeta":
+            return o.value
+        return o
+
+
+class CustomJSONString(graphene.JSONString):
+    """Custom graphene type with extended JSON handling.
+
+    Allows use of a `graphene.JSONString` with UserId Enum for
+    input / output from the GraphQL schema.
+    """
+
+    @staticmethod
+    def serialize(dt):
+        """Override the original serialize method."""
+        return json.dumps(dt, cls=EnumEnabledJSONEncoder)

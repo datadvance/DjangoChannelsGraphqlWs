@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -25,6 +25,7 @@
 # This is super-minimal configuration which is just enough for unit
 # tests and to illustrate main principles in the `example.py`.
 
+# import os
 import asyncio
 import pathlib
 import sys
@@ -91,7 +92,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.admin",
     "channels",
 ]
-ALLOWED_HOSTS = "*"
+ALLOWED_HOSTS = ["*"]
 STATIC_URL = "/static/"
 STATICFILES_FINDERS = ["django.contrib.staticfiles.finders.AppDirectoriesFinder"]
 # In this simple example we use in-process in-memory Channel layer.

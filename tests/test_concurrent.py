@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -28,7 +28,6 @@ import asyncio
 import concurrent.futures
 import itertools
 import textwrap
-import threading
 import time
 import uuid
 
@@ -37,16 +36,22 @@ import pytest
 
 import channels_graphql_ws
 
+from .utils import CustomJSONString
+
 
 @pytest.mark.asyncio
 async def test_concurrent_queries(gql):
     """Check a single hanging operation does not block other ones."""
 
+    global WAKEUP  # pylint: disable=global-statement
+    WAKEUP = asyncio.Event()
     print("Establish & initialize WebSocket GraphQL connection.")
     client = gql(query=Query, mutation=Mutation)
     await client.connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
+    # Since tests and server are launched using same eventloop we should
+    # not await for response here.
     long_op_id = await client.send(
         msg_type="start",
         payload={
@@ -119,7 +124,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
                 msg_id=op_id,
                 msg_type="start",
                 payload={
-                    "query": "query op_name { %s }" % query,
+                    "query": f"query op_name {{ {query} }}",
                     "variables": {},
                     "operationName": "op_name",
                 },
@@ -194,10 +199,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -207,10 +211,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -220,10 +223,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -240,14 +242,13 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
@@ -327,12 +328,11 @@ async def test_subscribe_and_many_unsubscribes(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -419,14 +419,13 @@ async def test_subscribe_and_many_unsubscribes(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
@@ -494,12 +493,11 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -611,12 +609,11 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": "ALICE"},
                 "operationName": "op_name",
@@ -626,14 +623,13 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
         spam_payload = {
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {
                 "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
@@ -767,12 +763,11 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -829,7 +824,10 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
 
-WAKEUP = threading.Event()
+# Will be set on the test start. In python < 3.10 you can not create
+# asyncio loop bound structures when there is no running event loop.
+# Here the loop is not yet active.
+WAKEUP = None
 
 
 class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: ignore
@@ -841,7 +839,7 @@ class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: igno
     async def mutate(root, info):
         """Sleep until `WAKEUP` event is set."""
         del root, info
-        WAKEUP.wait()
+        await WAKEUP.wait()
         return LongMutation(True)
 
 
@@ -860,7 +858,7 @@ class OnChatMessageSentSync(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = graphene.JSONString()
+    event = CustomJSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""
@@ -900,7 +898,7 @@ class OnChatMessageSentAsync(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = graphene.JSONString()
+    event = CustomJSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""

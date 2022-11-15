@@ -58,7 +58,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ## Features
 
 - WebSocket-based GraphQL server implemented on the
-  [Django Channels v2](https://github.com/django/channels).
+  [Django Channels v3](https://github.com/django/channels).
 - WebSocket protocol is compatible with
   [Apollo GraphQL](https://github.com/apollographql) client.
 - [Graphene](https://github.com/graphql-python/graphene)-like
@@ -95,8 +95,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     - AIOHTTP-based client.
     - Client for unit test based on the Django Channels testing
       communicator.
-- Supported Python 3.6 and newer (tests run on 3.6, 3.7, and 3.8).
+- Supported Python 3.8 and newer (tests run on 3.8, 3.9, 3.10).
 - Works on Linux, macOS, and Windows.
+- Supports Django 4.0.
 
 ## Installation
 
@@ -148,7 +149,11 @@ class MySubscription(channels_graphql_ws.Subscription):
 class Query(graphene.ObjectType):
     """Root GraphQL query."""
     # Check Graphene docs to see how to define queries.
-    pass
+    value = graphene.String()
+
+    def resolve_value(self):
+        """Resolver to return predefined value."""
+        return "test"
 
 class Mutation(graphene.ObjectType):
     """Root GraphQL mutation."""
@@ -209,7 +214,8 @@ MySubscription.broadcast(
 ```
 
 Notify<sup>[﹡](#redis-layer)</sup> clients in an coroutine function
-using the `broadcast()` or `broadcast_async()` method:
+using the `broadcast()` with `await` statement or using
+`broadcast_async()` method:
 
 ```python
 await MySubscription.broadcast(
@@ -323,9 +329,11 @@ the the Django's guide
 - By default different requests (WebSocket messages) from a single
   client are processed concurrently in different worker threads. (It is
   possible to change the maximum number of worker threads with the
-  `max_worker_threads` setting.) So there is no guarantee that requests
-  will be processed in the same the client sent these requests.
-  Actually, with HTTP we have this behavior for decades.
+  `ASGI_THREADS` environment variable of the
+  [asgiref](https://github.com/django/asgiref/) library) So there is no
+  guarantee that requests will be processed in the same the client sent
+  these requests.  Actually, with HTTP we have this behavior for
+  decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
   execution - in other words, the server will not start processing
@@ -432,7 +440,7 @@ See the `GraphqlWsClient` class docstring for the details.
 ### The GraphiQL client
 
 The GraphiQL provided by Graphene doesn't connect to your GraphQL
-endpoint via WebSocket ; instead you should use a modified GraphiQL
+endpoint via WebSocket; instead you should use a modified GraphiQL
 template under `graphene/graphiql.html` which will take precedence over
 the one of Graphene. One such modified GraphiQL is provided in the
 [example](example/) directory.
@@ -527,7 +535,7 @@ _A reminder of how to setup an environment for the development._
    should be the system python.
 3. Install Poetry to the system Python.
    ```shell
-   $ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+   $ curl -sSL https://install.python-poetry.org | python3 -
    ```
    It is important to install Poetry into the system Python, NOT in your
    virtual environment. For details see Poetry docs: https://python-poetry.org/docs/#installation
@@ -548,7 +556,7 @@ _A reminder of how to setup an environment for the development._
      ```
    - With VS Code: Choose `.venv` with "Python: Select interpreter" and
      reopen the terminal.
-   ```
+
 6. Upgrade Pip:
    ```shell
    $ pip install --upgrade pip
@@ -574,13 +582,13 @@ _A reminder of how to run tests._
    ```shell
    $ tox
    ```
-- Run all tests on a single Python version, e.g on Python 3.7:
+- Run all tests on a single Python version, e.g on Python 3.8:
    ```shell
-   $ tox -e py37
+   $ tox -e py38
    ```
 - Example of running a single test:
    ```shell
-   $ tox -e py36 -- tests/test_basic.py::test_main_usecase
+   $ tox -e py310 -- tests/test_basic.py::test_main_usecase
    ```
 - Running on currently active Python directly with Pytest:
    ```shell

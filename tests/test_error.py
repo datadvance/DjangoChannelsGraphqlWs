@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -155,8 +155,8 @@ async def test_connection_error(gql):
 
     print("Establish WebSocket GraphQL connection.")
 
-    def on_connect(self, payload):
-        del self, payload
+    def on_connect(self, user, payload):
+        del self, user, payload
         raise RuntimeError("Connection rejected!")
 
     client = gql(consumer_attrs={"strict_ordering": True, "on_connect": on_connect})
@@ -238,8 +238,9 @@ async def test_subscribe_return_value(gql):
         await client.send(
             msg_type="start",
             payload={
-                "query": """subscription { test_subscription (switch: "%s") { ok } }"""
-                % result_type
+                "query": f"""
+                subscription {{ test_subscription (switch: "{result_type}\") {{ ok }} }}
+                """
             },
         )
         await client.assert_no_messages("Subscribe responded with a message!")
@@ -253,8 +254,9 @@ async def test_subscribe_return_value(gql):
         msg_id = await client.send(
             msg_type="start",
             payload={
-                "query": """subscription { test_subscription (switch: "%s") { ok } }"""
-                % result_type
+                "query": f"""
+                subscription {{ test_subscription (switch: "{result_type}") {{ ok }} }}
+                """
             },
         )
         with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:

@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -27,8 +27,10 @@ import sys
 import textwrap
 import uuid
 
+import channels
 import django.contrib.auth
 import graphene
+import graphene_django
 import pytest
 
 import channels_graphql_ws
@@ -39,6 +41,124 @@ if sys.version_info < (3, 7):
     import backports.datetime_fromisoformat  # pylint: disable=import-error
 
     backports.datetime_fromisoformat.MonkeyPatch.patch_fromisoformat()  # pylint: disable=no-member
+
+
+@pytest.mark.asyncio
+async def test_models_serialization_with_nested_db_query(gql, transactional_db):
+    """Test serialization of the Django model inside the `payload`."""
+    del transactional_db
+
+    # Get Django user model class without referencing it directly:
+    # https://docs.djangoproject.com/en/dev/topics/auth/customizing/#referencing-the-user-model
+    User = django.contrib.auth.get_user_model()  # pylint: disable=invalid-name
+
+    user_id = random.randint(0, 1023)
+    username = uuid.uuid4().hex
+    async_user_create = channels.db.database_sync_to_async(User.objects.create)
+    user = await async_user_create(
+        id=user_id,
+        username=username,
+    )
+
+    class UserModel(
+        graphene_django.types.DjangoObjectType,
+        model=User,
+        only_fields=(
+            "username",
+            "id",
+        ),
+    ):
+        """User data."""
+
+        id = graphene.Int(
+            description="Id of a user",
+            required=True,
+        )
+        username = graphene.String(
+            description="Username of a user",
+            required=True,
+        )
+
+    class SendModels(graphene.Mutation):
+        """Send models to the subscriptions OnModelsReceived."""
+
+        is_ok = graphene.Boolean()
+
+        @staticmethod
+        def mutate(root, info):
+            """Send models in the `payload` to the `publish` method."""
+            del root, info
+            # Broadcast models inside a dictionary.
+            OnModelsReceived.broadcast(payload={})
+            return SendModels(is_ok=True)
+
+    class OnModelsReceived(channels_graphql_ws.Subscription):
+        """Receive the models and extract some info from it."""
+
+        user = graphene.Field(UserModel, description="A username queried from database")
+
+        @staticmethod
+        def resolve_user(this, info):
+            """Resolves user by reading it from db."""
+            del this, info
+            return User.objects.get(id=user_id)
+
+        @staticmethod
+        def publish(payload, info):
+            """Publish models info so test can check it."""
+            del payload, info
+            return OnModelsReceived(
+                user=user,
+            )
+
+    class Subscription(graphene.ObjectType):
+        """Root subscription."""
+
+        on_models_received = OnModelsReceived.Field()
+
+    class Mutation(graphene.ObjectType):
+        """Root mutation."""
+
+        send_model = SendModels.Field()
+
+    print("Establish & initialize WebSocket GraphQL connections.")
+
+    client = gql(
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs={"strict_ordering": True},
+    )
+    await client.connect_and_init()
+
+    print("Subscribe to receive subscription notifications.")
+
+    sub_id = await client.send(
+        msg_type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                subscription {
+                    on_models_received {
+                        user { id, username }
+                    }
+                }
+                """
+            )
+        },
+    )
+
+    print("Invoke mutation which sends Django model to the subscription.")
+
+    await client.execute("mutation { send_model { is_ok } }")
+
+    print("Receive subscription notification with models info and check it.")
+
+    models_info = await client.receive(assert_id=sub_id)
+    models_info = models_info["data"]["on_models_received"]
+    assert models_info["user"]["id"] == user_id
+    assert models_info["user"]["username"] == username
+
+    await client.finalize()
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2022
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -30,7 +30,7 @@ repos:
           - description: "Black: The uncompromising Python code formatter"
             entry: black
             id: black
-            language_version: python3.8
+            language_version: python3.10
             language: python
             name: black
             require_serial: true
@@ -46,7 +46,7 @@ repos:
             # Uncomment to debug what is happening.
             #args: ["-v"]
             id: isort
-            language_version: python3.8
+            language_version: python3.10
             language: python
             name: isort
             require_serial: true
