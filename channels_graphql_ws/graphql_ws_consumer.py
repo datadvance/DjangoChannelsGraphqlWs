@@ -27,7 +27,6 @@ LOG = logging.getLogger(__name__)
 GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
 TRANSPORT_WS_SUBPROTOCOL = "graphql-transport-ws"
 
-
 class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     """Channels consumer for the WebSocket GraphQL backend.
 
