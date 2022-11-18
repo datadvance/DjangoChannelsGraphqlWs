@@ -60,9 +60,9 @@ from typing import (
 import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
+import graphene.types.resolver
 import graphql
 import graphql.error
-import graphql.error.graphql_error
 import graphql.execution
 import graphql.pyutils
 import graphql.utilities
@@ -75,6 +75,8 @@ LOG = logging.getLogger(__name__)
 
 # WebSocket subprotocol used for the GraphQL.
 GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
+
+dict_or_attr_resolver = graphene.types.resolver.dict_or_attr_resolver
 
 
 async def _subscribe(
@@ -694,6 +696,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             context.db_sync_to_async = self.db_sync_to_async
             context.group_name_prefix = self.group_name_prefix
 
+            _marked_as_type_query = False
+
             async def async_resolver_middleware(
                 next_middleware, root, info: graphql.GraphQLResolveInfo, *args, **kwds
             ):
@@ -709,6 +713,34 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 Also this middleware able to track execution time of
                 resolvers and print warnings about slow resolvers.
                 """
+                nonlocal _marked_as_type_query
+                # The "introspectionQuery" as well as requests for type
+                # information might have a lot of nested resolver calls.
+                # Since type information requests have no need to access
+                # Django database, we will execute them directly. That
+                # is faster than ThreadPool execution.
+                if (
+                    info.field_name == "__schema"
+                    and info.return_type
+                    and info.return_type.of_type
+                    and info.return_type.of_type.name == "__Schema"
+                ):
+                    _marked_as_type_query = True
+
+                # The standard resolver "dict_or_attr_resolver" is known
+                # to do just minor inmemory lookups. No need to execute
+                # it in separate thread.
+                std_resolver = (
+                    hasattr(next_middleware, "func")
+                    and next_middleware.func
+                    == dict_or_attr_resolver  # pylint: disable=comparison-with-callable
+                )
+
+                # Execute known "system" resolvers directly. There is no
+                # need to measure time of them.
+                if _marked_as_type_query or std_resolver:
+                    return next_middleware(root, info, *args, **kwds)
+
                 if asyncio.iscoroutinefunction(next_middleware):
                     next_func = next_middleware
                 else:
@@ -893,17 +925,33 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 if self.warn_if_operation_took_longer_then:
                     start_time = time.perf_counter()
 
-                result = await graphql.graphql(
+                # Standard name for "IntrospectionQuery". We might also
+                # check that
+                # `document_ast.definitions[0].selection_set.selections[0].name.value`
+                # equals to `__schema`. This is a more robust way. But
+                # it will eat up more CPU pre each query. For now lets
+                # check only query name.
+                if op_name == "IntrospectionQuery":
+                    # No need to call middlewares for the
+                    # IntrospectionQuery. There no real resolvers. Only
+                    # the type information.
+                    middleware_manager = None
+                else:
+                    middleware_manager = graphql.execution.MiddlewareManager(
+                        async_resolver_middleware, *self.middleware
+                    )
+                result = graphql.execution.execute(
                     self.schema.graphql_schema,
-                    source=query,
+                    document=document_ast,
                     root_value=None,
                     operation_name=op_name,
                     variable_values=variables,
                     context_value=context,
-                    middleware=graphql.execution.MiddlewareManager(
-                        async_resolver_middleware, *self.middleware
-                    ),
+                    middleware=middleware_manager,
                 )
+                if inspect.isawaitable(result):
+                    result = await result
+
                 if self.warn_if_operation_took_longer_then:
                     duration = time.perf_counter() - start_time
                     if duration >= self.warn_if_operation_took_longer_then:
@@ -1010,11 +1058,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Moreover this allows us to access the `_subscriptions` and
         # `_sids_by_group` without any locks.
         self._assert_thread()
-        LOG.debug(
-            "Register new subscription (operation_id=%s, groups=%s)",
-            operation_id,
-            groups,
-        )
 
         # The subscription notification queue.
         queue_size = notification_queue_limit
@@ -1113,7 +1156,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Send the unsubscription confirmation message.
         await self._send_gql_complete(operation_id)
-        LOG.debug("Operation %s stop - done", operation_id)
 
     # -------------------------------------------------------- GRAPHQL PROTOCOL MESSAGES
 
