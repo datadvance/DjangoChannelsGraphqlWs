@@ -727,6 +727,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 ):
                     _marked_as_type_query = True
 
+                type_request = info.field_name == "__typename"
+
                 # The standard resolver "dict_or_attr_resolver" is known
                 # to do just minor inmemory lookups. No need to execute
                 # it in separate thread.
@@ -738,7 +740,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # Execute known "system" resolvers directly. There is no
                 # need to measure time of them.
-                if _marked_as_type_query or std_resolver:
+                if _marked_as_type_query or std_resolver or type_request:
                     return next_middleware(root, info, *args, **kwds)
 
                 if asyncio.iscoroutinefunction(next_middleware):
