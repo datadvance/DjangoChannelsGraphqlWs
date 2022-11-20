@@ -36,10 +36,11 @@ def test_pylint(src_dir):
 
     pylint = plumbum.local["pylint"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        if src_dir.startswith("example"):
-            result = pylint(src_dir)
-        else:
-            result = pylint(src_dir)
+        # There is the bug in pylint_django:
+        # https://github.com/PyCQA/pylint-django/issues/369#issuecomment-1305725496
+        #
+        # The `env` parameter should be removed once that bug is fixed.
+        result = pylint(src_dir, env={"PYTHONPATH": "."})
         if result:
             print("\nPylint:", result)
 

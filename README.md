@@ -83,9 +83,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     - Notification can be suppressed in the subscription resolver method
       `publish`. For example, this is useful to avoid sending
       self-notifications.
-- All GraphQL "resolvers" run in a threadpool so they never block the
-  server itself and may communicate with database or perform other
-  blocking tasks.
+- All GraphQL "resolvers" run either in an eventloop or in a threadpool.
+  So asynchronous "resolvers" able to execute blocking calls with
+  `sync_to_async`.  And synchronous "resolvers" never block the server
+  itself and may communicate with database or perform other blocking
+  tasks.
 - Resolvers (including subscription's `subscribe` & `publish`) can be
   represented both as synchronous or asynchronous (`async def`) methods.
 - Subscription notifications can be sent from both synchronous and
@@ -97,7 +99,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       communicator.
 - Supported Python 3.8 and newer (tests run on 3.8, 3.9, 3.10).
 - Works on Linux, macOS, and Windows.
-- Supports Django 4.0.
+- Supports Django 4.1.
 
 ## Installation
 
@@ -147,11 +149,15 @@ class MySubscription(channels_graphql_ws.Subscription):
         return MySubscription(event="Something has happened!")
 
 class Query(graphene.ObjectType):
-    """Root GraphQL query."""
+    """Root GraphQL query.
+
+    The Graphene library requires us to define a Query with at least one
+    field. This value field is not used in this example.
+    """
     # Check Graphene docs to see how to define queries.
     value = graphene.String()
 
-    def resolve_value(self):
+    async def resolve_value(self):
         """Resolver to return predefined value."""
         return "test"
 
@@ -213,9 +219,8 @@ MySubscription.broadcast(
 )
 ```
 
-Notify<sup>[﹡](#redis-layer)</sup> clients in an coroutine function
-using the `broadcast()` with `await` statement or using
-`broadcast_async()` method:
+Notify<sup>[﹡](#redis-layer)</sup> clients in a coroutine function
+with async `broadcast()` or `broadcast_async()` method:
 
 ```python
 await MySubscription.broadcast(
@@ -327,12 +332,13 @@ the the Django's guide
 - Different requests from different WebSocket client are processed
   asynchronously.
 - By default different requests (WebSocket messages) from a single
-  client are processed concurrently in different worker threads. (It is
+  client are processed concurrently by using an event loop (for async
+  resolvers) or different worker threads (for sync resolvers). (It is
   possible to change the maximum number of worker threads with the
   `ASGI_THREADS` environment variable of the
-  [asgiref](https://github.com/django/asgiref/) library) So there is no
-  guarantee that requests will be processed in the same the client sent
-  these requests.  Actually, with HTTP we have this behavior for
+  [asgiref](https://github.com/django/asgiref/) library). So there is no
+  guarantee that requests will be processed in the same order the client
+  sent these requests. Actually, with HTTP we have this behavior for
   decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
@@ -341,6 +347,16 @@ the the Django's guide
   See comments in the class `GraphqlWsConsumer`.
 - All subscription notifications are delivered in the order they were
   issued.
+
+Each request (WebSocket message) processing starts in the main thread of
+the process. With exception that the request's parsing and validation is
+offloaded into a thread pool. Resolver calls made from the main thread.
+And for each resolver it checks whether the resolver is a coroutine
+function. If it is a coroutine function, then the resolver is launched
+from the main thread. If it is not a coroutine function (a synchronous
+function), then the resolver is launched from the thread pool. As you
+know an asyncio eventloop call is faster than a thread call. So you
+should prefer asynchronous resolvers in your code. It will work faster.
 
 ### Context
 
@@ -358,6 +374,9 @@ def resolve_something(self, info):
     info.context.fortytwo = 42
     assert info.context["fortytwo"] == 42
 ```
+
+The context object contains several fields defined by this library:
+- `channel_name` - [The channel name from Channels](https://channels.readthedocs.io/en/stable/topics/channel_layers.html?highlight=channel_name#single-channels)
 
 ### Authentication
 
@@ -485,6 +504,23 @@ processing. For that define `middleware` setting of your
 `GraphqlWsConsumer` subclass, like this:
 
 ```python
+async def my_middleware(next_middleware, root, info, *args, **kwds):
+    """My custom GraphQL middleware."""
+    # Invoke next middleware.
+    result = next_middleware(root, info, *args, **kwds)
+    if graphql.pyutils.is_awaitable(result):
+       result = await result
+    return result
+
+class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+    ...
+    middleware = [my_middleware]
+```
+
+It is recommended to write asynchronous middlewares. But synchronous
+middlewares are also supported:
+
+```python
 def my_middleware(next_middleware, root, info, *args, **kwds):
     """My custom GraphQL middleware."""
     # Invoke next middleware.
@@ -520,7 +556,8 @@ _A reminder of how to setup an environment for the development._
 
 1. Install PyEnv to be able to work with many Python versions at once
    [PyEnv→Installation](https://github.com/pyenv/pyenv#installation).
-2. Install Python versions needed. The command should be executed in the project's directory:
+2. Install Python versions needed. The command should be executed in the
+   project's directory:
    ```shell
    $ pyenv local | xargs -L1 pyenv install
    ```
@@ -528,11 +565,12 @@ _A reminder of how to setup an environment for the development._
    ```shell
    $ pyenv versions
    ```
-   should show python versions enlisted in [.python-version](.python-version).
-   If everything is set up correctly pyenv will switch version of python when
-   you enter and leave the project's directory. Inside the directory `pyenv which
-   python` should show you a python installed in pyenv, outside the dir it
-   should be the system python.
+   should show python versions enlisted in
+   [.python-version](.python-version).  If everything is set up
+   correctly pyenv will switch version of python when you enter and
+   leave the project's directory. Inside the directory `pyenv which
+   python` should show you a python installed in pyenv, outside the dir
+   it should be the system python.
 3. Install Poetry to the system Python.
    ```shell
    $ curl -sSL https://install.python-poetry.org | python3 -
@@ -560,10 +598,6 @@ _A reminder of how to setup an environment for the development._
 6. Upgrade Pip:
    ```shell
    $ pip install --upgrade pip
-   ```
-7. Install pre-commit hooks to check code style automatically:
-   ```shell
-   $ pre-commit install
    ```
 
 Use:

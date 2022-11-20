@@ -26,10 +26,11 @@ from typing import Optional
 
 import channels.testing
 
-from . import client, transport
+import channels_graphql_ws.client
+import channels_graphql_ws.transport
 
 
-class GraphqlWsClient(client.GraphqlWsClient):
+class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
     """Add functions useful for testing purposes."""
 
     # Time in seconds to wait to ensure the queue of messages is empty.
@@ -66,7 +67,7 @@ class GraphqlWsClient(client.GraphqlWsClient):
                 )
 
 
-class GraphqlWsTransport(transport.GraphqlWsTransport):
+class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
     """Testing client transport to work without WebSocket connection.
 
     Client is implemented based on the Channels `WebsocketCommunicator`.

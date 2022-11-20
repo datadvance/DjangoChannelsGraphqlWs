@@ -96,14 +96,8 @@ async def test_middleware_called_in_mutation(gql):
 
 @pytest.mark.asyncio
 async def test_middleware_called_in_subscription(gql):
-    """Check that middleware called during subscription processing.
+    """Check that middleware called during subscription processing."""
 
-    Middleware expected to be called four times:
-    - during subscribing to the subscription;
-    - during a notification;
-    - ???
-    - ???
-    """
     middleware_call_counter = 0
 
     async def middleware(next_middleware, root, info, *args, **kwds):
@@ -131,6 +125,8 @@ async def test_middleware_called_in_subscription(gql):
     )
     await client.assert_no_messages()
 
+    # Middleware expected to be called during subscribing to the
+    # subscription.
     assert (
         middleware_call_counter == 1
     ), "Middleware is not called during subscribing to the subscription!"
@@ -142,9 +138,12 @@ async def test_middleware_called_in_subscription(gql):
     # subscription processing has finished.
     await client.receive(assert_id=sub_id, assert_type="data")
 
+    # Middleware expected to be called during a notification:
+    #  - to resolve "on_trigger";
+    #  - to resolve "ok".
     assert (
-        middleware_call_counter == 4
-    ), "Middleware is not called four times for subscription!"
+        middleware_call_counter == 3
+    ), "Middleware is not called three times for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.finalize()

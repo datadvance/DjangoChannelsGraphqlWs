@@ -35,8 +35,7 @@ import graphene
 import pytest
 
 import channels_graphql_ws
-
-from .utils import CustomJSONString
+import tests.utils
 
 
 @pytest.mark.asyncio
@@ -858,7 +857,7 @@ class OnChatMessageSentSync(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = CustomJSONString()
+    event = tests.utils.CustomJSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""
@@ -898,7 +897,7 @@ class OnChatMessageSentAsync(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = CustomJSONString()
+    event = tests.utils.CustomJSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""

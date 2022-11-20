@@ -241,8 +241,8 @@ async def demo_middleware(next_middleware, root, info, *args, **kwds):
         and info.operation.name.value != "IntrospectionQuery"
     ):
         print("Demo middleware report")
-        print("    operation    :", info.operation.operation)
-        print("    name         :", info.operation.name.value)
+        print("    operation :", info.operation.operation)
+        print("    name      :", info.operation.name.value)
 
     # Invoke next middleware.
     return await next_middleware(root, info, *args, **kwds)
@@ -253,7 +253,7 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
 
     send_keepalive_every = 1
 
-    async def on_connect(self, user, payload):
+    async def on_connect(self, payload):
         """Handle WebSocket connection event."""
 
         # Use auxiliary Channels function `get_user` to replace an
@@ -292,7 +292,9 @@ def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
     del request
     graphiql_filepath = pathlib.Path(__file__).absolute().parent / "graphiql.html"
-    with open(graphiql_filepath, "r", encoding="utf-8") as f:
+    # It is better to specify an encoding when opening documents. Using the
+    # system default implicitly can create problems on other operating systems.
+    with open(graphiql_filepath, encoding="utf-8") as f:
         return django.http.response.HttpResponse(f.read())
 
 

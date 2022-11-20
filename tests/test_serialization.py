@@ -45,7 +45,7 @@ if sys.version_info < (3, 7):
 
 @pytest.mark.asyncio
 async def test_models_serialization_with_nested_db_query(gql, transactional_db):
-    """Test serialization of the Django model inside the `payload`."""
+    """Test serialization with resolver that executes DB queries."""
     del transactional_db
 
     # Get Django user model class without referencing it directly:
