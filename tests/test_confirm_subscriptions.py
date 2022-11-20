@@ -161,13 +161,13 @@ async def test_custom_confirmation_message(gql):
         },
     )
 
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
         await client.receive(assert_id=sub_op_id, assert_type="data")
         expected_errors = [
             {"message": f"{type(expected_error).__name__}: {expected_error}"}
         ]
-        assert error.errors == expected_errors, "Wrong confirmation errors received!"
-        assert error.response == {
+        assert ex.errors == expected_errors, "Wrong confirmation errors received!"
+        assert ex.response == {
             "data": expected_data,
             "errors": expected_errors,
         }, "Wrong subscription confirmation message received!"
@@ -196,10 +196,6 @@ async def test_custom_confirmation_message(gql):
 
 
 # ------------------------------------------------------------------- TEST GRAPHQL SETUP
-
-
-class Query(graphene.ObjectType):
-    """Root GraphQL query."""
 
 
 class Trigger(graphene.Mutation):

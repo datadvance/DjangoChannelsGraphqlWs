@@ -41,11 +41,7 @@ class EnumEnabledJSONEncoder(json.JSONEncoder):
 
 
 class CustomJSONString(graphene.JSONString):
-    """Custom graphene type with extended JSON handling.
-
-    Allows use of a `graphene.JSONString` with UserId Enum for
-    input / output from the GraphQL schema.
-    """
+    """The JSONString able to serialize `graphene.Enum`."""
 
     @staticmethod
     def serialize(dt):

@@ -24,12 +24,11 @@
 
 import asyncio
 import logging
-import os
 import textwrap
 import time
 import uuid
 
-from .transport import GraphqlWsTransport
+import channels_graphql_ws.transport
 
 LOG = logging.getLogger(__name__)
 
@@ -57,16 +56,16 @@ class GraphqlWsClient:
             receive messages over the WebSocket connection.
     """
 
-    def __init__(self, transport: GraphqlWsTransport):
+    def __init__(self, transport: channels_graphql_ws.transport.GraphqlWsTransport):
         """Constructor."""
         assert isinstance(
-            transport, GraphqlWsTransport
+            transport, channels_graphql_ws.transport.GraphqlWsTransport
         ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
         self._is_connected = False
 
     @property
-    def transport(self) -> GraphqlWsTransport:
+    def transport(self) -> channels_graphql_ws.transport.GraphqlWsTransport:
         """Underlying network transport."""
         return self._transport
 
@@ -81,8 +80,6 @@ class GraphqlWsClient:
         1. Establish WebSocket connection.
         2. Initialize GraphQL connection. Skipped if connect_only=True.
         """
-        if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
-            LOG.debug("Connect to websocket.")
         await self._transport.connect()
         if not connect_only:
             await self._transport.send({"type": "connection_init", "payload": ""})
@@ -113,8 +110,6 @@ class GraphqlWsClient:
         message.update({"id": msg_id} if msg_id is not None else {})
         message.update({"type": msg_type} if msg_type is not None else {})
         message.update({"payload": payload} if payload is not None else {})
-        if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
-            LOG.debug("Send %s", message)
         await self._transport.send(message)
         return msg_id
 
@@ -138,8 +133,6 @@ class GraphqlWsClient:
         """
         while True:
             response = await self._transport.receive()
-            if os.environ.get("GRAPHQL_WS_CLIENT_LOG") == "1":
-                LOG.debug("Receive %s", response)
             if self._is_keep_alive_response(response):
                 continue
             if wait_id is None or response["id"] == wait_id:

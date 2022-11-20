@@ -25,7 +25,6 @@
 # This is super-minimal configuration which is just enough for unit
 # tests and to illustrate main principles in the `example.py`.
 
-# import os
 import asyncio
 import pathlib
 import sys
