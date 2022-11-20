@@ -739,11 +739,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 )
 
                 # Execute known "system" resolvers directly. There is no
-                # need to measure time of them.
+                # need to measure time for them.
                 if _marked_as_type_query or std_resolver or type_request:
                     return next_middleware(root, info, *args, **kwds)
 
-                if asyncio.iscoroutinefunction(next_middleware):
+                if asyncio.iscoroutinefunction(next_middleware) or (
+                    hasattr(next_middleware, "func")
+                    and asyncio.iscoroutinefunction(next_middleware.func)
+                ):
                     next_func = next_middleware
                 else:
                     next_func = self.db_sync_to_async(next_middleware)
