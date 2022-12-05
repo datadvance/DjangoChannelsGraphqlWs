@@ -398,6 +398,10 @@ class Subscription(graphene.ObjectType):
         """Subscription request received.
 
         This method is called by the Graphene when a client subscribes.
+
+        Returns:
+            AsyncGenerator: An generator that yields notifications to be
+                            sent to the subscriber.
         """
         try:
             # pylint: disable=protected-access

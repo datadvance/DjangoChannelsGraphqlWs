@@ -50,6 +50,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   - [Alternatives](#alternatives)
   - [Development](#development)
     - [Bootstrap](#bootstrap)
+    - [How to read the code](#how-to-read-the-code)
     - [Running tests](#running-tests)
     - [Making release](#making-release)
   - [Contributing](#contributing)
@@ -607,6 +608,35 @@ Use:
 )](
     https://github.com/ambv/black
 )
+
+### How to read the code
+
+The code is quite complex. You might need some time to dive into. Here
+are quick insights to help you to get on track.
+
+Important classes are `GraphqlWsConsumer` and `Subscription`.
+
+When server receives JSON from the client, the
+`GraphqlWsConsumer.receive_json` method is called. Then the request is
+passed to the `_on_gql_start` method. Most magic happens here.
+
+The `sync_to_async_middleware` is used to allow execution of blocking
+operations inside of resolvers.
+
+Queries and mutations are handled in one way, and subscriptions in
+another: you can find the big if-else block inside of the
+`_on_gql_start` method.
+
+`GraphqlWsConsumer` and `Subscription` instances are connected one to
+each other with help of `context._channels_graphql_ws`. The data they
+share is specified in the `PrivateSubscriptionContext` data type.
+
+The `GraphqlWsConsumer._register_subscription` method is quite important
+for subscriptions to work. The `Subscription._subscribe_resolver` method
+is calling it on new subscription. And the `_subscribe_resolver` method
+is responsible for handling subscription lifecycle.
+
+Read through implementations of those methods.
 
 ### Running tests
 
