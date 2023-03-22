@@ -23,14 +23,11 @@
 
 
 import asyncio
-import logging
 import textwrap
 import time
 import uuid
 
 import channels_graphql_ws.transport
-
-LOG = logging.getLogger(__name__)
 
 
 class GraphqlWsClient:
