@@ -28,7 +28,6 @@ from the Graphene (`graphene/types/mutation.py`).
 import asyncio
 import collections
 import hashlib
-import inspect
 import logging
 import threading
 from typing import Optional
@@ -528,6 +527,7 @@ class Subscription(graphene.ObjectType):
                                 private_context.operation_id,
                             )
                         notification_queue.get_nowait()
+                        notification_queue.task_done()
 
         # Continue to execute `_subscribe_resolver`.
         await private_context.register_subscription(
