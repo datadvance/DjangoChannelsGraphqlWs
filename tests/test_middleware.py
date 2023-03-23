@@ -21,8 +21,6 @@
 
 """Test GraphQL middleware."""
 
-import time
-
 import graphene
 import graphql.pyutils
 import pytest
@@ -101,13 +99,11 @@ async def test_middleware_called_in_subscription(gql):
     middleware_call_counter = 0
 
     async def middleware(next_middleware, root, info, *args, **kwds):
-        start_time = time.time()
         nonlocal middleware_call_counter
         middleware_call_counter += 1
         result = next_middleware(root, info, *args, **kwds)
         if graphql.pyutils.is_awaitable(result):
             result = await result
-        print("local middleware execution time", time.time() - start_time)
         return result
 
     print("Initialize WebSocket GraphQL connection with middleware enabled.")
