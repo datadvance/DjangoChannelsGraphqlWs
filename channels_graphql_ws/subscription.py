@@ -505,16 +505,15 @@ class Subscription(graphene.ObjectType):
                 sid: Operation id of the subscription.
             """
             while True:
-                try:
-                    with notification_queue_lock:
+                with notification_queue_lock:
+                    try:
                         notification_queue.put_nowait(payload)
-                    break
-                except asyncio.QueueFull:
-                    # The queue is full - issue a warning and throw away
-                    # the oldest item from the queue.
-                    # NOTE: Queue with the size 1 means that it is safe
-                    # to drop intermediate notifications.
-                    with notification_queue_lock:
+                        break
+                    except asyncio.QueueFull:
+                        # The queue is full - issue a warning and throw away
+                        # the oldest item from the queue.
+                        # NOTE: Queue with the size 1 means that it is safe
+                        # to drop intermediate notifications.
                         if notification_queue.maxsize != 1:
                             LOG.warning(
                                 "Subscription notification dropped!"
