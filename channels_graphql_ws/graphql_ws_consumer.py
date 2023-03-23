@@ -757,11 +757,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # consume stream of notifications and send them to
                 # clients.
                 if hasattr(result, "__aiter__"):
-                    consumer_init_lock = asyncio.Lock()
-                    await consumer_init_lock.acquire()
+                    consumer_init_done = asyncio.Event()
 
                     async def consume_stream():
-                        consumer_init_lock.release()
+                        consumer_init_done.set()
                         try:
                             async for item in result:
                                 try:
@@ -793,8 +792,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     # actually is.
                     # This allows us to avoid the race condition between
                     # simultaneous subscribe and unsubscribe calls.
-                    await consumer_init_lock.acquire()
-                    consumer_init_lock.release()
+                    await consumer_init_done.wait()
 
                 # Else (when `_subscribe` call returned ExecutionResult
                 # containing error) fallback to standard handling below.
