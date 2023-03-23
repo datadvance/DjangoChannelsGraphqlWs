@@ -311,7 +311,14 @@ class Subscription(graphene.ObjectType):
     def Field(  # pylint: disable=invalid-name
         cls, name=None, description=None, deprecation_reason=None, required=False
     ):
-        """Represent subscription as a field to "deploy" it."""
+        """Represent subscription as a field to "deploy" it.
+
+        This method is called when user defines a Subscription like
+        that:
+            class Subscription(graphene.ObjectType):
+                on_new_chat_message = OnNewChatMessage.Field()
+
+        """
         return SubscriptionField(
             cls._meta.output,
             args=cls._meta.arguments,
@@ -640,5 +647,13 @@ class SubscriptionField(graphene.Field):
     """Helper Field class to handle subscriptions."""
 
     def wrap_subscribe(self, parent_subscribe):
-        """Wraps a function "subscribe"."""
+        """Wraps a function "subscribe".
+
+        This method is called from the inside of the graphql library
+        when it need to find the "subscribe" function for the field.
+
+        The resolver is defined in the constructor call as
+        `cls._meta.resolver`. It will be equal to the
+        `Subscription._subscribe` function.
+        """
         return self.resolver
