@@ -34,6 +34,7 @@ import django.contrib.auth
 import django.core.asgi
 import graphene
 import graphene_django.types
+import graphql
 
 import channels_graphql_ws
 
@@ -245,7 +246,10 @@ async def demo_middleware(next_middleware, root, info, *args, **kwds):
         print("    name      :", info.operation.name.value)
 
     # Invoke next middleware.
-    return await next_middleware(root, info, *args, **kwds)
+    result = next_middleware(root, info, *args, **kwds)
+    if graphql.pyutils.is_awaitable(result):
+        result = await result
+    return result
 
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):

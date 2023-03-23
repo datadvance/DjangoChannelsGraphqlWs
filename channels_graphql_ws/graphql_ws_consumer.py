@@ -136,6 +136,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # Typically a list of functions (callables) like:
     # ```python
     # async def my_middleware(next_middleware, root, info, *args, **kwds):
+    #     # Write user code here
     #     result = next_middleware(root, info, *args, **kwds)
     #     if graphql.pyutils.is_awaitable(result):
     #        result = await result
@@ -167,6 +168,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         Args:
             payload: Payload from CONNECTION_INIT message.
         """
+        del payload
 
     async def on_operation_start(self, operation_id, payload):
         """Process business logic before operation processing will start.
