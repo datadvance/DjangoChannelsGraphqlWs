@@ -474,12 +474,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # subscriptions in the subscription group. This saves us from
         # thinking about raise condition between subscription and
         # unsubscription.
-        await asyncio.wait(
-            [
-                asyncio.create_task(self.receive_json({"type": "stop", "id": sid}))
-                for sid in self._sids_by_group[group]
-            ]
-        )
+        if self._sids_by_group[group]:
+            await asyncio.wait(
+                [
+                    asyncio.create_task(self.receive_json({"type": "stop", "id": sid}))
+                    for sid in self._sids_by_group[group]
+                ]
+            )
 
     # ---------------------------------------------------------- GRAPHQL PROTOCOL EVENTS
 
@@ -955,7 +956,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             unsubscribed_callback=unsubscribed_callback,
             receive_notification_callback=receive_notification_callback,
         )
-        await asyncio.wait(waitlist)
+        if waitlist:
+            await asyncio.wait(waitlist)
 
     async def _on_gql_stop(self, operation_id):
         """Process the STOP message.
@@ -1005,7 +1007,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     )
                 )
 
-        await asyncio.wait(waitlist)
+        if waitlist:
+            await asyncio.wait(waitlist)
 
         await subinf.unsubscribed_callback()
 
