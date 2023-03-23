@@ -740,23 +740,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     ),
                 )
 
-                # Respond with the subscription activation message if
-                # enabled in the consumer configuration.
-                # NOTE: We intentionally do it before subscribing to the
-                # `result` stream. This guarantees that subscription
-                # confirmation message is sent before any subscription
-                # notifications.
-                if self.confirm_subscriptions:
-                    await self._send_gql_data(
-                        operation_id,
-                        data=self.subscription_confirmation_message["data"],
-                        errors=self.subscription_confirmation_message["errors"],
-                    )
-
                 # If the result is an AsyncGenerator (stream), then
                 # consume stream of notifications and send them to
                 # clients.
                 if hasattr(result, "__aiter__"):
+                    # Respond with the subscription activation message if
+                    # enabled in the consumer configuration.
+                    # NOTE: We intentionally do it before subscribing to the
+                    # `result` stream. This guarantees that subscription
+                    # confirmation message is sent before any subscription
+                    # notifications.
+                    if self.confirm_subscriptions:
+                        await self._send_gql_data(
+                            operation_id,
+                            data=self.subscription_confirmation_message["data"],
+                            errors=self.subscription_confirmation_message["errors"],
+                        )
+
                     consumer_init_done = asyncio.Event()
 
                     async def consume_stream():
