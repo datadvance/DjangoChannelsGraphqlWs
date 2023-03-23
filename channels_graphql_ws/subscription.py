@@ -77,8 +77,8 @@ class Subscription(graphene.ObjectType):
             always you must be careful with blocking calls in such case.
             If you need to do a blocking operation you can offload it
             manually to the thread or use auxiliary method
-            `cls.sync_to_async`. Synchronous implementation always runs
-            in a thread through `cls.sync_to_async` which comes with a
+            `cls._sync_to_async`. Synchronous implementation always runs
+            in a thread through `cls._sync_to_async` which comes with a
             price of a rather significant overhead.
 
             Required.
@@ -107,7 +107,7 @@ class Subscription(graphene.ObjectType):
             method runs in the main thread with eventloop running. If
             you need to do an call that accesses a database (or execute
             other long running operations) from asynchronous function
-            wrap those calls with `cls.sync_to_async` to offload the
+            wrap those calls with `cls._sync_to_async` to offload the
             execution into separate worker thread.
 
             Optional.
@@ -137,7 +137,7 @@ class Subscription(graphene.ObjectType):
             method runs in the main thread with eventloop running. If
             you need to do an call that accesses a database (or execute
             other long running operations) from asynchronous function
-            wrap those calls with `cls.sync_to_async` to offload the
+            wrap those calls with `cls._sync_to_async` to offload the
             execution into separate worker thread.
 
             Args:
@@ -179,7 +179,7 @@ class Subscription(graphene.ObjectType):
 
     # A function to execute synchronous code. If set to None, will take
     # same function that is specified in the GraphqlWsConsumer class.
-    sync_to_async: Optional[asgiref.sync.SyncToAsync] = None
+    _sync_to_async: Optional[asgiref.sync.SyncToAsync] = None
 
     # A prefix of the Channel group names used for the subscription
     # notifications.
@@ -221,7 +221,7 @@ class Subscription(graphene.ObjectType):
         """Broadcast, asynchronous version."""
         # Manually serialize the `payload` to allow transfer of Django
         # models inside the `payload`.
-        serialized_payload = await cls.sync_to_async(  # pylint: disable=not-callable
+        serialized_payload = await cls._sync_to_async(  # pylint: disable=not-callable
             Serializer.serialize
         )(payload)
 
@@ -468,7 +468,7 @@ class Subscription(graphene.ObjectType):
             if asyncio.iscoroutinefunction(cls._meta.publish):
                 result = await cls._meta.publish(payload, info, *args, **kwds)
             else:
-                async_publish = cls.sync_to_async(  # pylint: disable=not-callable
+                async_publish = cls._sync_to_async(  # pylint: disable=not-callable
                     cls._meta.publish
                 )
                 result = await async_publish(payload, info, *args, **kwds)
@@ -479,7 +479,7 @@ class Subscription(graphene.ObjectType):
 
             The `cls._meta.unsubscribed` function might do database
             operations and could block execution. So we wrap it with
-            `sync_to_async`.
+            `_sync_to_async`.
             """
             if cls._meta.unsubscribed is None:
                 return None
@@ -487,7 +487,7 @@ class Subscription(graphene.ObjectType):
             if asyncio.iscoroutinefunction(cls._meta.unsubscribed):
                 result = await cls._meta.unsubscribed(None, info, *args, **kwds)
             else:
-                async_unsubscribed = cls.sync_to_async(  # pylint: disable=not-callable
+                async_unsubscribed = cls._sync_to_async(  # pylint: disable=not-callable
                     cls._meta.unsubscribed
                 )
                 result = await async_unsubscribed(None, info, *args, **kwds)
@@ -532,7 +532,7 @@ class Subscription(graphene.ObjectType):
         )
 
         # pylint: disable=not-callable
-        _deserialize = cls.sync_to_async(Serializer.deserialize)
+        _deserialize = cls._sync_to_async(Serializer.deserialize)
 
         # For each notification (event) yielded from this function
         # the "graphql_ws_consumer._subscribe" function will call normal
@@ -578,8 +578,8 @@ class Subscription(graphene.ObjectType):
             info.context._channels_graphql_ws  # pylint: disable=protected-access
         )
 
-        if cls.sync_to_async is None:
-            cls.sync_to_async = private_context.sync_to_async
+        if cls._sync_to_async is None:
+            cls._sync_to_async = private_context.sync_to_async
         if cls._group_name_prefix is None:
             cls._group_name_prefix = private_context.group_name_prefix
 
@@ -593,7 +593,7 @@ class Subscription(graphene.ObjectType):
             resolve_fn = middleware_manager.get_field_resolver(resolve_fn)
 
         if not asyncio.iscoroutinefunction(resolve_fn):
-            resolve_fn = cls.sync_to_async(resolve_fn)  # pylint: disable=not-callable
+            resolve_fn = cls._sync_to_async(resolve_fn)  # pylint: disable=not-callable
 
         return await resolve_fn(root, info, *args, **kwds)
 
