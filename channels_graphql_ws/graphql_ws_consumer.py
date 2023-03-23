@@ -238,8 +238,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # according to our experiments even GraphQL document parsing
         # (as well as validation) may take a while (and depends
         # approx. linearly on the size of the selection set).
-        self._graphql_parse = self.sync_to_async(graphql.parse)
-        self._graphql_validate = self.sync_to_async(graphql.validate)
+        self._async_parse_and_validate = self.sync_to_async(self._parse_and_validate)
 
         super().__init__(*args, **kwargs)
 
@@ -670,31 +669,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 return result
 
             # Process the request with Graphene/GraphQL.
-
-            # Do parsing.
-            try:
-                document_ast = await self._graphql_parse(query)
-            except graphql.GraphQLError as ex:
-                LOG.exception("GraphQL parse failed.")
-                await self._send_gql_data(operation_id, None, [ex])
-                await self._send_gql_complete(operation_id)
-                return
-
-            # Do validation.
-            validation_errors: List[
-                graphql.GraphQLError
-            ] = await self._graphql_validate(self.schema.graphql_schema, document_ast)
-            if validation_errors:
-                LOG.warning(
-                    "GraphQL validation failed with error: %s.", validation_errors
-                )
-                await self._send_gql_data(operation_id, None, validation_errors)
-                await self._send_gql_complete(operation_id)
-                return
-
-            op_ast = graphql.utilities.get_operation_ast(
-                document_ast, operation_name=op_name
+            document_ast, op_ast, error = await self._async_parse_and_validate(
+                op_name, query
             )
+            if error:
+                LOG.exception(
+                    "GraphQL query failed. (operation_id=%s, error=%s)",
+                    operation_id,
+                    error,
+                )
+                await self._send_gql_data(operation_id, None, error)
+                await self._send_gql_complete(operation_id)
+                return
+
             # If the operation is subscription.
             if op_ast.operation == graphql.language.ast.OperationType.SUBSCRIPTION:
                 LOG.debug(
@@ -895,6 +882,38 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Tell the client that the request processing is over.
             await self._send_gql_complete(operation_id)
+
+    @functools.lru_cache
+    def _parse_and_validate(self, op_name, query):
+        """Parse and validate query and return ast.
+
+        Returns:
+            Tuple:
+                document_ast, op_ast, error
+        """
+        # Do parsing.
+        try:
+            document_ast = graphql.parse(query)
+        except graphql.GraphQLError as ex:
+            LOG.exception("GraphQL parse failed.")
+            return None, None, [ex]
+
+        # Do validation.
+        validation_errors: List[graphql.GraphQLError] = graphql.validate(
+            self.schema.graphql_schema, document_ast
+        )
+        if validation_errors:
+            LOG.warning(
+                "GraphQL validation failed for operation %s with error: %s.",
+                op_name,
+                validation_errors,
+            )
+            return None, None, validation_errors
+
+        op_ast = graphql.utilities.get_operation_ast(
+            document_ast, operation_name=op_name
+        )
+        return document_ast, op_ast, None
 
     async def _register_subscription(
         self,
