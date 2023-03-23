@@ -61,13 +61,13 @@ def event_loop(request):
 class DummyQuery(graphene.ObjectType):
     """Dummy query to use if no query supplied to the `gql` call.
 
-    Graphene will throw exception from the `graphene.Schema` constructor
+    Graphene will throw a exception from the `graphene.Schema` constructor
     call if the `query` parameter is `None`. The `query` with no fields
     will also result in an exception.
 
-    The our `gql` function should still allow `None` value for the
-    `query` parameter to make tests code simplier. So this "DummyQuery"
-    will be used as a substitution for the `query` parameter of the
+    Our `gql` function should allow `None` value for the `query`
+    parameter to make tests code simplier. So this "DummyQuery" will be
+    used as a substitution for the `query` parameter of the
     `graphene.Schema` constructor call.
     """
 
@@ -145,7 +145,7 @@ def gql(db, request):
         communicator_kwds=None,
     ):
         """Setup GraphQL consumer and the communicator for tests."""
-        # Graphene will throw exception from the `graphene.Schema`
+        # Graphene will throw a exception from the `graphene.Schema`
         # constructor call if the `query` parameter is `None`. The
         # `query` with no fields will also result in exception.
         #
