@@ -617,38 +617,6 @@ class Subscription(graphene.ObjectType):
 
         return f"{prefix}-{suffix_sha256}"
 
-    @staticmethod
-    def _from_coroutine() -> bool:
-        """Check if called from the coroutine function.
-
-        Determine whether the current function is called from a
-        coroutine function (native coroutine, generator-based coroutine,
-        or asynchronous generator function).
-
-        NOTE: That it's only recommended to use for debugging, not as
-        part of your production code's functionality.
-        """
-        try:
-            frame = inspect.currentframe()
-            if frame is None:
-                return False
-            coroutine_function_flags = (
-                inspect.CO_COROUTINE  # pylint: disable=no-member
-                | inspect.CO_ASYNC_GENERATOR  # pylint: disable=no-member
-                | inspect.CO_ITERABLE_COROUTINE  # pylint: disable=no-member
-            )
-            if (
-                frame is not None
-                and frame.f_back is not None
-                and frame.f_back.f_back is not None
-            ):
-                return bool(
-                    frame.f_back.f_back.f_code.co_flags & coroutine_function_flags
-                )
-            return False
-        finally:
-            del frame
-
     @classmethod
     def _channel_layer(cls):
         """Channel layer."""
