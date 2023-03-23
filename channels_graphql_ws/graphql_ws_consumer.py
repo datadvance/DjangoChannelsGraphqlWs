@@ -76,69 +76,6 @@ LOG = logging.getLogger(__name__)
 GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
 
 
-async def _subscribe(
-    schema: graphql.GraphQLSchema,
-    document: graphql.DocumentNode,
-    middleware_manager: graphql.MiddlewareManager,
-    root_value: Any = None,
-    context_value: Any = None,
-    variable_values: Optional[Dict[str, Any]] = None,
-    operation_name: Optional[str] = None,
-    field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
-    subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
-) -> Union[AsyncIterator[graphql.ExecutionResult], graphql.ExecutionResult]:
-    """Create a GraphQL subscription.
-
-    This is a copy of function from GraphQL-core library (v3.2.3).
-    Original version of this code were found in the
-    `graphql.execution.subscribe` module - the function `subscribe`.
-
-    This version is extended with the `middleware_manager` argument
-    handling.
-    """
-    result_or_stream = await graphql.create_source_event_stream(
-        schema,
-        document,
-        root_value,
-        context_value,
-        variable_values,
-        operation_name,
-        subscribe_field_resolver,
-    )
-    if isinstance(result_or_stream, graphql.ExecutionResult):
-        return result_or_stream
-
-    async def map_source_to_response(payload: Any) -> graphql.ExecutionResult:
-        """Map source to response.
-
-        For each payload yielded from a subscription, map it over the
-        normal GraphQL :func:`~graphql.execute` function, with
-        `payload` as the `root_value`. This implements the
-        "MapSourceToResponseEvent" algorithm described in the GraphQL
-        specification. The :func:`~graphql.execute` function provides
-        the "ExecuteSubscriptionEvent" algorithm, as it is nearly
-        identical to the "ExecuteQuery" algorithm, for which
-        :func:`~graphql.execute` is also used.
-        """
-        result = await graphql.execute(
-            schema,
-            document,
-            payload,
-            context_value,
-            variable_values,
-            operation_name,
-            field_resolver,
-            middleware=middleware_manager,
-        )  # type: ignore
-        if inspect.isawaitable(result):
-            return cast(graphql.ExecutionResult, await result)
-        return cast(graphql.ExecutionResult, result)
-
-    # Map every source value to a ExecutionResult value
-    # as described above.
-    return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)
-
-
 class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     """Channels consumer for the WebSocket GraphQL backend.
 
@@ -1207,3 +1144,66 @@ def _get_nice_name_for_callable(func):
             func,
         )
         return str(func)
+
+
+async def _subscribe(
+    schema: graphql.GraphQLSchema,
+    document: graphql.DocumentNode,
+    middleware_manager: graphql.MiddlewareManager,
+    root_value: Any = None,
+    context_value: Any = None,
+    variable_values: Optional[Dict[str, Any]] = None,
+    operation_name: Optional[str] = None,
+    field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
+    subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
+) -> Union[AsyncIterator[graphql.ExecutionResult], graphql.ExecutionResult]:
+    """Create a GraphQL subscription.
+
+    This is a copy of a function from the GraphQL-core library (v3.2.3).
+    The original version of this code were found in the
+    `graphql.execution.subscribe` module - the function `subscribe`.
+
+    This version is extended with the `middleware_manager` argument
+    handling.
+    """
+    result_or_stream = await graphql.create_source_event_stream(
+        schema,
+        document,
+        root_value,
+        context_value,
+        variable_values,
+        operation_name,
+        subscribe_field_resolver,
+    )
+    if isinstance(result_or_stream, graphql.ExecutionResult):
+        return result_or_stream
+
+    async def map_source_to_response(payload: Any) -> graphql.ExecutionResult:
+        """Map source to response.
+
+        For each payload yielded from a subscription, map it over the
+        normal GraphQL :func:`~graphql.execute` function, with
+        `payload` as the `root_value`. This implements the
+        "MapSourceToResponseEvent" algorithm described in the GraphQL
+        specification. The :func:`~graphql.execute` function provides
+        the "ExecuteSubscriptionEvent" algorithm, as it is nearly
+        identical to the "ExecuteQuery" algorithm, for which
+        :func:`~graphql.execute` is also used.
+        """
+        result = await graphql.execute(
+            schema,
+            document,
+            payload,
+            context_value,
+            variable_values,
+            operation_name,
+            field_resolver,
+            middleware=middleware_manager,
+        )  # type: ignore
+        if inspect.isawaitable(result):
+            return cast(graphql.ExecutionResult, await result)
+        return cast(graphql.ExecutionResult, result)
+
+    # Map every source value to a ExecutionResult value
+    # as described above.
+    return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)
