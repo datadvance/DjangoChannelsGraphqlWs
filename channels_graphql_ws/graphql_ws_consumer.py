@@ -1109,10 +1109,57 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     @staticmethod
     def _format_error(error: Exception) -> graphql.GraphQLFormattedError:
-        """Format given exception `error` to send over a network."""
+        """Format given exception `error` to send over a network.
+
+        This function will add the "extensions.code" field containing an
+        exception class name. A frontend may use this value to handle
+        errors properly.
+
+        If your backend throws an Exception, then an error will be formatted
+        for a client like this:
+            {
+                "id": "NNN",
+                "type": "data",
+                "payload": {
+                    "data": {...},
+                    "errors": [{
+                        "message": "Test error",
+                        "locations": [{"line": NNN, "column": NNN}],
+                        "path": ["somepath"],
+                        "extensions": {"code": "Exception"}
+                    }]
+                }
+            }
+
+        If you define custom exception class (`class
+        CustomErr(Exception)`), then the error code in the "extensions"
+        field will equals to the "CustomErr":
+            "extensions": {"code": "Exception"}
+
+        There is a special case of errors on connection. They behave
+        using same logic: in the "code" field there will be an
+        exception class name:
+            {
+                "payload": {
+                    "message": "message from a exception",
+                    "extensions": {"code": "UserUnauthenticatedError"}
+                },
+                "type": "connection_error"
+            }
+
+        Note: If you need to add more fields to the error, then override
+        this function in a subclass. Another way to enrich errors is to
+        use a GraphQLError based classes for your exceptions.
+        """
         if isinstance(error, graphql.error.GraphQLError):
+            if error.extensions and "code" not in error.extensions:
+                if error.original_error:
+                    error.extensions["code"] = type(error.original_error).__name__
             return error.formatted
 
+        # Usually the GraphQL-core library wraps any exception with
+        # GraphQLError. So this code should be unreachable, unless there
+        # are some bugs in the library.
         return {
             "message": f"{type(error).__name__}: {str(error)}",
             "extensions": {"code": type(error).__name__},

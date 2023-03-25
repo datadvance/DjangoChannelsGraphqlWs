@@ -26,10 +26,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ## [1.0.0rc1] - 2022-11-16
 
 - Optional log messages to find slow operations and resolvers added.
+- Support for async resolvers and middlewares.
+- On exceptions a response now contains an "extensions.code" field with
+  exception class name inside.
 - The implementation now relies on the
   `channels.db.database_sync_to_async` function and on the thread pool
   from the `asgiref` library.
-- Support for async resolvers and middlewares.
 - Dependencies updated:
   - Django 4.x
   - channels 3.x
