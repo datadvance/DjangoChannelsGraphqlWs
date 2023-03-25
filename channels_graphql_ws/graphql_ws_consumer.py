@@ -60,6 +60,7 @@ from typing import (
 import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
+import django.db.models.query
 import graphql
 import graphql.error
 import graphql.execution
@@ -619,7 +620,25 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 ):
                     next_func = next_middleware
                 else:
-                    next_func = self.sync_to_async(next_middleware)
+                    # The function is sync, so wrap it.abs
+                    def wrapped_middleware(root, info, *args, **kwds):
+                        resp = next_middleware(root, info, *args, **kwds)
+
+                        # If users code returned an unevaluated
+                        # QuerySet, then we should force it to evaluate
+                        # here.
+                        #
+                        # Because we are going to move that QuerySet out
+                        # out its sync context. And somewhere later, in
+                        # a point of real evaluation the django will
+                        # raise the SynchronousOnlyOperation error: "You
+                        # cannot call this from an async context - use a
+                        # thread or sync_to_async."
+                        if isinstance(resp, django.db.models.query.QuerySet):
+                            resp = list(resp)
+                        return resp
+
+                    next_func = self.sync_to_async(wrapped_middleware)
 
                 result = next_func(root, info, *args, **kwds)
                 if inspect.isawaitable(result):
