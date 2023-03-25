@@ -77,6 +77,9 @@ async def test_error_cases(gql):
     assert isinstance(
         payload["errors"][0]["message"], str
     ), "Error's message  must be of str type!"
+    assert (
+        payload["errors"][0]["extensions"]["code"] == "Exception"
+    ), "Error must have 'code' field."
 
     print(
         "Check that query syntax error leads to the `data` response "
@@ -120,6 +123,9 @@ async def test_error_cases(gql):
     assert len(payload["errors"]) == 1, "Single error expected!"
     assert payload["errors"][0]["message"] == Query.VALUE
     assert "locations" in payload["errors"][0]
+    assert (
+        "extensions" not in payload["errors"][0]
+    ), "For syntax error there should be no 'extensions'."
     await client.receive(assert_id=msg_id, assert_type="complete")
 
     print("Check multiple errors in the `data` message.")
@@ -175,6 +181,9 @@ async def test_connection_error(gql):
     await client.send(msg_type="connection_init", payload="")
     resp = await client.receive(assert_type="connection_error")
     assert resp["message"] == "RuntimeError: Connection rejected!"
+    assert (
+        resp["extensions"]["code"] == "RuntimeError"
+    ), "Error should have 'extensions' with 'code'."
     await client.wait_disconnect()
 
     print("Disconnect and wait the application to finish gracefully.")
@@ -231,7 +240,7 @@ async def test_subscribe_return_value(gql):
         def publish(payload, info):
             """We will never get here in this test."""
             del payload, info
-            assert False
+            assert False  # raises AssertionError exception
 
     class Subscription(graphene.ObjectType):
         """Root subscription."""
@@ -270,8 +279,14 @@ async def test_subscribe_return_value(gql):
         )
         with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
             await client.receive(assert_id=msg_id, assert_type="data")
-            assert "AssertionError" in ex.errors[0]["message"], (
-                "There is no error in response"
-                " to the wrong type of the `subscribe` result!"
-            )
+
+        payload = ex.value.response["payload"]
+        assert "AssertionError" in payload["errors"][0]["message"], (
+            "There is no error in response"
+            " to the wrong type of the `subscribe` result!"
+        )
+        assert (
+            payload["errors"][0]["extensions"]["code"] == "AssertionError"
+        ), "Error should have 'extensions' with 'code'."
+
         await client.finalize()
