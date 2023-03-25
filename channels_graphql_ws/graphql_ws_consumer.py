@@ -120,8 +120,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # Issue a warning to the log when operation/resolver takes longer
     # than specified number in seconds. None disables printing.
-    operation_warn_timeout: Optional[int] = 1
-    resolver_warn_timeout: Optional[int] = 1
+    operation_warn_timeout: Optional[float] = 1
+    resolver_warn_timeout: Optional[float] = 1
 
     # The size of the subscription notification queue. If there are more
     # notifications (for a single subscription) than the given number,
@@ -638,6 +638,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                             resp = list(resp)
                         return resp
 
+                    # The timeout_warning_middleware will use this to
+                    # get nice function name for logs.
+                    wrapped_middleware.__orig_func = next_middleware  # type: ignore
                     next_func = self.sync_to_async(wrapped_middleware)
 
                 result = next_func(root, info, *args, **kwds)
@@ -681,7 +684,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                             "Execution time of resolver %s "
                             "for %s.%s is %.6f "
                             "(operation_id=%s, op_name=%r)",
-                            _get_nice_name_for_callable(next_middleware),
+                            _get_nice_name_for_callable(
+                                next_middleware,
+                                wrapper_func=sync_to_async_middleware,
+                            ),
                             info.parent_type.name,
                             info.field_name,
                             duration,
@@ -1207,7 +1213,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         return self.channel_layer
 
 
-def _get_nice_name_for_callable(func):
+def _get_nice_name_for_callable(func, wrapper_func=None):
     """Get a callable name to show to a developer in logs.
 
     Unfortunately this is not always possible. Lambda functions, for
@@ -1217,12 +1223,23 @@ def _get_nice_name_for_callable(func):
         str: function name.
     """
     try:
+        # If the func variable is the functools.partial with the
+        # `sync_to_async_middleware` (wrapper_func) inside, then unwrap
+        # it to get a real resolver name.
+        if isinstance(func, functools.partial):
+            if func.func == wrapper_func:
+                return _get_nice_name_for_callable(func.args[0])
+
+        # Unwrap sync_to_async helper wrapper of
+        # sync_to_async_middleware.
+        if hasattr(func, "__orig_func"):
+            return _get_nice_name_for_callable(func.__orig_func)
+
         if isinstance(func, functools.partial):
             return f"{func.func.__qualname__}"
 
         if hasattr(func, "__self__"):
-            # it is a bound method with
-            # self variable?
+            # it is a bound method with self variable?
             return f"{func.__self__.__qualname__}." f"{func.__qualname__}"
 
         return f"{func.__qualname__}"
