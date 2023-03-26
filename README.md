@@ -238,6 +238,11 @@ by notifying it from the Django Shell, you have to setup a
 in order for the two instance of your application. The same applies in
 production with workers.
 
+You should prefer async resolvers and async middleware over sync ones.
+Async versions will result in faster code execution. To do DB operations
+you can use
+[Django 4 asynchronous queries](https://docs.djangoproject.com/en/4.1/topics/async/).
+
 ## Example
 
 You can find simple usage example in the [example](example/) directory.
