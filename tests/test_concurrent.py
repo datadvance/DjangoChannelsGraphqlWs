@@ -102,7 +102,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
     been processed. This test reveals hanging worker threads.
     """
 
-    # Name of Graphql Query used in this test.
+    # Name of GraphQL Query used in this test.
     if sync_resolvers == "sync":
         query = "fast_op_sync"
     elif sync_resolvers == "async":
@@ -169,7 +169,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
        the second and the third subscription.
     """
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -296,7 +296,7 @@ async def test_subscribe_and_many_unsubscribes(
     2) Check that all requests have been successfully processed.
     """
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -467,7 +467,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     # Gradually stop the test if time is up.
     TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
@@ -733,7 +733,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
 
-    # Name of Graphql subscription used in this test.
+    # Name of GraphQL subscription used in this test.
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
