@@ -959,6 +959,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             operation_id: Id of the protocol operation.
             groups: A list of subscription group names to put the
                 subscription into.
+            receive_notification_callback: A function that should be
+                called on a incoming notification for a subscription.
             unsubscribed_callback: Called to notify when a client
                 unsubscribes.
 
