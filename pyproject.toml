@@ -53,6 +53,8 @@ aiohttp = "^3"
 asgiref = "^3"
 channels = "^3"
 graphene = ">=3"
+# Updates of the GraphQL-core library should be carefully tested since
+# we rely on private internals of the library.
 graphql-core = "3.2.3"
 msgpack = ">=0.6.1"
 
