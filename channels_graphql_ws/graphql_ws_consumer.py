@@ -681,18 +681,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     duration = time.perf_counter() - start_time
                     if duration >= self.resolver_warn_timeout:
                         LOG.warning(
-                            "Execution time of resolver %s "
-                            "for %s.%s is %.6f "
-                            "(operation_id=%s, op_name=%r)",
+                            "Resolver %r for %s.%s "
+                            "(Operation ID %r, name %r) "
+                            "took %.6f seconds.",
                             _get_nice_name_for_callable(
                                 next_middleware,
                                 wrapper_func=sync_to_async_middleware,
                             ),
                             info.parent_type.name,
                             info.field_name,
-                            duration,
                             operation_id,
                             op_name,
+                            duration,
                         )
                 return result
 
