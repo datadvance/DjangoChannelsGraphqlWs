@@ -640,6 +640,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                     # The timeout_warning_middleware will use this to
                     # get nice function name for logs.
+                    # pylint: disable=protected-access,unused-private-member
                     wrapped_middleware.__orig_func = next_middleware  # type: ignore
                     next_func = self.sync_to_async(wrapped_middleware)
 
@@ -1233,6 +1234,7 @@ def _get_nice_name_for_callable(func, wrapper_func=None):
         # Unwrap sync_to_async helper wrapper of
         # sync_to_async_middleware.
         if hasattr(func, "__orig_func"):
+            # pylint: disable=protected-access
             return _get_nice_name_for_callable(func.__orig_func)
 
         if isinstance(func, functools.partial):
