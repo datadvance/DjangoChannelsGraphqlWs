@@ -1122,7 +1122,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Send GraphQL `complete` message to the client.
 
         Args:
-            operation_id: If of the corresponding operation.
+            operation_id: Id of the corresponding operation.
 
         """
         await self.send_json({"type": "complete", "id": operation_id})
