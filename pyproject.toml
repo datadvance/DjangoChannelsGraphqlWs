@@ -68,7 +68,6 @@ graphene-django = ">=3"
 isort = {version = "*", extras = ["pyproject"]}
 mypy = "*"
 plumbum = "*"
-pre-commit = "*"
 pydocstyle = "*"
 pylint = "*"
 pylint-django = "*"
