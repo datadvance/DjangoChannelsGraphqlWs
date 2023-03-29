@@ -92,7 +92,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
 
         """
         connected = asyncio.Event()
-        self._message_processor = asyncio.ensure_future(
+        self._message_processor = asyncio.create_task(
             self._process_messages(connected, timeout or self.TIMEOUT)
         )
         await asyncio.wait(
