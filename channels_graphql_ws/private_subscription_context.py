@@ -40,7 +40,6 @@ class PrivateSubscriptionContext:
     __slots__ = (
         "operation_id",
         "sync_to_async",
-        "group_name_prefix",
         "register_subscription",
         "middleware_manager_for_subscriptions",
         "subscription_notification_queue_limit",
@@ -50,7 +49,6 @@ class PrivateSubscriptionContext:
         self,
         operation_id,
         sync_to_async: asgiref.sync.SyncToAsync,
-        group_name_prefix: str,
         register_subscription,
         subscription_notification_queue_limit: int,
         middleware_manager_for_subscriptions: graphql.MiddlewareManager,
@@ -60,8 +58,6 @@ class PrivateSubscriptionContext:
         Args:
             operation_id: Operation id.
             sync_to_async: A function passed as a configuration to the
-                GraphqlWsConsumer class.
-            group_name_prefix: A string passed as a configuration to the
                 GraphqlWsConsumer class.
             register_subscription: A reference to the
                 `GraphqlWsConsumer._register_subscription` function.
@@ -73,7 +69,6 @@ class PrivateSubscriptionContext:
         """
         self.operation_id = operation_id
         self.sync_to_async: asgiref.sync.SyncToAsync = sync_to_async
-        self.group_name_prefix: str = group_name_prefix
         self.register_subscription = register_subscription
         self.middleware_manager_for_subscriptions: graphql.MiddlewareManager = (
             middleware_manager_for_subscriptions
