@@ -1173,7 +1173,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 "type": "connection_error"
             }
 
-        Note: If you need to add more fields to the error, then override
+        NOTE: If you need to add more fields to the error, then override
         this function in a subclass. Another way to enrich errors is to
         use a GraphQLError based classes for your exceptions.
         """
