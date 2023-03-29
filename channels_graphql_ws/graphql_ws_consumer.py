@@ -241,7 +241,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # according to our experiments even GraphQL document parsing
         # (as well as validation) may take a while (and depends
         # approx. linearly on the size of the selection set).
-        self._async_parse_and_validate = self.sync_to_async(self._parse_and_validate)
+        self._parse_and_validate = self.sync_to_async(self._parse_and_validate_sync)
 
         super().__init__(*args, **kwargs)
 
@@ -698,9 +698,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 return result
 
             # Process the request with Graphene/GraphQL.
-            document_ast, op_ast, error = await self._async_parse_and_validate(
-                op_name, query
-            )
+            document_ast, op_ast, error = await self._parse_and_validate(op_name, query)
             if error:
                 LOG.exception(
                     "GraphQL query failed. (operation_id=%s, error=%s)",
@@ -910,8 +908,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Tell the client that the request processing is over.
             await self._send_gql_complete(operation_id)
 
-    @functools.lru_cache
-    def _parse_and_validate(self, op_name, query):
+    @functools.lru_cache(maxsize=128)
+    def _parse_and_validate_sync(self, op_name, query):
         """Parse and validate query and return ast.
 
         Returns:
