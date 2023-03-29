@@ -462,8 +462,8 @@ class Subscription(graphene.ObjectType):
         async def publish_callback(payload):
             """Call `publish` with the payload.
 
-            The `cls._meta.publish` function might do database
-            operations and could be slow.
+            The `cls._meta.publish` function might do blocking database
+            operations. Due to that it is wrapped with `_sync_to_async`.
 
             Called to process the notification (and to invoke GraphQL
             resolvers). The callback will be associated with a Channels
