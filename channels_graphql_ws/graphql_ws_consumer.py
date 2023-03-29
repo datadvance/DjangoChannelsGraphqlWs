@@ -130,7 +130,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # A prefix of the Channel group names used for the subscription
     # notifications. You may change this to avoid name clashes in the
-    # ASGI backend, e.g. in the Redis.
+    # ASGI backend, e.g. in the Redis. But the change will require to
+    # make your own subclasses:
+    # ```
+    # class CustomGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+    #     group_name_prefix: str = "NEW_PREFIX"
+    #
+    # class CustomSubscription(channels_graphql_ws.Subscription):
+    #     group_name_prefix: str = "NEW_PREFIX"
+    # ```
     group_name_prefix: str = "GRAPHQL_WS_SUBSCRIPTION"
 
     # GraphQL middleware.
@@ -723,7 +731,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # subclass.
                 #
                 # Both fields are used in a `Subscription`
-                # implementation.
+                # implementation as well.
                 #
                 # We pass those values to a `Subscription` through
                 # `context`, because there is no access from
@@ -734,7 +742,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 context._channels_graphql_ws = PrivateSubscriptionContext(
                     operation_id=operation_id,
                     sync_to_async=self.sync_to_async,
-                    group_name_prefix=self.group_name_prefix,
                     register_subscription=self._register_subscription,
                     subscription_notification_queue_limit=(
                         self.subscription_notification_queue_limit

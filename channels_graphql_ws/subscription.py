@@ -181,8 +181,17 @@ class Subscription(graphene.ObjectType):
     _sync_to_async: Optional[asgiref.sync.SyncToAsync] = None
 
     # A prefix of the Channel group names used for the subscription
-    # notifications.
-    _group_name_prefix = None
+    # notifications. You may change this to avoid name clashes in the
+    # ASGI backend, e.g. in the Redis. But the change will require to
+    # make your own subclasses:
+    # ```
+    # class CustomGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+    #     group_name_prefix: str = "NEW_PREFIX"
+    #
+    # class CustomSubscription(channels_graphql_ws.Subscription):
+    #     group_name_prefix: str = "NEW_PREFIX"
+    # ```
+    group_name_prefix = GraphqlWsConsumer.group_name_prefix
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
@@ -586,8 +595,6 @@ class Subscription(graphene.ObjectType):
 
         if cls._sync_to_async is None:
             cls._sync_to_async = private_context.sync_to_async
-        if cls._group_name_prefix is None:
-            cls._group_name_prefix = private_context.group_name_prefix
 
         middleware_manager: graphql.MiddlewareManager = (
             private_context.middleware_manager_for_subscriptions
@@ -606,11 +613,6 @@ class Subscription(graphene.ObjectType):
     @classmethod
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
-        prefix = (
-            cls._group_name_prefix
-            if cls._group_name_prefix
-            else GraphqlWsConsumer.group_name_prefix
-        )
         suffix = f"{cls.__module__}.{cls.__qualname__}"
         if group is not None:
             suffix += "-" + group
@@ -622,7 +624,7 @@ class Subscription(graphene.ObjectType):
         suffix_sha256.update(suffix.encode("utf-8"))
         suffix_sha256 = suffix_sha256.hexdigest()
 
-        return f"{prefix}-{suffix_sha256}"
+        return f"{cls.group_name_prefix}-{suffix_sha256}"
 
     @classmethod
     def _channel_layer(cls):
