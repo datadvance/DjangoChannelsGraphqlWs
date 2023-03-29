@@ -1122,7 +1122,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Send GraphQL `complete` message to the client.
 
         Args:
-            operation_id: If of the corresponding operation.
+            operation_id: Id of the corresponding operation.
 
         """
         await self.send_json({"type": "complete", "id": operation_id})
@@ -1173,7 +1173,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 "type": "connection_error"
             }
 
-        Note: If you need to add more fields to the error, then override
+        NOTE: If you need to add more fields to the error, then override
         this function in a subclass. Another way to enrich errors is to
         use a GraphQLError based classes for your exceptions.
         """
