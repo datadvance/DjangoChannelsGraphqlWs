@@ -523,7 +523,7 @@ class Subscription(graphene.ObjectType):
                 with notification_queue_lock:
                     try:
                         notification_queue.put_nowait(payload)
-                        break
+                        break  # The item was enqueued. Exit the loop.
                     except asyncio.QueueFull:
                         # The queue is full - issue a warning and throw away
                         # the oldest item from the queue.
@@ -537,6 +537,18 @@ class Subscription(graphene.ObjectType):
                             )
                         notification_queue.get_nowait()
                         notification_queue.task_done()
+
+                        # Try to put the incoming item to the queue
+                        # within the same lock. This is an speed
+                        # optimization.
+                        try:
+                            notification_queue.put_nowait(payload)
+                            break  # The item was enqueued. Exit the loop.
+                        except asyncio.QueueFull:
+                            # Kind'a impossible to get here, but if we
+                            # do, then we should retry the until queue
+                            # have capacity to process item.
+                            pass
 
         # Continue to execute `_subscribe_resolver`.
         await private_context.register_subscription(
