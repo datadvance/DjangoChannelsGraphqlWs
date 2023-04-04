@@ -390,7 +390,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             op_id = content["id"]
 
             async def on_stop():
-                # Will until START message processing finishes, if any.
+                # Wait until START message processing finishes, if any.
                 async with self._operation_locks.setdefault(op_id, asyncio.Lock()):
                     await self._on_gql_stop(operation_id=op_id)
 
@@ -628,7 +628,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 ):
                     next_func = next_middleware
                 else:
-                    # The function is sync, so wrap it.abs
+                    # The function is sync, so wrap it.
                     def wrapped_middleware(root, info, *args, **kwds):
                         resp = next_middleware(root, info, *args, **kwds)
 
