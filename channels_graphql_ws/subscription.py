@@ -525,10 +525,10 @@ class Subscription(graphene.ObjectType):
                         notification_queue.put_nowait(payload)
                         break  # The item was enqueued. Exit the loop.
                     except asyncio.QueueFull:
-                        # The queue is full - issue a warning and throw away
-                        # the oldest item from the queue.
-                        # NOTE: Queue with the size 1 means that it is safe
-                        # to drop intermediate notifications.
+                        # The queue is full - issue a warning and throw
+                        # away the oldest item from the queue.
+                        # NOTE: Queue with the size 1 means that it is
+                        # safe to drop intermediate notifications.
                         if notification_queue.maxsize != 1:
                             LOG.warning(
                                 "Subscription notification dropped!"
@@ -543,10 +543,11 @@ class Subscription(graphene.ObjectType):
                         # optimization.
                         try:
                             notification_queue.put_nowait(payload)
-                            break  # The item was enqueued. Exit the loop.
+                            # The item was enqueued. Exit the loop.
+                            break
                         except asyncio.QueueFull:
                             # Kind'a impossible to get here, but if we
-                            # do, then we should retry the until queue
+                            # do, then we should retry until the queue
                             # have capacity to process item.
                             pass
 
