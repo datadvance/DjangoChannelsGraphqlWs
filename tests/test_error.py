@@ -250,7 +250,6 @@ async def test_subscribe_return_value(gql):
     print("Check there is no error when `subscribe` returns nothing, list, or tuple.")
 
     for result_type in ["NONE", "LIST", "TUPLE"]:
-
         client = gql(subscription=Subscription)
         await client.connect_and_init()
         await client.send(

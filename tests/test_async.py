@@ -240,7 +240,7 @@ class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):  # type: 
 
         for idx in range(count):
             now = datetime.fromtimestamp(time.monotonic())
-            payload = dict(message=now.isoformat(), delay=(count - idx) / 10)
+            payload = {"message": now.isoformat(), "delay": (count - idx) / 10}
             await OnMessageSent.broadcast(payload=payload)
 
         return SendTimestamps(success=True)
