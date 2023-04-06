@@ -172,6 +172,7 @@ envlist = py38,py39,py310
 whitelist_externals = poetry
 commands_pre = poetry install -v
 commands = poetry run pytest {posargs}
+allowlist_externals = poetry
 """
 
 # ----------------------------------------------------------------- MYPY
