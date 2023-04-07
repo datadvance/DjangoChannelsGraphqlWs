@@ -102,7 +102,7 @@ async def test_notification_queue_limit(gql):
     print("Subscribe to receive a new message notifications.")
 
     sub_op_id = await comm2.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -114,23 +114,23 @@ async def test_notification_queue_limit(gql):
     print("Start sending notifications.")
 
     mut_op_id = await comm1.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { send_messages { is_ok } }""",
             "variables": {},
             "operationName": "op_name",
         },
     )
-    await comm1.receive(assert_id=mut_op_id, assert_type="data")
+    await comm1.receive(assert_id=mut_op_id, assert_type="next")
     await comm1.receive(assert_id=mut_op_id, assert_type="complete")
 
     await comm1.assert_no_messages("Self-notification happened!")
 
     # Client will receive only the first and the last notifications.
-    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await comm2.receive(assert_id=sub_op_id, assert_type="next")
     assert resp["data"]["on_new_message"]["message"] == "0"
 
-    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await comm2.receive(assert_id=sub_op_id, assert_type="next")
     assert resp["data"]["on_new_message"]["message"] == "9"
 
     await comm1.assert_no_messages(

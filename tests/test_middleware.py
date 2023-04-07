@@ -49,8 +49,8 @@ async def test_middleware_called_in_query(gql):
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(msg_type="start", payload={"query": "query { ok }"})
-    await client.receive(assert_id=msg_id, assert_type="data")
+    msg_id = await client.send(msg_type="subscribe", payload={"query": "query { ok }"})
+    await client.receive(assert_id=msg_id, assert_type="next")
     await client.receive(assert_id=msg_id, assert_type="complete")
 
     assert middleware_called, "Middleware is not called!"
@@ -81,9 +81,9 @@ async def test_middleware_called_in_mutation(gql):
 
     print("Make simple mutation and assert that middleware function called.")
     msg_id = await client.send(
-        msg_type="start", payload={"query": "mutation { noop { ok } }"}
+        msg_type="subscribe", payload={"query": "mutation { noop { ok } }"}
     )
-    await client.receive(assert_id=msg_id, assert_type="data")
+    await client.receive(assert_id=msg_id, assert_type="next")
     await client.receive(assert_id=msg_id, assert_type="complete")
 
     assert middleware_called, "Middleware is not called!"
@@ -117,7 +117,7 @@ async def test_middleware_called_in_subscription(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await client.send(
-        msg_type="start", payload={"query": "subscription { on_trigger{ ok } }"}
+        msg_type="subscribe", payload={"query": "subscription { on_trigger{ ok } }"}
     )
     await client.assert_no_messages()
 
@@ -132,7 +132,7 @@ async def test_middleware_called_in_subscription(gql):
 
     # Receive subscription notification to guarantee that the
     # subscription processing has finished.
-    await client.receive(assert_id=sub_id, assert_type="data")
+    await client.receive(assert_id=sub_id, assert_type="next")
 
     # Middleware expected to be called during a notification:
     #  - to resolve "on_trigger";
@@ -172,8 +172,8 @@ async def test_middleware_invocation_order(gql):
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(msg_type="start", payload={"query": "query { ok }"})
-    await client.receive(assert_id=msg_id, assert_type="data")
+    msg_id = await client.send(msg_type="subscribe", payload={"query": "query { ok }"})
+    await client.receive(assert_id=msg_id, assert_type="next")
     await client.receive(assert_id=msg_id, assert_type="complete")
 
     assert middleware_invocation_log == [1, 2], "Middleware invocation order is wrong!"

@@ -255,8 +255,6 @@ async def demo_middleware(next_middleware, root, info, *args, **kwds):
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
-    send_keepalive_every = 1
-
     async def on_connect(self, payload):
         """Handle WebSocket connection event."""
 
@@ -291,6 +289,7 @@ application = channels.routing.ProtocolTypeRouter(
     }
 )
 
+
 # -------------------------------------------------------------------- URL CONFIGURATION
 def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
@@ -302,7 +301,23 @@ def graphiql(request):
         return django.http.response.HttpResponse(f.read())
 
 
+def iterator(request):
+    """Trivial view to serve the file required to create fetcher for GraphiQL."""
+    del request
+    iterator_filepath = (
+        pathlib.Path(__file__).absolute().parent
+        / "@n1ru4l"
+        / "push-pull-async-iterable-iterator"
+        / "index.js"
+    )
+    # It is better to specify an encoding when opening documents. Using the
+    # system default implicitly can create problems on other operating systems.
+    with open(iterator_filepath, encoding="utf-8") as f:
+        return django.http.response.HttpResponse(f.read())
+
+
 urlpatterns = [
     django.urls.path("", graphiql),
+    django.urls.path("push-pull-async-iterable-iterator/index.js", iterator),
     django.urls.path("admin", django.contrib.admin.site.urls),
 ]

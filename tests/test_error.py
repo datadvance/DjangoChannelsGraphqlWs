@@ -87,7 +87,7 @@ async def test_error_cases(gql):
     )
 
     msg_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "This produces a syntax error!",
             "variables": {},
@@ -95,7 +95,7 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="data")
+        await client.receive(assert_id=msg_id, assert_type="next")
 
     payload = exc_info.value.response["payload"]
     assert "data" in payload
@@ -109,7 +109,7 @@ async def test_error_cases(gql):
 
     print("Check that syntax error leads to the `data` response with `errors` array.")
     msg_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "query op_name { value(issue_error: true) }",
             "variables": {},
@@ -117,7 +117,7 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="data")
+        await client.receive(assert_id=msg_id, assert_type="next")
     payload = exc_info.value.response["payload"]
     assert payload["data"]["value"] is None
     assert len(payload["errors"]) == 1, "Single error expected!"
@@ -130,7 +130,7 @@ async def test_error_cases(gql):
 
     print("Check multiple errors in the `data` message.")
     msg_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -144,7 +144,7 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="data")
+        await client.receive(assert_id=msg_id, assert_type="next")
     payload = exc_info.value.response["payload"]
     assert payload["data"] is None
     assert (
@@ -250,11 +250,10 @@ async def test_subscribe_return_value(gql):
     print("Check there is no error when `subscribe` returns nothing, list, or tuple.")
 
     for result_type in ["NONE", "LIST", "TUPLE"]:
-
         client = gql(subscription=Subscription)
         await client.connect_and_init()
         await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": f"""
                 subscription {{ test_subscription (switch: "{result_type}\") {{ ok }} }}
@@ -270,7 +269,7 @@ async def test_subscribe_return_value(gql):
         client = gql(subscription=Subscription)
         await client.connect_and_init()
         msg_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": f"""
                 subscription {{ test_subscription (switch: "{result_type}") {{ ok }} }}
@@ -278,7 +277,7 @@ async def test_subscribe_return_value(gql):
             },
         )
         with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
-            await client.receive(assert_id=msg_id, assert_type="data")
+            await client.receive(assert_id=msg_id, assert_type="next")
 
         payload = ex.value.response["payload"]
         assert "AssertionError" in payload["errors"][0]["message"], (

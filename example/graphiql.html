@@ -23,46 +23,73 @@
 -->
 <html>
     <head>
+        <title>GraphiQL</title>
         <style>
-            html,
             body {
                 height: 100%;
                 margin: 0;
-                overflow: hidden;
                 width: 100%;
+                overflow: hidden;
+            }
+
+            #graphiql {
+                height: 100vh;
             }
         </style>
-        <link
-            href="//cdn.jsdelivr.net/npm/graphiql@0.11.11/graphiql.css"
-            rel="stylesheet"
-        />
-        <script src="//cdn.jsdelivr.net/react/15.4.2/react.min.js"></script>
-        <script src="//cdn.jsdelivr.net/react/15.4.2/react-dom.min.js"></script>
-        <script src="//cdn.jsdelivr.net/npm/graphiql@0.11.11/graphiql.min.js"></script>
-        <script src="//cdn.jsdelivr.net/npm/graphql-transport-ws@0.8.3/browser/client.js"></script>
+        <link rel="stylesheet" href="https://unpkg.com/graphiql@2.4.1/graphiql.min.css" />
+        <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+        <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+        <script src="https://unpkg.com/graphiql@2.4.1/graphiql.min.js" type="application/javascript"></script>
+        <script src="https://unpkg.com/graphql-ws@5.12.1/umd/graphql-ws.min.js" type="application/javascript"></script>
+        <!-- https://unpkg.com/@n1ru4l/push-pull-async-iterable-iterator@3.2.0/index.js -->
+        <script
+            src="push-pull-async-iterable-iterator/index.js"
+            type="text/javascript"
+        ></script>
     </head>
 
     <body>
+        <div id="graphiql">Loading...</div>
         <script>
+            const createWebsocketsFetcherFromClient = (wsClient) => (graphQLParams) =>
+                makeAsyncIterableIteratorFromSink((sink) =>
+                    wsClient.subscribe(graphQLParams, {
+                        ...sink,
+                        error: (err) => {
+                            if (err instanceof CloseEvent) {
+                                sink.error(
+                                    new Error(
+                                        `Socket closed with event ${err.code} ${
+                                            err.reason || ""
+                                        }`.trim(),
+                                    ),
+                                );
+                            } else {
+                                sink.error(err);
+                            }
+                        },
+                    }),
+                );
+
             // Setup subscription client.
             const GRAPHQL_ENDPOINT =
                 (location.protocol === "https" ? "wss" : "ws") +
                 "://" +
                 location.host +
-                "/graphql/"
-            let subClient = new window.SubscriptionsTransportWs.SubscriptionClient(
-                GRAPHQL_ENDPOINT,
-                {reconnect: true},
-            )
-            subFetcher = subClient.request.bind(subClient)
+                "/graphql/";
+            let subClient = graphqlWs.createClient({
+                url: GRAPHQL_ENDPOINT,
+                shouldRetry: () => true,
+                keepAlive: 60000,
+            });
 
-            // Render <GraphiQL /> into the body.
             ReactDOM.render(
                 React.createElement(GraphiQL, {
-                    fetcher: subFetcher, //graphQLFetcher
+                    fetcher: createWebsocketsFetcherFromClient(subClient),
+                    defaultEditorToolsVisibility: true,
                 }),
-                document.body,
-            )
+                document.getElementById("graphiql"),
+            );
         </script>
     </body>
 </html>

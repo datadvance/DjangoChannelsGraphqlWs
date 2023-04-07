@@ -133,7 +133,7 @@ async def test_models_serialization_with_nested_db_query(gql, transactional_db):
     print("Subscribe to receive subscription notifications.")
 
     sub_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -242,7 +242,7 @@ async def test_models_serialization(gql, transactional_db):
     print("Subscribe to receive subscription notifications.")
 
     sub_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -359,7 +359,7 @@ async def test_timestamps_serialization(gql, transactional_db):
     print("Subscribe to receive subscription notifications.")
 
     sub_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """

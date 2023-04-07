@@ -58,7 +58,7 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
             except asyncio.TimeoutError:
                 continue
             else:
-                if self._is_keep_alive_response(received):
+                if self._is_ping_pong_response(received):
                     continue
                 assert False, (
                     f"{error_message}\n{received}"
@@ -78,7 +78,7 @@ class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
         self._comm = channels.testing.WebsocketCommunicator(
             application=application,
             path=path,
-            subprotocols=["graphql-ws"],
+            subprotocols=["graphql-transport-ws"],
             **(communicator_kwds or {}),
         )
 

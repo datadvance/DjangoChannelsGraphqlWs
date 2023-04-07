@@ -486,14 +486,10 @@ The original Apollo's protocol does not allow client to know when a
 subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
 when this leads to serious issues.
-[Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
-in the
-[`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
-tracker.
 
 To solve this problem, there is the `GraphqlWsConsumer` setting
 `confirm_subscriptions` which when set to `True` will make the consumer
-issue an additional `data` message which confirms the subscription
+issue an additional `next` message which confirms the subscription
 activation. Please note, you have to modify the client's code to make it
 consume this message, otherwise it will be mistakenly considered as the
 first subscription notification.
