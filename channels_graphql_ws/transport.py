@@ -77,11 +77,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         # HTTP headers.
         self._headers = headers
         # AIOHTTP connection.
-        self._connection = None
+        self._connection: aiohttp.ClientWebSocketResponse
         # A task which processes incoming messages.
-        self._message_processor = None
+        self._message_processor: asyncio.Task
         # A queue for incoming messages.
-        self._incoming_messages = asyncio.Queue()
+        self._incoming_messages: asyncio.Queue = asyncio.Queue()
 
     async def connect(self, timeout: Optional[float] = None) -> None:
         """Establish a connection with the WebSocket server.

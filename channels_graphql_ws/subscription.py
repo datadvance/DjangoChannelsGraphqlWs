@@ -500,16 +500,12 @@ class Subscription(graphene.ObjectType):
                 return None
             # Properly handle `async def unsubscribed`.
             if asyncio.iscoroutinefunction(cls._meta.unsubscribed):
-                result = await cls._meta.unsubscribed(None, info, *args, **kwds)
+                await cls._meta.unsubscribed(None, info, *args, **kwds)
             else:
                 async_unsubscribed = graphql_ws_consumer.sync_to_async(
                     cls._meta.unsubscribed
                 )
-                result = await async_unsubscribed(None, info, *args, **kwds)
-            # There is not particular purpose of returning result of the
-            # callback. We do it just for uniformity with `publish` and
-            # `subscribe`.
-            return result
+                await async_unsubscribed(None, info, *args, **kwds)
 
         def enqueue_notification(payload):
             """Put notification to the queue.

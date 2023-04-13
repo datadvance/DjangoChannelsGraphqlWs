@@ -46,7 +46,7 @@ import time
 import traceback
 import weakref
 from collections.abc import Sequence
-from typing import Any, AsyncIterator, Callable, Optional, Union, cast
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional, Union, cast
 
 import asgiref.sync
 import channels.db
@@ -86,7 +86,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     schema: graphene.Schema
 
     # The interval to send keepalive messages to the clients (seconds).
-    send_keepalive_every: Optional[int] = None
+    send_keepalive_every: Optional[float] = None
 
     # Set to `True` to process requests (i.e. GraphQL documents) from
     # a client in order of arrival, which is the same as sending order,
@@ -190,9 +190,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Subscription groups the subscription belongs to.
         groups: list[str]
         # A function which triggets subscription.
-        enqueue_notification: Callable[[], None]
+        enqueue_notification: Callable[[Any], None]
         # The callback to invoke when client unsubscribes.
-        unsubscribed_callback: Callable[[], None]
+        unsubscribed_callback: Callable[..., Awaitable[None]]
 
     def __init__(self, *args, **kwargs):
         """Consumer constructor."""
@@ -481,11 +481,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # If keepalive enabled then send one message immediately and
             # schedule periodic messages.
             if self.send_keepalive_every is not None:
+                send_keepalive_every = self.send_keepalive_every
 
                 async def keepalive_sender():
                     """Send keepalive messages periodically."""
                     while True:
-                        await asyncio.sleep(self.send_keepalive_every)
+                        await asyncio.sleep(send_keepalive_every)
                         await self._send_gql_connection_keep_alive()
 
                 self._keepalive_task = asyncio.create_task(keepalive_sender())
@@ -555,7 +556,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # This returns asynchronous generator or ExecutionResult
                 # instance in case of error.
-                result = await self._on_gql_start__subscribe(
+                subscr_result = await self._on_gql_start__subscribe(
                     doc_ast,
                     operation_name=op_name,
                     root_value=None,
@@ -567,12 +568,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     ),
                 )
 
-                # If the result is an AsyncGenerator (stream), then
-                # consume stream of notifications and send them to
-                # clients.
-                if hasattr(result, "__aiter__"):
+                # When subscr_result is an AsyncGenerator, consume
+                # stream of notifications and send them to clients.
+                if hasattr(subscr_result, "__aiter__"):
+                    stream = cast(AsyncIterator[graphql.ExecutionResult], subscr_result)
                     # Send subscription activation message (if enabled)
-                    # NOTE: We do it before reading the the `result`
+                    # NOTE: We do it before reading the the stream
                     # stream to guarantee that no notifications are sent
                     # before the subscription confirmation message.
                     if self.confirm_subscriptions:
@@ -587,7 +588,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     async def consume_stream():
                         consumer_init_done.set()
                         try:
-                            async for item in result:
+                            async for item in stream:
                                 try:
                                     await self._send_gql_data(
                                         op_id, item.data, item.errors
@@ -624,11 +625,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # If the operation is query or mutation.
             else:
-                LOG.debug(
-                    "New query/mutation. Operation ID: %s, operation name: %s.)",
-                    op_id,
-                    op_name,
-                )
+                LOG.debug("New query/mutation. Operation %s(%s).", op_name, op_id)
 
                 if self.warn_operation_timeout:
                     start_time = time.perf_counter()
@@ -649,7 +646,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         self._on_gql_start__root_middleware,
                         *self.middleware,
                     )
-                result = graphql.execution.execute(
+                exec_result = graphql.execution.execute(
                     self.schema.graphql_schema,
                     document=doc_ast,
                     root_value=None,
@@ -658,8 +655,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     context_value=context,
                     middleware=middleware_manager,
                 )
-                if inspect.isawaitable(result):
-                    result = await result
+                if inspect.isawaitable(exec_result):
+                    exec_result = await exec_result
 
                 if self.warn_operation_timeout:
                     duration = time.perf_counter() - start_time
@@ -680,38 +677,25 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                             query,
                             variables,
                         )
+            # Respond to a query or mutation immediately.
+            await self._send_gql_data(
+                op_id,
+                cast(graphql.ExecutionResult, exec_result).data,
+                cast(graphql.ExecutionResult, exec_result).errors,
+            )
+            await self._send_gql_complete(op_id)
+
         except Exception as ex:  # pylint: disable=broad-except
             if isinstance(ex, graphql.error.GraphQLError):
                 # Respond with details of GraphQL execution error.
                 LOG.warning(
-                    "GraphQL error! Operation %s(%s).",
-                    op_name,
-                    op_id,
-                    exc_info=True,
+                    "GraphQL error! Operation %s(%s).", op_name, op_id, exc_info=True
                 )
                 await self._send_gql_data(op_id, None, [ex])
                 await self._send_gql_complete(op_id)
             else:
                 # Respond with general error responce.
                 await self._send_gql_error(op_id, ex)
-        else:
-            # This is the "else" block of the "try-catch". Here we
-            # finalizing processing of the `result` value. And, if
-            # required, sending response to the client.
-
-            # Receiving an AsyncIterator (stream) means the subscription
-            # has been processed. We should not send anything to the
-            # client.
-            if hasattr(result, "__aiter__"):
-                return
-
-            # Respond to a query or mutation immediately.
-
-            # The `result` is an instance of the `ExecutionResult`.
-            await self._send_gql_data(op_id, result.data, result.errors)
-
-            # Tell the client that the request processing is over.
-            await self._send_gql_complete(op_id)
 
     async def _on_gql_start__parse_query(
         self, op_name: str, query: str
