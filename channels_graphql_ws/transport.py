@@ -20,7 +20,7 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-"""GraphQL WebSocket client transports."""
+"""GraphQL WebSocket client transport."""
 
 import asyncio
 import json
@@ -28,7 +28,7 @@ from typing import Optional
 
 import aiohttp
 
-import channels_graphql_ws.graphql_ws_consumer
+from . import graphql_ws_consumer
 
 
 class GraphqlWsTransport:
@@ -169,15 +169,13 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         async with session as session:
             connection = session.ws_connect(
                 self._url,
-                protocols=[
-                    channels_graphql_ws.graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL
-                ],
+                protocols=[graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL],
                 timeout=timeout,
             )
             async with connection as self._connection:
                 if (
                     self._connection.protocol
-                    != channels_graphql_ws.graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL
+                    != graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL
                 ):
                     raise RuntimeError(
                         f"Server uses wrong subprotocol: {self._connection.protocol}!"

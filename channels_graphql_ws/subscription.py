@@ -30,7 +30,6 @@ import collections
 import hashlib
 import logging
 import threading
-from typing import Optional
 
 import asgiref.sync
 import channels.db
@@ -43,7 +42,6 @@ import graphene.utils.props
 import graphql
 
 from .graphql_ws_consumer import GraphqlWsConsumer
-from .private_subscription_context import PrivateSubscriptionContext
 from .serializer import Serializer
 
 # Module logger.
@@ -67,18 +65,18 @@ class Subscription(graphene.ObjectType):
         [async] publish(payload, info, *args, **kwds):
             This method invoked each time subscription "triggers".
             Raising an exception here will lead to sending the
-            notification with the error. To suppress the notification
-            return `Subscription.SKIP`.
+            notification with the error. Technically the WebSocker
+            message will contain extra field "extensions.code" holding
+            the classname of the exception raised. To suppress the
+            notification return `Subscription.SKIP`.
 
             Can be implemented as both asynchronous (`async def`) or
-            synchronous function. Asynchronous implementation runs
-            blazingly fast in the main event loop of the main thread. As
-            always you must be careful with blocking calls in such case.
-            If you need to do a blocking operation you can offload it
-            manually to the thread or use auxiliary method
-            `cls._sync_to_async`. Synchronous implementation always runs
-            in a thread through `cls._sync_to_async` which comes with a
-            price of a rather significant overhead.
+            synchronous (`def`) function. Asynchronous implementation
+            runs blazingly fast in the main event loop of the main
+            thread. You must be careful with blocking calls though. You
+            can offload blocking operations to a thread in such cases.
+            Synchronous implementation always runs in a worker thread
+            which comes with a price of extra overhead.
 
             Required.
 
@@ -89,25 +87,24 @@ class Subscription(graphene.ObjectType):
                     information.
                 args, kwds: Values of the GraphQL subscription inputs.
             Returns:
-                The same the any Graphene resolver returns. Returning
-                a special object `Subscription.SKIP` indicates that this
-                notification shall not be sent to the client at all.
+                The same that any Graphene resolver returns. Returning a
+                special object `Subscription.SKIP` indicates that this
+                notification must not be sent to the client at all.
 
         [async] subscribe(root, info, *args, **kwds):
             Called when client subscribes. Define this to do some extra
             work when client subscribes and to group subscriptions into
             different subscription groups. Method signature is the same
-            as in other GraphQL "resolver" methods but it may return
-            the subscription groups names to put the subscription into.
+            as in other GraphQL "resolver" methods but it may return the
+            subscription groups names to put the subscription into.
 
-            Can be implemented both as a synchronous or as a coroutine
-            function. A synchronous method runs in a worker thread - you
-            can call database operations freely. But an asynchronous
-            method runs in the main thread with eventloop running. If
-            you need to do an call that accesses a database (or execute
-            other long running operations) from asynchronous function
-            wrap those calls with `cls._sync_to_async` to offload the
-            execution into separate worker thread.
+            Can be implemented as both asynchronous (`async def`) or
+            synchronous (`def`) function. Asynchronous implementation
+            runs blazingly fast in the main event loop of the main
+            thread. You must be careful with blocking calls though. You
+            can offload blocking operations to a thread in such cases.
+            Synchronous implementation always runs in a worker thread
+            which comes with a price of extra overhead.
 
             Optional.
 
@@ -130,14 +127,13 @@ class Subscription(graphene.ObjectType):
             Called when client unsubscribes. Define this to be notified
             when client unsubscribes.
 
-            Can be implemented both as a synchronous or as a coroutine
-            function. A synchronous method runs in a worker thread - you
-            can call database operations freely. But an asynchronous
-            method runs in the main thread with eventloop running. If
-            you need to do an call that accesses a database (or execute
-            other long running operations) from asynchronous function
-            wrap those calls with `cls._sync_to_async` to offload the
-            execution into separate worker thread.
+            Can be implemented as both asynchronous (`async def`) or
+            synchronous (`def`) function. Asynchronous implementation
+            runs blazingly fast in the main event loop of the main
+            thread. You must be careful with blocking calls though. You
+            can offload blocking operations to a thread in such cases.
+            Synchronous implementation always runs in a worker thread
+            which comes with a price of extra overhead.
 
             Args:
                 root: Always `None`.
@@ -153,13 +149,11 @@ class Subscription(graphene.ObjectType):
     access to this value as `info.context.zen`.
 
     Static methods of subscription subclass:
-        broadcast: Call this method to notify all subscriptions in the
-            group.
-        unsubscribe: Call this method to stop all subscriptions in the
-            group.
+        broadcast(): Call this to notify all subscriptions in the group.
+        unsubscribe(): Call this to stop all subscriptions in the group.
+
     NOTE: If you call any of these methods from the asynchronous context
     then `await` the result of the call.
-
     """
 
     # ----------------------------------------------------------------------- PUBLIC API
@@ -168,48 +162,27 @@ class Subscription(graphene.ObjectType):
     SKIP = GraphqlWsConsumer.SKIP
 
     # Subscription notifications queue limit. Set this to control the
-    # amount of notifications server keeps in queue when notifications
-    # come faster than server processing them. Set this limit to 1 drops
-    # all notifications in queue except the latest one. Use this only if
-    # you are sure that subscription always returns all required state
-    # to the client and client does not loose information when
-    # intermediate notification is missed.
+    # amount of notifications server keeps in the queue when
+    # notifications come faster than server processes them. Setting this
+    # to 1 drops all notifications in the queue except the latest one.
+    # Useful to skip intermediate notifications, e.g. progress reports.
     notification_queue_limit = None
-
-    # A function to execute synchronous code. If set to None, will take
-    # same function that is specified in the GraphqlWsConsumer class.
-    _sync_to_async: Optional[asgiref.sync.SyncToAsync] = None
-
-    # A prefix of the Channel group names used for the subscription
-    # notifications. You may change this to avoid name clashes in the
-    # ASGI backend, e.g. in the Redis. But the change will require to
-    # make your own subclasses:
-    # ```
-    # class CustomGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
-    #     group_name_prefix: str = "NEW_PREFIX"
-    #
-    # class CustomSubscription(channels_graphql_ws.Subscription):
-    #     group_name_prefix: str = "NEW_PREFIX"
-    # ```
-    group_name_prefix = GraphqlWsConsumer.group_name_prefix
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
 
-        This method can be called from both synchronous and asynchronous
-        contexts.
+        Can be called from both synchronous and asynchronous contexts.
 
-        If you call it from the asynchronous context, then you
-        have to `await`.
+        It is necessary to `await` if called from the async context.
 
         Args:
             group: Name of the subscription group which members must be
                 notified. `None` means that all the subscriptions of
                 type will be triggered.
             payload: The payload delivered to the `publish` handler.
-                NOTE: The `payload` is serialized before sending
-                to the subscription group.
+                NOTE: The `payload` is serialized before sending to the
+                subscription group.
 
         """
         try:
@@ -228,8 +201,8 @@ class Subscription(graphene.ObjectType):
     async def broadcast_async(cls, *, group=None, payload=None):
         """Broadcast, asynchronous version."""
         # Manually serialize the `payload` to allow transfer of Django
-        # models inside the `payload`.
-        serialized_payload = await cls._sync_to_async(  # pylint: disable=not-callable
+        # models inside `payload`, auto serialization does not do this.
+        serialized_payload = await channels.db.database_sync_to_async(
             Serializer.serialize
         )(payload)
 
@@ -319,10 +292,9 @@ class Subscription(graphene.ObjectType):
     def Field(  # pylint: disable=invalid-name
         cls, name=None, description=None, deprecation_reason=None, required=False
     ):
-        """Represent subscription as a field to "deploy" it.
+        """Represent subscription as a field to mount it to the schema.
 
-        This method is called when user defines a Subscription like
-        that:
+        Typical usage:
             class Subscription(graphene.ObjectType):
                 on_new_chat_message = OnNewChatMessage.Field()
 
@@ -354,14 +326,15 @@ class Subscription(graphene.ObjectType):
 
         This method is invoked by the superclass `__init__subclass__`.
         It is needed to process class fields, `Meta` and inheritance
-        parameters. This is genuine Graphene approach.
+        parameters. This is genuine Graphene approach inherited/cloned
+        from the original Mutation class implementation.
         """
         if not _meta:
             _meta = SubscriptionOptions(cls)
 
         output = output or getattr(cls, "Output", None)
         # Collect fields if output class is not explicitly defined.
-        fields = {}
+        fields: dict = {}
         if not output:
             fields = collections.OrderedDict()
             for base in reversed(cls.__mro__):
@@ -374,7 +347,6 @@ class Subscription(graphene.ObjectType):
 
         if not arguments:
             input_class = getattr(cls, "Arguments", None)
-
             if input_class:
                 arguments = graphene.utils.props.props(input_class)
             else:
@@ -383,12 +355,12 @@ class Subscription(graphene.ObjectType):
         # Get `publish`, `subscribe`, and `unsubscribe` handlers.
         subscribe = subscribe or getattr(cls, "subscribe", None)
         publish = publish or getattr(cls, "publish", None)
+        unsubscribed = unsubscribed or getattr(cls, "unsubscribed", None)
         assert publish is not None, (
             f"Subscription '{cls.__qualname__}' does not define a"
             " method 'publish'! All subscriptions must define"
-            " 'publish' which processes a GraphQL query!"
+            " 'publish' which processes GraphQL queries!"
         )
-        unsubscribed = unsubscribed or getattr(cls, "unsubscribed", None)
 
         if _meta.fields:
             _meta.fields.update(fields)
@@ -396,73 +368,107 @@ class Subscription(graphene.ObjectType):
             _meta.fields = fields
 
         # Auxiliary alias.
-        get_function = graphene.utils.get_unbound_function.get_unbound_function
+        graphene_get_function = graphene.utils.get_unbound_function.get_unbound_function
 
         # pylint: disable=attribute-defined-outside-init
         _meta.arguments = arguments
         _meta.output = output
-        _meta.resolver = get_function(cls._subscribe)
-        _meta.subscribe = get_function(subscribe)
-        _meta.publish = get_function(publish)
-        _meta.unsubscribed = get_function(unsubscribed)
+        _meta.resolver = graphene_get_function(cls._resolver)
+        _meta.subscribe = graphene_get_function(subscribe)
+        _meta.publish = graphene_get_function(publish)
+        _meta.unsubscribed = graphene_get_function(unsubscribed)
 
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
     @classmethod
-    async def _subscribe_resolver(cls, root, info, *args, **kwds):
+    async def _resolver(cls, root, info, *args, **kwds):
         """Subscription request received.
 
-        This method is called by the Graphene when a client subscribes.
+        First time this method is called with `root=None` to start a
+        subscription. We call "register_subscription" to do the job.
+
+        Then this method is called by the GraphQL-core library with non
+        None root for every notification yielded from the
+        `enqueue_notification` function ("MapSourceToResponseEvent"
+        algorithm).
+
+        We have own behavior of "publish" methods that do the same job.
+        So we have no need to use that behavior of the GraphQL-core
+        library.
+
+        If the root value is not None here, then we ignore that call by
+        just returning a same value.
+        """
+        # Since a notification is already handled by a `publish` method,
+        # there is no need to do this job again. So we just returning
+        # same value for that case.
+        if root is not None:
+            return root
+
+        graphql_ws_consumer = info.context.graphql_ws_consumer
+        middleware_manager = graphql.MiddlewareManager(
+            # pylint: disable=protected-access
+            graphql_ws_consumer._on_gql_start__root_middleware,
+            *graphql_ws_consumer.middleware,
+        )
+
+        # TODO: Needed?
+        # Wrap `cls._resolver_impl` with middlewares.
+        resolve_fn = cls._resolver_impl
+        resolve_fn = middleware_manager.get_field_resolver(resolve_fn)
+
+        # TODO: Sure?
+        if not asyncio.iscoroutinefunction(resolve_fn):
+            resolve_fn = graphql_ws_consumer.sync_to_async(resolve_fn)
+
+        return await resolve_fn(root, info, *args, **kwds)
+
+    @classmethod
+    async def _resolver_impl(cls, root, info, *args, **kwds):
+        """Subscription request received.
 
         Returns:
             AsyncGenerator: An generator that yields notifications to be
-                            sent to the subscriber.
+                sent to the subscriber.
         """
-        try:
-            # pylint: disable=protected-access
-            private_context: PrivateSubscriptionContext = (
-                info.context._channels_graphql_ws
+        graphql_ws_consumer = info.context.graphql_ws_consumer
+
+        # Attach current subscription to the group corresponding to
+        # the concrete class. This allows to trigger all the
+        # subscriptions of the current type, by invoking `publish`
+        # without setting the `group` argument.
+        groups = [cls._group_name()]
+
+        # Invoke the subclass-specified `subscribe` method to get
+        # the groups subscription must be attached to.
+        if cls._meta.subscribe is not None:
+            subclass_groups = cls._meta.subscribe(root, info, *args, **kwds)
+            # Properly handle `async def subscribe`.
+            if asyncio.iscoroutinefunction(cls._meta.subscribe):
+                subclass_groups = await subclass_groups
+            assert subclass_groups is None or isinstance(
+                subclass_groups, (list, tuple)
+            ), (
+                f"Method 'subscribe' returned a value of an incorrect type"
+                f" {type(subclass_groups)}! A list, a tuple, or 'None' expected."
             )
+            subclass_groups = subclass_groups or []
+        else:
+            subclass_groups = []
 
-            # Attach current subscription to the group corresponding to
-            # the concrete class. This allows to trigger all the
-            # subscriptions of the current type, by invoking `publish`
-            # without setting the `group` argument.
-            groups = [cls._group_name()]
-
-            # Invoke the subclass-specified `subscribe` method to get
-            # the groups subscription must be attached to.
-            if cls._meta.subscribe is not None:
-                subclass_groups = cls._meta.subscribe(root, info, *args, **kwds)
-                # Properly handle `async def subscribe`.
-                if asyncio.iscoroutinefunction(cls._meta.subscribe):
-                    subclass_groups = await subclass_groups
-                assert subclass_groups is None or isinstance(
-                    subclass_groups, (list, tuple)
-                ), (
-                    f"Method 'subscribe' returned a value of an incorrect type"
-                    f" {type(subclass_groups)}! A list, a tuple, or 'None' expected."
-                )
-                subclass_groups = subclass_groups or []
-            else:
-                subclass_groups = []
-
-            groups += [cls._group_name(group) for group in subclass_groups]
-        except Exception as ex:
-            LOG.exception("Subscription resolver got exception.")
-            raise ex
+        groups += [cls._group_name(group) for group in subclass_groups]
 
         # The subscription notification queue. Required to preserve the
         # order of notifications within a single subscription.
         queue_size = cls.notification_queue_limit
         if not queue_size or queue_size < 0:
             # Take default limit from the Consumer class.
-            queue_size = private_context.subscription_notification_queue_limit
+            queue_size = graphql_ws_consumer.subscription_notification_queue_limit
         # The subscription notification queue.
         # NOTE: The asyncio.Queue class is not thread-safe. So use the
         # `notification_queue_lock` as a guard while reading or writing
         # to the queue.
-        notification_queue = asyncio.Queue(maxsize=queue_size)
+        notification_queue: asyncio.Queue = asyncio.Queue(maxsize=queue_size)
         # Lock to ensure that `notification_queue` operations are
         # thread safe.
         notification_queue_lock = threading.RLock()
@@ -471,30 +477,24 @@ class Subscription(graphene.ObjectType):
         async def publish_callback(payload):
             """Call `publish` with the payload.
 
-            The `cls._meta.publish` function might do blocking database
-            operations. Due to that it is wrapped with `_sync_to_async`.
-
             Called to process the notification (and to invoke GraphQL
             resolvers). The callback will be associated with a Channels
             groups used to deliver messages to the subscription groups
             current subscription belongs to.
             """
-            # Properly handle `async def publish`.
+            # Properly handle `async def publish()`.
             if asyncio.iscoroutinefunction(cls._meta.publish):
                 result = await cls._meta.publish(payload, info, *args, **kwds)
             else:
-                async_publish = cls._sync_to_async(  # pylint: disable=not-callable
-                    cls._meta.publish
-                )
+                async_publish = graphql_ws_consumer.sync_to_async(cls._meta.publish)
                 result = await async_publish(payload, info, *args, **kwds)
             return result
 
         async def unsubscribed_callback():
             """Call `unsubscribed` notification.
 
-            The `cls._meta.unsubscribed` function might do database
-            operations and could block execution. So we wrap it with
-            `_sync_to_async`.
+            The `cls._meta.unsubscribed` might do blocking operations,
+            so offload it to the thread.
             """
             if cls._meta.unsubscribed is None:
                 return None
@@ -502,7 +502,7 @@ class Subscription(graphene.ObjectType):
             if asyncio.iscoroutinefunction(cls._meta.unsubscribed):
                 result = await cls._meta.unsubscribed(None, info, *args, **kwds)
             else:
-                async_unsubscribed = cls._sync_to_async(  # pylint: disable=not-callable
+                async_unsubscribed = graphql_ws_consumer.sync_to_async(
                     cls._meta.unsubscribed
                 )
                 result = await async_unsubscribed(None, info, *args, **kwds)
@@ -511,10 +511,13 @@ class Subscription(graphene.ObjectType):
             # `subscribe`.
             return result
 
-        def receive_notification_callback(payload):
-            """Process incoming notification.
+        def enqueue_notification(payload):
+            """Put notification to the queue.
 
-            Called when a new notification received though channels.
+            Called by the WebSocket consumer (instance of the
+            GraphqlWsConsumer subclass) when it receives the broadcast
+            message (from the Channels group) sent by the
+            Subscription.broadcast.
 
             Args:
                 sid: Operation id of the subscription.
@@ -532,8 +535,9 @@ class Subscription(graphene.ObjectType):
                         if notification_queue.maxsize != 1:
                             LOG.warning(
                                 "Subscription notification dropped!"
-                                " Subscription operation id: %s.",
-                                private_context.operation_id,
+                                " Operation %s(%s).",
+                                info.context.graphql_operation_name,
+                                info.context.graphql_operation_id,
                             )
                         notification_queue.get_nowait()
                         notification_queue.task_done()
@@ -551,16 +555,15 @@ class Subscription(graphene.ObjectType):
                             # have capacity to process item.
                             pass
 
-        # Continue to execute `_subscribe_resolver`.
-        await private_context.register_subscription(
-            private_context.operation_id,
+        # pylint: disable=protected-access
+        await graphql_ws_consumer._on_gql_start__register_subscription(
+            info.context.graphql_operation_id,
             groups,
-            receive_notification_callback,
+            enqueue_notification,
             unsubscribed_callback,
         )
 
-        # pylint: disable=not-callable
-        _deserialize = cls._sync_to_async(Serializer.deserialize)
+        _deserialize = channels.db.database_sync_to_async(Serializer.deserialize)
 
         # For each notification (event) yielded from this function
         # the "graphql_ws_consumer._subscribe" function will call normal
@@ -576,54 +579,6 @@ class Subscription(graphene.ObjectType):
                 notification_queue.task_done()
 
     @classmethod
-    async def _subscribe(cls, root, info, *args, **kwds):
-        """Subscription request received.
-
-        First time this method is called with `root=None` to start a
-        subscription. We call "register_subscription" to do the job.
-
-        Then this method is called (by the GraphQL-core library) with
-        non None root for every notification yielded from the
-        `receive_notification_callback` function
-        ("MapSourceToResponseEvent" algorithm).
-
-        We have own behavior of "publish" methods that do the same job.
-        So we have no need to use that behavior of the GraphQL-core
-        library.
-
-        If the root value is not None here, then we ignore that call by
-        just returning a same value.
-        """
-        # Since a notification is already handled by a `publish` method,
-        # there is no need to do this job again. So we just returning
-        # same value for that case.
-        if root is not None:
-            return root
-
-        # We need to copy and store configuration options from
-        # GraphqlWsConsumer to be used in other places.
-        private_context: PrivateSubscriptionContext = (
-            info.context._channels_graphql_ws  # pylint: disable=protected-access
-        )
-
-        if cls._sync_to_async is None:
-            cls._sync_to_async = private_context.sync_to_async
-
-        middleware_manager: graphql.MiddlewareManager = (
-            private_context.middleware_manager_for_subscriptions
-        )
-
-        # We want to call `cls._subscribe_resolver` but with middlewares.
-        resolve_fn = cls._subscribe_resolver
-        if middleware_manager is not None:
-            resolve_fn = middleware_manager.get_field_resolver(resolve_fn)
-
-        if not asyncio.iscoroutinefunction(resolve_fn):
-            resolve_fn = cls._sync_to_async(resolve_fn)  # pylint: disable=not-callable
-
-        return await resolve_fn(root, info, *args, **kwds)
-
-    @classmethod
     def _group_name(cls, group=None):
         """Group name based on the name of the subscription class."""
         suffix = f"{cls.__module__}.{cls.__qualname__}"
@@ -635,9 +590,8 @@ class Subscription(graphene.ObjectType):
         # about that the group name is wrong (actually is too long).
         suffix_sha256 = hashlib.sha256()
         suffix_sha256.update(suffix.encode("utf-8"))
-        suffix_sha256 = suffix_sha256.hexdigest()
 
-        return f"{cls.group_name_prefix}-{suffix_sha256}"
+        return f"{GraphqlWsConsumer.group_name_prefix}-{suffix_sha256.hexdigest()}"
 
     @classmethod
     def _channel_layer(cls):
@@ -669,6 +623,6 @@ class SubscriptionField(graphene.Field):
 
         The resolver is defined in the constructor call as
         `cls._meta.resolver`. It will be equal to the
-        `Subscription._subscribe` function.
+        `Subscription._resolver` function.
         """
         return self.resolver

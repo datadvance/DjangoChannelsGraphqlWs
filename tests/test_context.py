@@ -19,21 +19,19 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""Test `info.context` and `ScopeAsContext`."""
-
-from typing import List
+"""Test `info.context` and `DictAsObject`."""
 
 import graphene
 import pytest
 
-import channels_graphql_ws.scope_as_context
+import channels_graphql_ws.dict_as_object
 
 
-def test_scope_as_context():
-    """Make sure `ScopeAsContext` behaves as a correct dict wrapper."""
+def test_dict__as_object():
+    """Make sure `DictAsObject` behaves as a correct dict wrapper."""
     print("Construct a context as a wrapper of dict scope.")
-    scope = {}
-    context = channels_graphql_ws.scope_as_context.ScopeAsContext(scope)
+    scope: dict = {}
+    context = channels_graphql_ws.dict_as_object.DictAsObject(scope)
 
     print("Add records and check they propagate in both directions.")
     context.marker1 = 1
@@ -68,10 +66,10 @@ def test_scope_as_context():
 
 @pytest.mark.asyncio
 async def test_context_lifetime(gql):
-    """Check that `info.context` holds data during the connection."""
+    """Check `info.context` does hold data between requests."""
 
-    # Store ids of `info.context.scope` objects to check them later.
-    run_log: List[bool] = []
+    # Store ids of `info.context` to check them later.
+    run_log: list[bool] = []
 
     print("Setup GraphQL backend and initialize GraphQL client.")
 
@@ -81,7 +79,7 @@ async def test_context_lifetime(gql):
         ok = graphene.Boolean()
 
         def resolve_ok(self, info):
-            """Store `info.context.scope` id."""
+            """Store `info.context` id."""
 
             run_log.append("fortytwo" in info.context)
             if "fortytwo" in info.context:
@@ -91,7 +89,47 @@ async def test_context_lifetime(gql):
             return True
 
     for _ in range(2):
-        print("Make connection and perform query and close connection.")
+        print("Make connection,perform query, and close connection.")
+        client = gql(query=Query, consumer_attrs={"strict_ordering": True})
+        await client.connect_and_init()
+        for _ in range(2):
+            await client.send(msg_type="start", payload={"query": "{ ok }"})
+            await client.receive(assert_type="data")
+            await client.receive(assert_type="complete")
+        await client.finalize()
+
+    # Expected run log: [False, False, False, False].
+    assert not any(run_log), "Context preserved some values between requests!"
+
+
+@pytest.mark.asyncio
+async def test_context_channels_scope_lifetime(gql):
+    """Check `info.context.channels_scope` holds data in connection."""
+
+    # Store ids of `info.context.channels_scope` to check them later.
+    run_log: list[bool] = []
+
+    print("Setup GraphQL backend and initialize GraphQL client.")
+
+    class Query(graphene.ObjectType):
+        """Root GraphQL query."""
+
+        ok = graphene.Boolean()
+
+        def resolve_ok(self, info):
+            """Store `info.context.channels_scope` id."""
+
+            run_log.append("fortytwo" in info.context.channels_scope)
+            if "fortytwo" in info.context.channels_scope:
+                assert (
+                    info.context.channels_scope["fortytwo"] == 42
+                ), "Context has delivered wrong data!"
+            info.context.channels_scope["fortytwo"] = 42
+
+            return True
+
+    for _ in range(2):
+        print("Make connection,perform query, and close connection.")
         client = gql(query=Query, consumer_attrs={"strict_ordering": True})
         await client.connect_and_init()
         for _ in range(2):
@@ -101,6 +139,6 @@ async def test_context_lifetime(gql):
         await client.finalize()
 
     # Expected run log: [False, True, False, True].
-    assert run_log[2] is False, "Context preserved between connections!"
-    assert run_log[0:2] == [False, True], "Context is not preserved in a connection!"
-    assert run_log[2:4] == [False, True], "Context is not preserved in a connection!"
+    assert run_log[2] is False, "Data stays between connections!"
+    assert run_log[0:2] == [False, True], "Data lost within a single connection!"
+    assert run_log[2:4] == [False, True], "Data lost within a single connection!"

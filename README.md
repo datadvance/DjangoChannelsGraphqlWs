@@ -40,7 +40,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   - [Details](#details)
     - [Automatic Django model serialization](#automatic-django-model-serialization)
     - [Execution](#execution)
-    - [Context](#context)
+    - [Context and scope](#context-and-scope)
     - [Authentication](#authentication)
     - [The Python client](#the-python-client)
     - [The GraphiQL client](#the-graphiql-client)
@@ -50,11 +50,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   - [Alternatives](#alternatives)
   - [Development](#development)
     - [Bootstrap](#bootstrap)
-    - [How to read the code](#how-to-read-the-code)
+    - [Where to start reading the code](#where-to-start-reading-the-code)
     - [Running tests](#running-tests)
     - [Making release](#making-release)
   - [Contributing](#contributing)
   - [Acknowledgements](#acknowledgements)
+
 
 ## Features
 
@@ -96,17 +97,17 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   `await MySubscription.broadcast()` depending on the context.
 - Clients for the GraphQL WebSocket server:
     - AIOHTTP-based client.
-    - Client for unit test based on the Django Channels testing
-      communicator.
-- Supported Python 3.8 and newer (tests run on 3.8, 3.9, 3.10).
+    - Client for unit test based on the Channels testing communicator.
+- Requires Python 3.8 and newer. Tests run on 3.8, 3.9, 3.10.
 - Works on Linux, macOS, and Windows.
-- Supports Django 4.1.
+
 
 ## Installation
 
 ```shell
 pip install django-channels-graphql-ws
 ```
+
 
 ## Getting started
 
@@ -150,16 +151,11 @@ class MySubscription(channels_graphql_ws.Subscription):
         return MySubscription(event="Something has happened!")
 
 class Query(graphene.ObjectType):
-    """Root GraphQL query.
-
-    The Graphene library requires us to define a Query with at least one
-    field. This value field is not used in this example.
-    """
-    # Check Graphene docs to see how to define queries.
+    """Root GraphQL query."""
+    # Graphene requires at least one field to be present. Check
+    # Graphene docs to see how to define queries.
     value = graphene.String()
-
     async def resolve_value(self):
-        """Resolver to return predefined value."""
         return "test"
 
 class Mutation(graphene.ObjectType):
@@ -243,6 +239,7 @@ Async versions will result in faster code execution. To do DB operations
 you can use
 [Django 4 asynchronous queries](https://docs.djangoproject.com/en/4.1/topics/async/).
 
+
 ## Example
 
 You can find simple usage example in the [example](example/) directory.
@@ -288,6 +285,7 @@ subscription s { onNewChatMessage(chatroom: "kittens") { text sender }}
 mutation send { sendChatMessage(chatroom: "kittens", text: "Something ;-)!"){ ok }}
 ```
 
+
 ## Details
 
 The `channels_graphql_ws` module provides the following key classes:
@@ -320,6 +318,7 @@ Check the
 [protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
 for details.
 
+
 ### Automatic Django model serialization
 
 The `Subscription.broadcast` uses Channels groups to deliver a message
@@ -333,56 +332,50 @@ and hack the process to automatically serialize Django models following
 the the Django's guide
 [Serializing Django objects](https://docs.djangoproject.com/en/dev/topics/serialization/).
 
+
 ### Execution
 
 - Different requests from different WebSocket client are processed
   asynchronously.
 - By default different requests (WebSocket messages) from a single
-  client are processed concurrently by using an event loop (for async
-  resolvers) or different worker threads (for sync resolvers). (It is
-  possible to change the maximum number of worker threads with the
-  `ASGI_THREADS` environment variable of the
-  [asgiref](https://github.com/django/asgiref/) library). So there is no
-  guarantee that requests will be processed in the same order the client
-  sent these requests. Actually, with HTTP we have this behavior for
-  decades.
+  client are processed concurrently in an event loop (async resolvers)
+  or worker threads (sync resolvers). It is possible to change the
+  maximum number of worker threads with the `ASGI_THREADS` environment
+  variable of the [asgiref](https://github.com/django/asgiref/) library.
+  So there is no guarantee that requests will be processed in the same
+  order the client sent these requests. Actually, with HTTP we have this
+  behavior for decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
-  execution - in other words, the server will not start processing
-  another request from the client before it finishes the current one.
-  See comments in the class `GraphqlWsConsumer`.
+  execution - in other words, the server will not start processing a new
+  request from the client until it finishes the current one. See
+  comments in the class `GraphqlWsConsumer`.
 - All subscription notifications are delivered in the order they were
   issued.
+- Each request (WebSocket message) processing starts in the main thread.
+  The request's parsing and validation is offloaded into the thread
+  pool. Resolver calls made from the main thread. And for each resolver
+it checks whether the resolver is a coroutine function. If it is a
+coroutine function, then the resolver is launched from the main thread.
+If it is not a coroutine function (a synchronous function), then the
+resolver is launched from the thread pool. As you know an asyncio
+eventloop call is faster than a thread call. So you should prefer
+asynchronous resolvers in your code. It will work faster.
 
-Each request (WebSocket message) processing starts in the main thread of
-the process. With exception that the request's parsing and validation is
-offloaded into a thread pool. Resolver calls made from the main thread.
-And for each resolver it checks whether the resolver is a coroutine
-function. If it is a coroutine function, then the resolver is launched
-from the main thread. If it is not a coroutine function (a synchronous
-function), then the resolver is launched from the thread pool. As you
-know an asyncio eventloop call is faster than a thread call. So you
-should prefer asynchronous resolvers in your code. It will work faster.
 
-### Context
+### Context and scope
 
-The context object (`info.context` in resolvers) is an object-like
-wrapper around [Channels
-scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope)
-typically available as `self.scope` in the Channels consumers. So you
-can access Channels scope as `info.context`. Modifications made in
-`info.context` are stored in the Channels scope, so they are persisted
-as long as WebSocket connection lives. You can work with `info.context`
-both as with `dict` or as with `SimpleNamespace`:
+The context object (`info.context` in resolvers) is a `SimpleNamespace`
+instance useful to transfer extra data between GraphQL resolvers. It
+also contains some useful extras:
+- `graphql_ws_consumer`: An instance of `GraphqlWsConsumer` subclass.
+- `graphql_operation_id`: The GraphQL operation id came from the client.
+- `graphql_operation_name`: The name of GraphQL operation.
+- `channels_consumer`: The same as `graphql_ws_consumer`.
+- `channels_scope`: [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope),
+  the same as `channels_consumer.scope`.
+- `channel_name`: The same as `channels_consumer.channel_name`.
 
-```python
-def resolve_something(self, info):
-    info.context.fortytwo = 42
-    assert info.context["fortytwo"] == 42
-```
-
-The context object contains several fields defined by this library:
-- `channel_name` - [The channel name from Channels](https://channels.readthedocs.io/en/stable/topics/channel_layers.html?highlight=channel_name#single-channels)
 
 ### Authentication
 
@@ -399,9 +392,9 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-This gives you a Django user `info.context.user` in all the
-resolvers. To authenticate user you can create a `Login` mutation like
-the following:
+This gives you a Django user `info.context.channels_scope.user` in
+all the resolvers. To authenticate user you can create a `Login`
+mutation like the following:
 
 ```python
 class Login(graphene.Mutation, name="LoginPayload"):
@@ -424,10 +417,8 @@ class Login(graphene.Mutation, name="LoginPayload"):
             return Login(ok=False)
 
         # Use Channels to login, in other words to put proper data to
-        # the session stored in the scope. The `info.context` is
-        # practically just a wrapper around Channel `self.scope`, but
-        # the `login` method requires dict, so use `_asdict`.
-        asgiref.sync.async_to_sync(channels.auth.login)(info.context._asdict(), user)
+        # the session stored in the scope.
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context.channels_scope, user)
         # Save the session,cause `channels.auth.login` does not do this.
         info.context.session.save()
 
@@ -438,6 +429,7 @@ The authentication is based on the Channels authentication mechanisms.
 Check
 [the Channels documentation](https://channels.readthedocs.io/en/latest/topics/authentication.html).
 Also take a look at the example in the [example](example/) directory.
+
 
 ### The Python client
 
@@ -462,6 +454,7 @@ await client.finalize()
 
 See the `GraphqlWsClient` class docstring for the details.
 
+
 ### The GraphiQL client
 
 The GraphiQL provided by Graphene doesn't connect to your GraphQL
@@ -469,6 +462,7 @@ endpoint via WebSocket; instead you should use a modified GraphiQL
 template under `graphene/graphiql.html` which will take precedence over
 the one of Graphene. One such modified GraphiQL is provided in the
 [example](example/) directory.
+
 
 ### Testing
 
@@ -479,6 +473,7 @@ In order to simplify unit testing there is a `GraphqlWsTransport`
 implementation based on the Django Channels testing communicator:
 `channels_graphql_ws.testing.GraphqlWsTransport`. Check its docstring
 and take a look at the [tests](/tests) to see how to use it.
+
 
 ### Subscription activation confirmation
 
@@ -502,6 +497,7 @@ To customize the confirmation message itself set the `GraphqlWsConsumer`
 setting `subscription_confirmation_message`. It must be a dictionary
 with two keys `"data"` and `"errors"`. By default it is set to
 `{"data": None, "errors": None}`.
+
 
 ### GraphQL middleware
 
@@ -540,6 +536,7 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
 For more information about GraphQL middleware please take a look at the
 [relevant section in the Graphene documentation](https://docs.graphene-python.org/en/latest/execution/middleware/#middleware).
 
+
 ## Alternatives
 
 There is a [Tomáš Ehrlich](https://gist.github.com/tricoder42)
@@ -554,7 +551,9 @@ library by the Graphene authors. In particular
 gives a hope that there will be native Graphene implementation of the
 WebSocket transport with subscriptions one day.
 
+
 ## Development
+
 
 ### Bootstrap
 
@@ -614,34 +613,27 @@ Use:
     https://github.com/ambv/black
 )
 
-### How to read the code
 
-The code is quite complex. You might need some time to dive into. Here
-are quick insights to help you to get on track.
+### Where to start reading the code
 
-Important classes are `GraphqlWsConsumer` and `Subscription`.
+The code is inherently complex because it glues two rather different
+libraries/frameworks Channels and Graphene. You might need some time to
+dive into. Here are some quick insights to help you to get on track.
 
-When server receives JSON from the client, the
-`GraphqlWsConsumer.receive_json` method is called. Then the request is
-passed to the `_on_gql_start` method. Most magic happens here.
+The main classes are `GraphqlWsConsumer` and `Subscription`. The former
+one is a Channels consumer which instantiates each time a WebSocket
+connection establishes. User (of the library) subclasses it and tunes
+settings in the successor class. The latter is from the Graphene world.
+Both classes are tightly coupled. When client subscribes an instance of
+`GraphqlWsConsumer` subclass holding the WebSocket connection passes to
+the `Subscription`.
 
-The `sync_to_async_middleware` is used to allow execution of blocking
-operations inside of resolvers.
+To better dive in it is useful to understand in general terms how
+regular request are handled. When server receives JSON from the client,
+the `GraphqlWsConsumer.receive_json` method is called by Channels
+routines. Then the request passes to the `_on_gql_start` method which
+handles GraphQL message "START". Most magic happens there.
 
-Queries and mutations are handled in one way, and subscriptions in
-another: you can find the big if-else block inside of the
-`_on_gql_start` method.
-
-`GraphqlWsConsumer` and `Subscription` instances are connected one to
-each other with help of `context._channels_graphql_ws`. The data they
-share is specified in the `PrivateSubscriptionContext` data type.
-
-The `GraphqlWsConsumer._register_subscription` method is quite important
-for subscriptions to work. The `Subscription._subscribe_resolver` method
-is calling it on new subscription. And the `_subscribe_resolver` method
-is responsible for handling subscription lifecycle.
-
-Read through implementations of those methods.
 
 ### Running tests
 
@@ -664,6 +656,7 @@ _A reminder of how to run tests._
    $ poetry run pytest
    ```
 
+
 ### Making release
 
 _A reminder of how to make and publish a new release._
@@ -679,11 +672,13 @@ _A reminder of how to make and publish a new release._
    [release notes](https://github.com/datadvance/DjangoChannelsGraphqlWs/releases)
    on GitHub.
 
+
 ## Contributing
 
 This project is developed and maintained by DATADVANCE LLC. Please
 submit an issue if you have any questions or want to suggest an
 improvement.
+
 
 ## Acknowledgements
 

@@ -44,9 +44,10 @@ license = "MIT"
 packages = [
     { include = "channels_graphql_ws/" },
 ]
-[tool.poetry.dependencies]
+
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
+[tool.poetry.dependencies]
 python = "^3.8.0"
 Django = ">=4.0.0"
 aiohttp = "^3"
@@ -58,9 +59,9 @@ graphene = ">=3"
 graphql-core = "3.2.3"
 msgpack = ">=0.6.1"
 
-[tool.poetry.dev-dependencies]
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
+[tool.poetry.group.dev.dependencies]
 black = { version = "*", allow-prereleases = true }
 channels-redis = "*"
 coverage = "*"
@@ -169,16 +170,16 @@ legacy_tox_ini = """
 isolated_build = true
 envlist = py38,py39,py310
 [testenv]
-whitelist_externals = poetry
+allowlist_externals = poetry
 commands_pre = poetry install -v
 commands = poetry run pytest {posargs}
-allowlist_externals = poetry
 """
 
 # ----------------------------------------------------------------- MYPY
 # MyPy configuration.
 # Docs: https://mypy.readthedocs.io/en/latest/config_file.html
 [tool.mypy]
+check_untyped_defs = true
 ignore_missing_imports = true
 warn_return_any = true
 warn_unused_configs = true
@@ -224,4 +225,3 @@ match=".*\\.py"
 #   There is nothing bad in using words like "WebSocket" or
 #   "MessagePack" even in the beginning of the docstring.
 add_ignore="D202,D401,D403"
-

@@ -25,23 +25,21 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## [1.0.0rc1] - 2022-11-16
 
-- Optional log messages to find slow operations and resolvers added.
-- Support for async resolvers and middlewares.
-- On exceptions a response now contains an "extensions.code" field with
-  exception class name inside.
-- The implementation now relies on the
-  `channels.db.database_sync_to_async` function and on the thread pool
-  from the `asgiref` library.
-- Dependencies updated:
-  - Django 4.x
-  - channels 3.x
-  - graphene 3.x
-
-NOTE: The DjangoChannelsGraphqlWs library itself does not introduce any
-      backward incompatible changes. But it's dependencies have
-      incompatible changes. This includes: Django, Graphene and
-      GraphQL-core libraries. Read the migration docs of those libraries
-      during upgrade.
+- DjangoChannelsGraphqlWs has migrated to the recent versions of Django,
+  Channels, and Graphene. All other Python dependencies updated.
+- Server outputs a warning to the log when operation/resolver takes
+  longer than specified timeout, which is one second by default. The
+  settings `GraphqlWsConsumer.warn_operation_timeout` and
+  `GraphqlWsConsumer.warn_resolver_timeout` allow to tune the timeout or
+  even disable the warning at all.
+- If exception raises from the resolver a response now contains a field
+  "extensions.code" with a class name of the exception.
+- Added support for async resolvers and middlewares.
+- WARNING: This release is not backward compatible with previous ones!
+  The main cause is a major update of Django, Channels, and Graphene,
+  but there are some introduced by the library itself. In particular:
+  - Context lifetime and content have changed. See README.md for
+    details.
 
 ## [0.9.1] - 2022-01-27
 

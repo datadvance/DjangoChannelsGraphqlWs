@@ -32,7 +32,6 @@ import graphene
 import pytest
 
 import channels_graphql_ws
-import tests.utils
 
 
 @pytest.mark.asyncio
@@ -406,7 +405,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
 
     # pylint: disable=arguments-differ
 
-    event = tests.utils.CustomJSONString()
+    event = graphene.JSONString()
 
     class Arguments:
         """That is how subscription arguments are defined."""
@@ -426,7 +425,7 @@ class OnChatMessageSent(channels_graphql_ws.Subscription):
     def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"user_id": user_id, "payload": self}
+        event = {"user_id": user_id.value, "payload": self}
 
         return OnChatMessageSent(event=event)
 

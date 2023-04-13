@@ -45,30 +45,21 @@ import logging
 import time
 import traceback
 import weakref
-from typing import (
-    Any,
-    AsyncIterator,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Union,
-    cast,
-)
+from collections.abc import Sequence
+from typing import Any, AsyncIterator, Callable, Optional, Union, cast
 
 import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
 import django.db.models.query
+import graphene
 import graphql
 import graphql.error
 import graphql.execution
 import graphql.pyutils
 import graphql.utilities
 
-from .private_subscription_context import PrivateSubscriptionContext
-from .scope_as_context import ScopeAsContext
+from .dict_as_object import DictAsObject
 
 # Module logger.
 LOG = logging.getLogger(__name__)
@@ -92,7 +83,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # Overwrite this in the subclass to specify the GraphQL schema which
     # processes GraphQL queries.
-    schema = None
+    schema: graphene.Schema
 
     # The interval to send keepalive messages to the clients (seconds).
     send_keepalive_every: Optional[int] = None
@@ -116,36 +107,22 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # The message sent to the client when subscription activation
     # confirmation is enabled.
-    subscription_confirmation_message: Dict[str, Any] = {"data": None, "errors": None}
+    subscription_confirmation_message: dict[str, Any] = {"data": None, "errors": None}
 
     # Issue a warning to the log when operation/resolver takes longer
-    # than specified number in seconds. None disables printing.
-    operation_warn_timeout: Optional[float] = 1
-    resolver_warn_timeout: Optional[float] = 1
+    # than specified number in seconds. None disables the warning.
+    warn_operation_timeout: Optional[float] = 1
+    warn_resolver_timeout: Optional[float] = 1
 
     # The size of the subscription notification queue. If there are more
     # notifications (for a single subscription) than the given number,
     # then an oldest notification is dropped and a warning is logged.
     subscription_notification_queue_limit: int = 1024
 
-    # A prefix of the Channel group names used for the subscription
-    # notifications. You may change this to avoid name clashes in the
-    # ASGI backend, e.g. in the Redis. But the change will require to
-    # make your own subclasses:
-    # ```
-    # class CustomGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
-    #     group_name_prefix: str = "NEW_PREFIX"
-    #
-    # class CustomSubscription(channels_graphql_ws.Subscription):
-    #     group_name_prefix: str = "NEW_PREFIX"
-    # ```
-    group_name_prefix: str = "GRAPHQL_WS_SUBSCRIPTION"
-
     # GraphQL middleware.
-    # Typically a list of functions (callables) like:
+    # List of functions (callables) like the following:
     # ```python
     # async def my_middleware(next_middleware, root, info, *args, **kwds):
-    #     # Write user code here.
     #     result = next_middleware(root, info, *args, **kwds)
     #     if graphql.pyutils.is_awaitable(result):
     #        result = await result
@@ -154,18 +131,24 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # For more information read docs:
     # - https://docs.graphene-python.org/en/latest/execution/middleware/#middleware
     # - https://graphql-core-3.readthedocs.io/en/latest/diffs.html#custom-middleware
-    # On async middleware calls read the source code of the GraphQL-core
-    # library.
+    # Docs about async middlewares are still missing - read the
+    # GraphQL-core sources to know more.
     middleware: Sequence = []
 
-    # A function to execute synchronous code.
-    # By default we rely on the `channels.db.database_sync_to_async`
-    # function.  Because it clears unused database connections after a
-    # wrapped function execution is finished. Actual implementation of
-    # the `database_sync_to_async` uses a thread pool inside.
-    # For more information read:
+    # A function to execute synchronous resolvers, middlewares, request
+    # parsing functions, etc. from asynchronous context. The default is
+    # a ASGI thread pool in `channels.db.database_sync_to_async` which
+    # cleans up the database connections so resolvers can safely work
+    # with a database.
     # https://channels.readthedocs.io/en/latest/topics/databases.html#database-sync-to-async
+    # You can redefine this to use designated thread pool or to use
+    # `asgiref.sync.sync_to_async` if you are sure your resolvers does
+    # not work with the database.
     sync_to_async: asgiref.sync.SyncToAsync = channels.db.database_sync_to_async
+
+    # Subscription implementation shall return this to tell consumer
+    # to suppress subscription notification.
+    SKIP = object()
 
     async def on_connect(self, payload):
         """Client connection handler.
@@ -179,26 +162,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """
         del payload
 
-    async def on_operation_start(self, operation_id, payload):
-        """Process business logic before operation processing will start.
+    async def on_operation(self, op_id, payload):
+        """Process business logic before operation processing starts.
 
-        For example this hook can check that user session is active (not
-        yet expired).
+        Useful e.g. to check that user session is not yet expired.
 
-        If you want to cancel operation with an error you can throw a
-        `graphql.error.GraphQLError` here.
+        Throw `graphql.error.GraphQLError` to cancel the operation.
 
         Args:
-            operation_id: Operation id.
+            op_id: Operation id.
             payload: Payload of the operation.
         """
-        del operation_id, payload
+        del op_id, payload
 
     # ------------------------------------------------------------------- IMPLEMENTATION
 
-    # Subscription implementation may shall return this to tell consumer
-    # to suppress subscription notification.
-    SKIP = object()
+    # A prefix of Channel groups with subscription notifications.
+    group_name_prefix: str = "GQLWS"
 
     # Structure that holds subscription information.
     @dataclasses.dataclass
@@ -208,9 +188,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Subscription identifier - protocol operation identifier.
         sid: int
         # Subscription groups the subscription belongs to.
-        groups: List[str]
-        # A function to call when new notification received.
-        receive_notification_callback: Callable[[], None]
+        groups: list[str]
+        # A function which triggets subscription.
+        enqueue_notification: Callable[[], None]
         # The callback to invoke when client unsubscribes.
         unsubscribed_callback: Callable[[], None]
 
@@ -223,33 +203,30 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
 
         # Registry of active (subscribed) subscriptions.
-        self._subscriptions: Dict[
+        self._subscriptions: dict[
             int, GraphqlWsConsumer._SubInf
         ] = {}  # {'<sid>': '<SubInf>', ...}
-        # A task which processes incoming messages and sends them to
-        # clients.
-        self._subscription_consumers: Dict[int, asyncio.Task] = {}
         self._sids_by_group = {}  # {'<grp>': ['<sid0>', '<sid1>', ...], ...}
+
+        # Tasks which send notifications to clients indexed by an
+        # operation/subscription id.
+        self._notifier_tasks: dict[int, asyncio.Task] = {}
 
         # Task that sends keepalive messages periodically.
         self._keepalive_task = None
 
         # Background tasks to clean it up when a client disconnects.
         # We use weak collection so finished task will be autoremoved.
-        self._background_tasks = weakref.WeakSet()
+        self._background_tasks: weakref.WeakSet = weakref.WeakSet()
 
         # Crafty weak collection with per-operation locks. It holds a
         # mapping from the operaion id (protocol message id) to the
         # `asyncio.Lock` used to serialize processing of start & stop
         # requests. Since the collection is weak, it automatically
         # throws away items when locks are garbage collected.
-        self._operation_locks = weakref.WeakValueDictionary()
-
-        # Offload the GraphQL processing to the worker thread cause
-        # according to our experiments even GraphQL document parsing
-        # (as well as validation) may take a while (and depends
-        # approx. linearly on the size of the selection set).
-        self._parse_and_validate = self.sync_to_async(self._parse_and_validate_sync)
+        self._operation_locks: weakref.WeakValueDictionary = (
+            weakref.WeakValueDictionary()
+        )
 
         super().__init__(*args, **kwargs)
 
@@ -287,20 +264,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # 1000 "Normal Closure", and 1001 "Going Away" as OK.
         # See: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
         if not code:
-            LOG.warning("WebSocket connection closed without a code")
+            LOG.warning("WebSocket connection closed without a code!")
         elif code <= 1001:
             LOG.debug("WebSocket connection closed with code: %s.", code)
         else:
             LOG.warning("WebSocket connection closed with code: %s!", code)
 
         # The list of awaitables to simultaneously wait at the end.
-        waitlist: List[asyncio.Task] = []
+        waitlist: list[asyncio.Task] = []
 
         # Unsubscribe from the Channels groups.
         waitlist += [
-            asyncio.create_task(
-                self._channel_layer.group_discard(group, self.channel_name)
-            )
+            self._channel_layer.group_discard(group, self.channel_name)
             for group in self._sids_by_group
         ]
 
@@ -314,21 +289,21 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             self._keepalive_task.cancel()
             waitlist += [self._keepalive_task]
 
-        # Stop subscription event processing.
-        for consumer_task in self._subscription_consumers.values():
-            consumer_task.cancel()
-            waitlist.append(consumer_task)
+        # Stop tasks which listen to GraphQL lib and send notifications.
+        for notifier_task in self._notifier_tasks.values():
+            notifier_task.cancel()
+            waitlist += [notifier_task]
 
         # Wait for tasks to stop.
         if waitlist:
             await asyncio.wait(waitlist)
 
-        self._subscriptions.clear()
-        self._sids_by_group.clear()
         self._background_tasks.clear()
-        self._subscription_consumers.clear()
         self._keepalive_task = None
-        self._operation_locks = weakref.WeakValueDictionary()
+        self._notifier_tasks.clear()
+        self._operation_locks.clear()
+        self._sids_by_group.clear()
+        self._subscriptions.clear()
 
     async def receive_json(self, content):  # pylint: disable=arguments-differ
         """Process WebSocket message received from the client.
@@ -341,10 +316,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         of both messages concurrently we can deliver subscription
         confirmation after unsubscription confirmation.
         """
-        # Disable this check cause the current version of Pylint
-        # improperly complains when we assign a coroutine object to
-        # a local variable `task` below.
-        # pylint: disable=assignment-from-no-return
 
         # Extract message type based on which we select how to proceed.
         msg_type = content["type"].upper()
@@ -357,12 +328,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         elif msg_type == "START":
             op_id = content["id"]
-
-            try:
-                await self.on_operation_start(op_id, payload=content["payload"])
-            except Exception as ex:  # pylint: disable=broad-except
-                await self._send_gql_error(op_id, ex)
-                return
 
             # Create and lock a mutex for this particular operation id,
             # so STOP processing for the same operation id will wait
@@ -378,9 +343,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             async def on_start():
                 try:
-                    await self._on_gql_start(
-                        operation_id=op_id, payload=content["payload"]
-                    )
+                    # User hook which raises to cancel processing.
+                    await self.on_operation(op_id, payload=content["payload"])
+                    # START message processing.
+                    await self._on_gql_start(op_id, payload=content["payload"])
+                except Exception as ex:  # pylint: disable=broad-except
+                    await self._send_gql_error(op_id, ex)
                 finally:
                     op_lock.release()
 
@@ -392,20 +360,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             async def on_stop():
                 # Wait until START message processing finishes, if any.
                 async with self._operation_locks.setdefault(op_id, asyncio.Lock()):
-                    await self._on_gql_stop(operation_id=op_id)
+                    await self._on_gql_stop(op_id)
 
             task = on_stop()
 
         else:
-            error_msg = f"Message of unknown type '{msg_type}' received!"
             task = self._send_gql_error(
-                content["id"] if "id" in content else -1,
-                Exception(error_msg),
+                content["id"] if "id" in content else None,
+                Exception(f"Wrong message type '{msg_type}'!"),
             )
-            LOG.warning("GraphQL WS Client error: %s", error_msg)
 
         # If strict ordering is required then simply wait until the
-        # message processing is finished. Otherwise spawn a task so
+        # message processing finishes. Otherwise spawn a task so
         # Channels may continue calling `receive_json` while requests
         # (i.e. GraphQL documents) are being processed.
         if self.strict_ordering:
@@ -416,17 +382,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def broadcast(self, message):
         """The broadcast message handler.
 
-        Method is called when new `broadcast` message received from the
-        Channels group. The message itself is sent by
-        `Subscription.broadcast`.
+        Method is called when new `broadcast` message (sent by
+        `Subscription.broadcast`) received from the Channels group.
 
-        NOTE: There is an issue in the `channels_redis` implementation
-        which lead to the possibility to receive broadcast messages in
-        wrong order: https://github.com/django/channels_redis/issues/151
-        Currently we recommend to monkey-patch the `channels_redis` to
-        avoid this.
         """
-
         # If strict ordering is required then simply wait until all the
         # broadcast messages are sent. Otherwise spawn a task so this
         # consumer will continue receiving messages.
@@ -438,9 +397,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _process_broadcast(self, message):
         """Process the broadcast message.
 
-        For the group from the message we taking a list of registered
-        (active) subscriptions. And then we push the message to each
-        subscription notification queue.
+        This triggers subscription notification to all the subscriptions
+        belonging to the group received in the `message`.
 
         NOTE: Depending on the value of the `strict_ordering` setting
         this method is either awaited directly or offloaded to an async
@@ -461,7 +419,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # if the `notification_queue` is full.
         for sid in self._sids_by_group[group]:
             subinf = self._subscriptions[sid]
-            subinf.receive_notification_callback(payload)
+            subinf.enqueue_notification(payload)
 
     async def unsubscribe(self, message):
         """The unsubscribe message handler.
@@ -507,17 +465,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Notify subclass a new client is connected.
             await self.on_connect(payload)
         except Exception as ex:  # pylint: disable=broad-except
-            LOG.exception(str(ex))
             await self._send_gql_connection_error(ex)
-            # Close the connection.
-            # NOTE: We use the 4000 code because there are two reasons:
-            # A) We can not use codes greater than 1000 and less than
-            # 3000 because daphne and autobahn do not allow this
-            # (see `sendClose` from `autobahn/websocket/protocol.py`
-            # and `daphne/ws_protocol.py`).
-            # B) https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-            # So mozilla offers us the following codes:
-            # 4000–4999 - Available for use by applications.
+            # Close the connection. NOTE: We use the 4000 code because
+            # there are two reasons: A) We can not use codes greater
+            # than 1000 and less than 3000 because Daphne and Autobahn
+            # do not allow this (see `sendClose` from
+            # `autobahn/websocket/protocol.py` and
+            # `daphne/ws_protocol.py`). B)
+            # https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+            # Mozilla offers codes 4000–4999 available for all apps.
             await self.close(code=4000)
         else:
             # Send CONNECTION_ACK message.
@@ -548,20 +504,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Close the connection.
         await self.close(code=1000)
 
-    async def _on_gql_start(self, operation_id, payload):
+    async def _on_gql_start(self, op_id, payload):
         """Process the START message.
 
-        Handle the message which holds query, mutation or subscription
-        request.
+        Handle the message with query, mutation or subscription request.
 
         NOTE: Depending on the value of the `strict_ordering` setting
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
         try:
-            if operation_id in self._subscriptions:
+            if op_id in self._subscriptions:
                 raise graphql.error.GraphQLError(
-                    f"Subscription with msg_id={operation_id} already exists!"
+                    f"Subscription with msg_id={op_id} already exists!"
                 )
 
             # Get the message data.
@@ -569,205 +524,45 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             op_name = payload.get("operationName")
             variables = payload.get("variables", {})
 
-            # Create object-like context (like in `Query` or `Mutation`)
-            # from the dict-like one provided by the Channels.
-            context = ScopeAsContext(self.scope)
-
-            # Adding channel name to the context because it seems to be
-            # useful for some use cases, take a look at the issue for
-            # more details:
-            # https://github.com/datadvance/DjangoChannelsGraphqlWs/issues/41#issuecomment-663951595
+            # Prepare a context object.
+            context = DictAsObject({})
+            context.graphql_ws_consumer = self
+            context.graphql_operation_id = op_id
+            context.graphql_operation_name = op_name
+            context.channels_consumer = self
+            context.channels_scope = self.scope
             context.channel_name = self.channel_name
 
-            async def sync_to_async_middleware(
-                next_middleware, root, info: graphql.GraphQLResolveInfo, *args, **kwds
-            ):
-                """Wraps resolver calls with `sync_to_async`.
-
-                It is highly probable that resolvers will invoke
-                blocking DB operations and might be slow.
-
-                By wrapping resolvers with `sync_to_async` this
-                middleware ensures us that thouse slow operations will
-                be executed in separate worker thread.
-
-                Args:
-                    next_middleware: An middleware callable. When called
-                        executes a chain of middleware functions. And,
-                        in the end, executes a resolver and returns its
-                        result back.
-                    root: Any value. Passed to the resolver inside
-                        `next_middleware` chain.
-                    info: graphql.GraphQLResolveInfo. Passed to the
-                        resolver inside `next_middleware` chain.
-
-                Returns:
-                    Any value: result returned by an resolver.
-                    AsyncGenerator: when subscription started.
-                """
-                # Speed optimizations with some black magic.
-                #
-                # We know for sure that resolvers for the GraphQL-core
-                # and the Graphene libraries are not blocking.
-                # And therefore there is no need to wrap them with
-                # `sync_to_async`.
-                if isinstance(next_middleware, functools.partial):
-                    module = getattr(next_middleware.func, "__module__", "")
-                else:
-                    module = getattr(next_middleware, "__module__", "")
-                if module.startswith("graphql.type.") or module.startswith(
-                    "graphene.types."
-                ):
-                    return next_middleware(root, info, *args, **kwds)
-
-                # Check if resolver function needs to be wrapped and
-                # wrap it.
-                if asyncio.iscoroutinefunction(next_middleware) or (
-                    hasattr(next_middleware, "func")
-                    and asyncio.iscoroutinefunction(next_middleware.func)
-                ):
-                    next_func = next_middleware
-                else:
-                    # The function is sync, so wrap it.
-                    def wrapped_middleware(root, info, *args, **kwds):
-                        resp = next_middleware(root, info, *args, **kwds)
-
-                        # If users code returned an unevaluated
-                        # QuerySet, then we should force it to evaluate
-                        # here.
-                        #
-                        # Because we are going to move that QuerySet out
-                        # out its sync context. And somewhere later, in
-                        # a point of real evaluation the django will
-                        # raise the SynchronousOnlyOperation error: "You
-                        # cannot call this from an async context - use a
-                        # thread or sync_to_async."
-                        if isinstance(resp, django.db.models.query.QuerySet):
-                            resp = list(resp)
-                        return resp
-
-                    # The timeout_warning_middleware will use this to
-                    # get nice function name for logs.
-                    # pylint: disable=protected-access,unused-private-member
-                    wrapped_middleware.__orig_func = next_middleware  # type: ignore
-                    next_func = self.sync_to_async(wrapped_middleware)
-
-                result = next_func(root, info, *args, **kwds)
-                if inspect.isawaitable(result):
-                    result = await result
-                return result
-
-            async def timeout_warning_middleware(
-                next_middleware, root, info: graphql.GraphQLResolveInfo, *args, **kwds
-            ):
-                """Measures execution time of resolvers and middlewares.
-
-                Prints warning messages for slow resolvers and
-                operations.
-
-                Args:
-                    next_middleware: An middleware callable. When called
-                        executes a chain of middleware functions. And,
-                        in the end, executes a resolver and returns its
-                        result back.
-                    root: Any value. Passed to the resolver inside
-                        `next_middleware` chain.
-                    info: graphql.GraphQLResolveInfo. Passed to the
-                        resolver inside `next_middleware` chain.
-
-                Returns:
-                    Any value: result returned by an resolver.
-                    AsyncGenerator: when subscription started.
-                """
-                if self.resolver_warn_timeout:
-                    start_time = time.perf_counter()
-
-                result = next_middleware(root, info, *args, **kwds)
-                if inspect.isawaitable(result):
-                    result = await result
-
-                if self.resolver_warn_timeout:
-                    duration = time.perf_counter() - start_time
-                    if duration >= self.resolver_warn_timeout:
-                        LOG.warning(
-                            "Resolver %r for %s.%s "
-                            "(Operation ID %r, name %r) "
-                            "took %.6f seconds.",
-                            _get_nice_name_for_callable(
-                                next_middleware,
-                                wrapper_func=sync_to_async_middleware,
-                            ),
-                            info.parent_type.name,
-                            info.field_name,
-                            operation_id,
-                            op_name,
-                            duration,
-                        )
-                return result
-
-            # Process the request with Graphene/GraphQL.
-            document_ast, op_ast, error = await self._parse_and_validate(op_name, query)
-            if error:
-                LOG.exception(
-                    "GraphQL query failed. (operation_id=%s, error=%s)",
-                    operation_id,
-                    error,
-                )
-                await self._send_gql_data(operation_id, None, error)
-                await self._send_gql_complete(operation_id)
+            # Process the request with Graphene and GraphQL-core.
+            doc_ast, op_ast, errors = await self._on_gql_start__parse_query(
+                op_name, query
+            )
+            if errors:
+                await self._send_gql_data(op_id, None, errors)
+                await self._send_gql_complete(op_id)
                 return
+            # Assert values are not None to suppress MyPy complains.
+            assert doc_ast is not None
+            assert op_ast is not None
 
             # If the operation is subscription.
             if op_ast.operation == graphql.language.ast.OperationType.SUBSCRIPTION:
                 LOG.debug(
-                    "New subscription request (operation_id=%s, op_name=%s)",
-                    operation_id,
+                    "Subscription request. Operation ID: %s, operation name: %s.)",
+                    op_id,
                     op_name,
                 )
 
-                # The `self.sync_to_async` and the
-                # `self.group_name_prefix` fields are public and could
-                # be changed by the user in a `GraphqlWsConsumer`
-                # subclass.
-                #
-                # Both fields are used in a `Subscription`
-                # implementation as well.
-                #
-                # We pass those values to a `Subscription` through
-                # `context`, because there is no access from
-                # `Subscription` to real `GraphqlWsConsumer` instance
-                # available.
-
-                # pylint: disable=protected-access
-                context._channels_graphql_ws = PrivateSubscriptionContext(
-                    operation_id=operation_id,
-                    sync_to_async=self.sync_to_async,
-                    register_subscription=self._register_subscription,
-                    subscription_notification_queue_limit=(
-                        self.subscription_notification_queue_limit
-                    ),
-                    middleware_manager_for_subscriptions=(
-                        graphql.MiddlewareManager(
-                            sync_to_async_middleware,
-                            timeout_warning_middleware,
-                            *self.middleware,
-                        )
-                    ),
-                )
-
-                # Normally the `_subscribe` call returns an
-                # AsyncGenerator (stream). But in case of error it might
-                # return an ExecutionResult containing error).
-                result = await _subscribe(
-                    self.schema.graphql_schema,
-                    document_ast,
+                # This returns asynchronous generator or ExecutionResult
+                # instance in case of error.
+                result = await self._on_gql_start__subscribe(
+                    doc_ast,
                     operation_name=op_name,
                     root_value=None,
                     variable_values=variables,
                     context_value=context,
                     middleware_manager=graphql.MiddlewareManager(
-                        sync_to_async_middleware,
-                        timeout_warning_middleware,
+                        self._on_gql_start__root_middleware,
                         *self.middleware,
                     ),
                 )
@@ -776,15 +571,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # consume stream of notifications and send them to
                 # clients.
                 if hasattr(result, "__aiter__"):
-                    # Respond with the subscription activation message if
-                    # enabled in the consumer configuration.
-                    # NOTE: We intentionally do it before subscribing to the
-                    # `result` stream. This guarantees that subscription
-                    # confirmation message is sent before any subscription
-                    # notifications.
+                    # Send subscription activation message (if enabled)
+                    # NOTE: We do it before reading the the `result`
+                    # stream to guarantee that no notifications are sent
+                    # before the subscription confirmation message.
                     if self.confirm_subscriptions:
                         await self._send_gql_data(
-                            operation_id,
+                            op_id,
                             data=self.subscription_confirmation_message["data"],
                             errors=self.subscription_confirmation_message["errors"],
                         )
@@ -797,23 +590,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                             async for item in result:
                                 try:
                                     await self._send_gql_data(
-                                        operation_id, item.data, item.errors
+                                        op_id, item.data, item.errors
                                     )
                                 except asyncio.CancelledError:
                                     break
                         except Exception as ex:  # pylint: disable=broad-except
-                            LOG.exception(
-                                "Subscription events consumer got exception "
-                                "(operation_id=%s).",
-                                operation_id,
+                            LOG.debug(
+                                "Exception in the subscription GraphQL resolver!"
+                                "Operation %s(%s).",
+                                op_name,
+                                op_id,
+                                exc_info=ex,
                             )
-                            await self._send_gql_data(operation_id, None, [ex])
+                            await self._send_gql_data(op_id, None, [ex])
 
                     # We need to end this task when client drops
                     # connection or unsubscribes, so lets store it.
-                    self._subscription_consumers[operation_id] = asyncio.create_task(
-                        consume_stream()
-                    )
+                    self._notifier_tasks[op_id] = asyncio.create_task(consume_stream())
 
                     # We must be sure here that the subscription
                     # initialization is finished and the stream consumer
@@ -826,23 +619,23 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     # simultaneous subscribe and unsubscribe calls.
                     await consumer_init_done.wait()
 
-                # Else (when `_subscribe` call returned ExecutionResult
+                # Else (when gql_subscribe returns ExecutionResult
                 # containing error) fallback to standard handling below.
 
             # If the operation is query or mutation.
             else:
                 LOG.debug(
-                    "New operation (operation_id=%s, op_name=%s)",
-                    operation_id,
+                    "New query/mutation. Operation ID: %s, operation name: %s.)",
+                    op_id,
                     op_name,
                 )
 
-                if self.operation_warn_timeout:
+                if self.warn_operation_timeout:
                     start_time = time.perf_counter()
 
-                # Standard name for "IntrospectionQuery".
-                # We might also check that
-                # `document_ast.definitions[0].selection_set.selections[0].name.value`
+                # Standard name for "IntrospectionQuery". We might also
+                # check that
+                # `doc_ast.definitions[0].selection_set.selections[0].name.value`
                 # equals to `__schema`. This is a more robust way. But
                 # it will eat up more CPU pre each query. For now lets
                 # check only a query name.
@@ -853,13 +646,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     middleware_manager = None
                 else:
                     middleware_manager = graphql.execution.MiddlewareManager(
-                        sync_to_async_middleware,
-                        timeout_warning_middleware,
+                        self._on_gql_start__root_middleware,
                         *self.middleware,
                     )
                 result = graphql.execution.execute(
                     self.schema.graphql_schema,
-                    document=document_ast,
+                    document=doc_ast,
                     root_value=None,
                     operation_name=op_name,
                     variable_values=variables,
@@ -869,33 +661,39 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 if inspect.isawaitable(result):
                     result = await result
 
-                if self.operation_warn_timeout:
+                if self.warn_operation_timeout:
                     duration = time.perf_counter() - start_time
-                    if duration >= self.operation_warn_timeout:
+                    if duration >= self.warn_operation_timeout:
                         LOG.warning(
-                            "Operation %r (ID %r) took %.6f seconds. "
-                            "Debug log contains a full query and variables.",
+                            "Operation %s(%s) took %.6f seconds. Debug"
+                            " log contains full operation details.",
                             op_name,
-                            operation_id,
+                            op_id,
                             duration,
                         )
                         LOG.debug(
-                            "Operation %r (ID %r) took %.6f seconds. "
-                            "(query=%r, vars=%r)",
+                            "Operation %s(%s) took %.6f seconds. Query:"
+                            " %r, variables: %r.",
                             op_name,
-                            operation_id,
+                            op_id,
                             duration,
                             query,
                             variables,
                         )
         except Exception as ex:  # pylint: disable=broad-except
-            # Something is wrong - send error message.
-            LOG.exception("GraphQL operation error (operation_id=%s)", operation_id)
             if isinstance(ex, graphql.error.GraphQLError):
-                await self._send_gql_data(operation_id, None, [ex])
-                await self._send_gql_complete(operation_id)
+                # Respond with details of GraphQL execution error.
+                LOG.warning(
+                    "GraphQL error! Operation %s(%s).",
+                    op_name,
+                    op_id,
+                    exc_info=True,
+                )
+                await self._send_gql_data(op_id, None, [ex])
+                await self._send_gql_complete(op_id)
             else:
-                await self._send_gql_error(operation_id, ex)
+                # Respond with general error responce.
+                await self._send_gql_error(op_id, ex)
         else:
             # This is the "else" block of the "try-catch". Here we
             # finalizing processing of the `result` value. And, if
@@ -910,65 +708,262 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Respond to a query or mutation immediately.
 
             # The `result` is an instance of the `ExecutionResult`.
-            await self._send_gql_data(operation_id, result.data, result.errors)
+            await self._send_gql_data(op_id, result.data, result.errors)
 
             # Tell the client that the request processing is over.
-            await self._send_gql_complete(operation_id)
+            await self._send_gql_complete(op_id)
 
-    @functools.lru_cache(maxsize=128)
-    def _parse_and_validate_sync(self, op_name, query):
-        """Parse and validate query and return ast.
+    async def _on_gql_start__parse_query(
+        self, op_name: str, query: str
+    ) -> tuple[
+        Optional[graphql.DocumentNode],
+        Optional[graphql.OperationDefinitionNode],
+        Optional[Sequence[graphql.GraphQLError]],
+    ]:
+        """Parse and validate GraphQL query.
+
+        It is highly likely that the same operation will be parsed many
+        times, so this function is wrapped with LRU cache.
+
+        This async function offloads the GraphQL processing to the
+        worker thread cause according to our experiments even GraphQL
+        document parsing and validation take a while and depends approx.
+        linearly on the size of the selection set.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
 
         Returns:
-            Tuple:
-                document_ast, op_ast, error
+            Tuple with three optional fields:
+                0: AST of parsed GraphQL document.
+                1: GraphQL operation definition.
+                2: Sequence of errors.
         """
-        # Do parsing.
+
+        res = await self.sync_to_async(self._on_gql_start__parse_query_sync_cached)(
+            op_name, query
+        )
+
+        doc_ast: Optional[graphql.DocumentNode] = res[0]
+        op_ast: Optional[graphql.OperationDefinitionNode] = res[1]
+        errors: Optional[Sequence[graphql.GraphQLError]] = res[2]
+
+        return (doc_ast, op_ast, errors)
+
+    @functools.lru_cache(maxsize=128)
+    def _on_gql_start__parse_query_sync_cached(
+        self, op_name: str, query: str
+    ) -> tuple[
+        Optional[graphql.DocumentNode],
+        Optional[graphql.OperationDefinitionNode],
+        Optional[Sequence[graphql.GraphQLError]],
+    ]:
+        """Parse and validate GraphQL query. Cached sync implementation.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
+        """
+
+        # Parsing.
         try:
-            document_ast = graphql.parse(query)
+            doc_ast = graphql.parse(query)
         except graphql.GraphQLError as ex:
-            LOG.exception("GraphQL parse failed.")
             return None, None, [ex]
 
-        # Do validation.
-        validation_errors: List[graphql.GraphQLError] = graphql.validate(
-            self.schema.graphql_schema, document_ast
+        # Validation.
+        validation_errors: list[graphql.GraphQLError] = graphql.validate(
+            self.schema.graphql_schema, doc_ast
         )
         if validation_errors:
-            LOG.warning(
-                "GraphQL validation failed for operation %s with error: %s.",
-                op_name,
-                validation_errors,
-            )
             return None, None, validation_errors
 
-        op_ast = graphql.utilities.get_operation_ast(
-            document_ast, operation_name=op_name
-        )
-        return document_ast, op_ast, None
+        op_ast = graphql.utilities.get_operation_ast(doc_ast, op_name)
 
-    async def _register_subscription(
+        return doc_ast, op_ast, None
+
+    async def _on_gql_start__subscribe(
         self,
-        operation_id,
+        document: graphql.DocumentNode,
+        middleware_manager: graphql.MiddlewareManager,
+        root_value: Any = None,
+        context_value: Any = None,
+        variable_values: Optional[dict[str, Any]] = None,
+        operation_name: Optional[str] = None,
+        field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
+        subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
+    ) -> Union[AsyncIterator[graphql.ExecutionResult], graphql.ExecutionResult]:
+        """Create a GraphQL subscription.
+
+        This is a copy of `graphql.execution.subscribe.subscribe` from
+        the GraphQL-core library v3.2.3 improved to support middlewares.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
+        """
+
+        result_or_stream = await graphql.create_source_event_stream(
+            self.schema.graphql_schema,
+            document,
+            root_value,
+            context_value,
+            variable_values,
+            operation_name,
+            subscribe_field_resolver,
+        )
+        if isinstance(result_or_stream, graphql.ExecutionResult):
+            return result_or_stream
+
+        async def map_source_to_response(payload: Any) -> graphql.ExecutionResult:
+            """Map source to response.
+
+            For each payload yielded from a subscription, map it over
+            the normal GraphQL :func:`~graphql.execute` function, with
+            `payload` as the `root_value`. This implements the
+            "MapSourceToResponseEvent" algorithm described in the
+            GraphQL specification. The :func:`~graphql.execute` function
+            provides the "ExecuteSubscriptionEvent" algorithm, as it is
+            nearly identical to the "ExecuteQuery" algorithm, for which
+            :func:`~graphql.execute` is also used.
+            """
+            result = await graphql.execute(
+                self.schema.graphql_schema,
+                document,
+                payload,
+                context_value,
+                variable_values,
+                operation_name,
+                field_resolver,
+                middleware=middleware_manager,
+            )  # type: ignore
+            if inspect.isawaitable(result):
+                return cast(graphql.ExecutionResult, await result)
+            return cast(graphql.ExecutionResult, result)
+
+        # Map every source value to a ExecutionResult value.
+        return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)
+
+    async def _on_gql_start__root_middleware(
+        self, next_middleware, root, info: graphql.GraphQLResolveInfo, *args, **kwds
+    ):
+        """Root middleware injected right before resolver invocation.
+
+        This middleware is here to do two things:
+        1. Offload sync resolvers to the thread our of main event loop.
+        2. Issue a warning if resolver execution time exceeds a limit.
+
+        It is highly probable that resolvers will invoke
+        blocking operations, e.g. database operations. To avoid
+        blocking eventloop this method offloads sync resolvers
+        to the thread pool wrapping it into sync_to_async.
+
+        Since this middleware always comes first in the list of
+        middlewares, it always receives resolver as the first
+        argument instead of another middleware.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
+
+        Args:
+            resolver: Resolver to "wrap" into this middleware
+            root: Anything. Eventually passed to the resolver.
+            info: Passed to the resolver.
+
+        Returns:
+            Any value: result returned by the resolver.
+            AsyncGenerator: when subscription starts.
+        """
+
+        # Unwrap resolver from functools.partial or other wrappers.
+        real_resolver = self._on_gql_start__unwrap(next_middleware)
+        module = getattr(real_resolver, "__module__", "")
+
+        # Do not offload async resolvers and resolvers from
+        # GraphQL-core/Graphene since they are not blocking.
+        if not module.startswith(("graphql.type.", "graphene.types.")) and (
+            not asyncio.iscoroutinefunction(real_resolver)
+        ):
+            # Offload synchronous resolvers.
+            @functools.wraps(next_middleware)
+            def wrapped_next_middleware(root, info, *args, **kwds):
+                result = next_middleware(root, info, *args, **kwds)
+                # Manually evaluate QuerySet, otherwise we will
+                # eventually receive SynchronousOnlyOperation error:
+                # "You cannot call this from an async context - use a
+                # thread or sync_to_async.". This happens when
+                # unevaluated QuerySet moves out of its sync context.
+                if isinstance(result, django.db.models.query.QuerySet):
+                    result = list(result)
+                return result
+
+            next_middleware = self.sync_to_async(wrapped_next_middleware)
+
+        # Start measuring resolver execution time.
+        if self.warn_resolver_timeout:
+            start_time = time.perf_counter()
+
+        # Execute resolver.
+        result = next_middleware(root, info, *args, **kwds)
+        if inspect.isawaitable(result):
+            result = await result
+
+        # Warn about long resolver execution if the time limit exceeds.
+        if self.warn_resolver_timeout:
+            duration = time.perf_counter() - start_time
+            if duration >= self.warn_resolver_timeout:
+                resolver_fn = self._on_gql_start__unwrap(next_middleware)
+                pretty_name = (
+                    f"{resolver_fn.__self__.__qualname__}.{resolver_fn.__qualname__}"
+                    if hasattr(resolver_fn, "__self__")
+                    else f"{resolver_fn.__qualname__}"
+                )
+                LOG.warning(
+                    "Resolver %s took %.3f seconds (>%.3f)!"
+                    " Operation %s(%s), path: %s.",
+                    pretty_name,
+                    duration,
+                    self.warn_resolver_timeout,
+                    info.context.graphql_operation_name,
+                    info.context.graphql_operation_id,
+                    info.path,
+                )
+
+        return result
+
+    def _on_gql_start__unwrap(self, fn: Callable) -> Callable:
+        """Auxiliary method which unwraps given function.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
+        """
+        if isinstance(fn, functools.partial):
+            fn = self._on_gql_start__unwrap(fn.func)
+        elif hasattr(fn, "__wrapped__"):
+            fn = self._on_gql_start__unwrap(fn.__wrapped__)
+        return fn
+
+    async def _on_gql_start__register_subscription(
+        self,
+        op_id,
         groups,
-        receive_notification_callback,
+        enqueue_notification,
         unsubscribed_callback,
     ):
         """Register a new subscription when client subscribes.
 
-        This function is called (by the subscription implementation -
-        the "resolver" function `_subscribe`) when a client subscribes
-        to register necessary callbacks.
+        This function is called from the Subscription._resolver() when a
+        client subscribes.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
 
         Args:
-            operation_id: Id of the protocol operation.
+            op_id: GraphQL operation id.
             groups: A list of subscription group names to put the
                 subscription into.
-            receive_notification_callback: A function that should be
-                called on a incoming notification for a subscription.
+            enqueue_notification: A function that triggers the
+                subscription notification.
             unsubscribed_callback: Called to notify when a client
                 unsubscribes.
-
         """
         # Start listening for broadcasts (subscribe to the Channels
         # groups), spawn the notification processing task and put
@@ -977,22 +972,22 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # atomic i.e. without `awaits` in between.
         waitlist = []
         for group in groups:
-            self._sids_by_group.setdefault(group, []).append(operation_id)
+            self._sids_by_group.setdefault(group, []).append(op_id)
             waitlist.append(
                 asyncio.create_task(
                     self._channel_layer.group_add(group, self.channel_name)
                 )
             )
-        self._subscriptions[operation_id] = self._SubInf(
+        self._subscriptions[op_id] = self._SubInf(
             groups=groups,
-            sid=operation_id,
+            sid=op_id,
             unsubscribed_callback=unsubscribed_callback,
-            receive_notification_callback=receive_notification_callback,
+            enqueue_notification=enqueue_notification,
         )
         if waitlist:
             await asyncio.wait(waitlist)
 
-    async def _on_gql_stop(self, operation_id):
+    async def _on_gql_stop(self, op_id):
         """Process the STOP message.
 
         Handle an unsubscribe request.
@@ -1001,22 +996,22 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         this method is either awaited directly or offloaded to an async
         task. See the `receive_json` handler.
         """
-        LOG.debug("Stop handling operation %r (unsubscribe)", operation_id)
+        LOG.debug("Stop handling or unsubscribe operation %s.", op_id)
 
         # Currently only subscriptions can be stopped. But we see but
         # some clients (e.g. GraphiQL) send the stop message even for
         # queries and mutations. We also see that the Apollo server
         # ignores such messages, so we ignore them as well.
-        if operation_id not in self._subscriptions:
+        if op_id not in self._subscriptions:
             return
 
-        waitlist: List[asyncio.Task] = []
+        waitlist: list[asyncio.Task] = []
 
         # Remove the subscription from the registry.
-        subinf = self._subscriptions.pop(operation_id)
+        subinf = self._subscriptions.pop(op_id)
 
         # Cancel the task which watches the notification queue.
-        consumer_task = self._subscription_consumers.pop(operation_id, None)
+        consumer_task = self._notifier_tasks.pop(op_id, None)
         if consumer_task:
             consumer_task.cancel()
             waitlist.append(consumer_task)
@@ -1026,12 +1021,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Remove the subscription from groups it belongs to. Remove
             # the group itself from the `_sids_by_group` if there are no
             # subscriptions left in it.
-            assert self._sids_by_group[group].count(operation_id) == 1, (
+            assert self._sids_by_group[group].count(op_id) == 1, (
                 f"Registry is inconsistent: group '{group}' has "
-                f"{self._sids_by_group[group].count(operation_id)} "
-                "occurrences of operation_id={operation_id}!"
+                f"{self._sids_by_group[group].count(op_id)} "
+                "occurrences of op_id={op_id}!"
             )
-            self._sids_by_group[group].remove(operation_id)
+            self._sids_by_group[group].remove(op_id)
             if not self._sids_by_group[group]:
                 del self._sids_by_group[group]
                 waitlist.append(
@@ -1046,7 +1041,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         await subinf.unsubscribed_callback()
 
         # Send the unsubscription confirmation message.
-        await self._send_gql_complete(operation_id)
+        await self._send_gql_complete(op_id)
 
     # -------------------------------------------------------- GRAPHQL PROTOCOL MESSAGES
 
@@ -1056,12 +1051,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def _send_gql_connection_error(self, error: Exception):
         """Connection error sent in reply to the `connection_init`."""
+        LOG.warning("GraphQL connection error: %s!", error, exc_info=error)
         await self.send_json(
             {"type": "connection_error", "payload": self._format_error(error)}
         )
 
     async def _send_gql_data(
-        self, operation_id, data: Optional[Dict], errors: Optional[Sequence[Exception]]
+        self, op_id, data: Optional[dict], errors: Optional[Sequence[Exception]]
     ):
         """Send GraphQL `data` message to the client.
 
@@ -1076,16 +1072,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # Typical exception here is `GraphQLLocatedError` which has
             # reference to the original error raised from a resolver.
             tb = ex.__traceback__
-            LOG.error(
-                "GraphQL resolver failed (operation_id=%s):\n%s",
-                operation_id,
+            LOG.warning(
+                "GraphQL resolver failed! Operation id: %s:\n%s",
+                op_id,
                 "".join(traceback.format_exception(type(ex), ex, tb)).strip(),
             )
 
         await self.send_json(
             {
                 "type": "data",
-                "id": operation_id,
+                "id": op_id,
                 "payload": {
                     "data": data,
                     **(
@@ -1101,7 +1097,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def _send_gql_error(self, operation_id, error: Exception):
+    async def _send_gql_error(self, op_id, error: Exception):
         """Tell client there is a query processing error.
 
         Server sends this message upon a failing operation.
@@ -1111,34 +1107,34 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         must be sent by the `_send_gql_data` method).
 
         Args:
-            operation_id: Id of the operation that failed on the server.
+            op_id: Id of the operation that failed on the server.
             error: String with the information about the error.
 
         """
-        LOG.warning("Send error (operation_id=%s): %s", operation_id, error)
+        LOG.warning("Operation %s processing error: %s!", op_id, error, exc_info=error)
         formatted_error = self._format_error(error)
         await self.send_json(
             {
                 "type": "error",
-                "id": operation_id,
+                "id": op_id,
                 "payload": {"errors": [formatted_error]},
             }
         )
 
-    async def _send_gql_complete(self, operation_id):
+    async def _send_gql_complete(self, op_id):
         """Send GraphQL `complete` message to the client.
 
         Args:
-            operation_id: Id of the corresponding operation.
+            op_id: Id of the corresponding operation.
 
         """
-        await self.send_json({"type": "complete", "id": operation_id})
+        await self.send_json({"type": "complete", "id": op_id})
 
     async def _send_gql_connection_keep_alive(self):
         """Send the keepalive (ping) message."""
         await self.send_json({"type": "ka"})
 
-    # ------------------------------------------------------------------------ AUXILIARY
+    # ---------------------------------------------------------------------- AUXILIARIES
 
     @staticmethod
     def _format_error(error: Exception) -> graphql.GraphQLFormattedError:
@@ -1219,105 +1215,3 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # consumer constructor, so we added this property.
         assert self.channel_layer is not None, "Channel layer is not configured!"
         return self.channel_layer
-
-
-def _get_nice_name_for_callable(func, wrapper_func=None):
-    """Get a callable name to show to a developer in logs.
-
-    Unfortunately this is not always possible. Lambda functions, for
-    example, have no name.
-
-    Returns:
-        str: function name.
-    """
-    try:
-        # If the func variable is the functools.partial with the
-        # `sync_to_async_middleware` (wrapper_func) inside, then unwrap
-        # it to get a real resolver name.
-        if isinstance(func, functools.partial):
-            if func.func == wrapper_func:
-                return _get_nice_name_for_callable(func.args[0])
-
-        # Unwrap sync_to_async helper wrapper of
-        # sync_to_async_middleware.
-        if hasattr(func, "__orig_func"):
-            # pylint: disable=protected-access
-            return _get_nice_name_for_callable(func.__orig_func)
-
-        if isinstance(func, functools.partial):
-            return f"{func.func.__qualname__}"
-
-        if hasattr(func, "__self__"):
-            # it is a bound method with self variable?
-            return f"{func.__self__.__qualname__}." f"{func.__qualname__}"
-
-        return f"{func.__qualname__}"
-    except Exception:  # pylint: disable=broad-except
-        LOG.exception(
-            "Failed to form nice name for a function %s",
-            func,
-        )
-        return str(func)
-
-
-async def _subscribe(
-    schema: graphql.GraphQLSchema,
-    document: graphql.DocumentNode,
-    middleware_manager: graphql.MiddlewareManager,
-    root_value: Any = None,
-    context_value: Any = None,
-    variable_values: Optional[Dict[str, Any]] = None,
-    operation_name: Optional[str] = None,
-    field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
-    subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
-) -> Union[AsyncIterator[graphql.ExecutionResult], graphql.ExecutionResult]:
-    """Create a GraphQL subscription.
-
-    This is a copy of a function from the GraphQL-core library (v3.2.3).
-    The original version of this code were found in the
-    `graphql.execution.subscribe` module - the function `subscribe`.
-
-    This version is extended with the `middleware_manager` argument
-    handling.
-    """
-    result_or_stream = await graphql.create_source_event_stream(
-        schema,
-        document,
-        root_value,
-        context_value,
-        variable_values,
-        operation_name,
-        subscribe_field_resolver,
-    )
-    if isinstance(result_or_stream, graphql.ExecutionResult):
-        return result_or_stream
-
-    async def map_source_to_response(payload: Any) -> graphql.ExecutionResult:
-        """Map source to response.
-
-        For each payload yielded from a subscription, map it over the
-        normal GraphQL :func:`~graphql.execute` function, with
-        `payload` as the `root_value`. This implements the
-        "MapSourceToResponseEvent" algorithm described in the GraphQL
-        specification. The :func:`~graphql.execute` function provides
-        the "ExecuteSubscriptionEvent" algorithm, as it is nearly
-        identical to the "ExecuteQuery" algorithm, for which
-        :func:`~graphql.execute` is also used.
-        """
-        result = await graphql.execute(
-            schema,
-            document,
-            payload,
-            context_value,
-            variable_values,
-            operation_name,
-            field_resolver,
-            middleware=middleware_manager,
-        )  # type: ignore
-        if inspect.isawaitable(result):
-            return cast(graphql.ExecutionResult, await result)
-        return cast(graphql.ExecutionResult, result)
-
-    # Map every source value to a ExecutionResult value
-    # as described above.
-    return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)

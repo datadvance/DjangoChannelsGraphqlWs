@@ -27,7 +27,8 @@ import textwrap
 import time
 import uuid
 
-import channels_graphql_ws.transport
+# Underscored to avoid name clash with GraphqlWsClient init's argument.
+from . import transport as _transport
 
 
 class GraphqlWsClient:
@@ -53,16 +54,16 @@ class GraphqlWsClient:
             receive messages over the WebSocket connection.
     """
 
-    def __init__(self, transport: channels_graphql_ws.transport.GraphqlWsTransport):
+    def __init__(self, transport: _transport.GraphqlWsTransport):
         """Constructor."""
         assert isinstance(
-            transport, channels_graphql_ws.transport.GraphqlWsTransport
-        ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
+            transport, _transport.GraphqlWsTransport
+        ), "Given transport does not implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
         self._is_connected = False
 
     @property
-    def transport(self) -> channels_graphql_ws.transport.GraphqlWsTransport:
+    def transport(self) -> _transport.GraphqlWsTransport:
         """Underlying network transport."""
         return self._transport
 

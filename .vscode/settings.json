@@ -38,6 +38,7 @@
         "deserialization",
         "edouardtheron",
         "envlist",
+        "GQLWS",
         "graphiql",
         "graphql",
         "inmemory",
