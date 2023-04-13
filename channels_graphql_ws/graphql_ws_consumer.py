@@ -275,7 +275,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Unsubscribe from the Channels groups.
         waitlist += [
-            self._channel_layer.group_discard(group, self.channel_name)
+            asyncio.create_task(
+                self._channel_layer.group_discard(group, self.channel_name)
+            )
             for group in self._sids_by_group
         ]
 
