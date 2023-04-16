@@ -121,9 +121,9 @@ async def test_middleware_called_in_subscription(gql):
     )
     await client.assert_no_messages()
 
-    # Middleware must be called once - on subscribing.
+    # Middleware is not called during subscription initialization.
     assert (
-        middleware_call_counter == 1
+        middleware_call_counter == 0
     ), "Middleware is not called during subscribing to the subscription!"
 
     print("Manually trigger the subscription.")
@@ -133,11 +133,11 @@ async def test_middleware_called_in_subscription(gql):
     # subscription processing has finished.
     await client.receive(assert_id=sub_id, assert_type="data")
 
-    # Middleware must be called extra two times:
+    # Middleware must be called two times:
     #  - to resolve "on_trigger";
     #  - to resolve "ok".
     assert (
-        middleware_call_counter == 3
+        middleware_call_counter == 2
     ), "Middleware is not called three times for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")

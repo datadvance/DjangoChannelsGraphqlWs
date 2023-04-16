@@ -43,6 +43,7 @@ import functools
 import inspect
 import logging
 import time
+import threading
 import traceback
 import weakref
 from collections.abc import Sequence
@@ -60,6 +61,7 @@ import graphql.pyutils
 import graphql.utilities
 
 from .dict_as_object import DictAsObject
+from .serializer import Serializer
 
 # Module logger.
 LOG = logging.getLogger(__name__)
@@ -78,6 +80,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     `subscriptions-transport-ws` library (used by Apollo):
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md
     """
+
+    class SkipNotificationError(Exception):
+        pass
 
     # ----------------------------------------------------------------- PUBLIC INTERFACE
 
@@ -518,9 +523,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """
         try:
             if op_id in self._subscriptions:
-                raise graphql.error.GraphQLError(
-                    f"Subscription with msg_id={op_id} already exists!"
-                )
+                message = f"Subscription with msg_id={op_id} already exists!"
+                raise graphql.error.GraphQLError(message)
 
             # Get the message data.
             query = payload["query"]
@@ -558,12 +562,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # This returns asynchronous generator or ExecutionResult
                 # instance in case of error.
+                subscribe_field_resolver = functools.partial(
+                    self._initialize_subscription_stream, op_id
+                )
                 subscr_result = await self._on_gql_start__subscribe(
                     doc_ast,
                     operation_name=op_name,
                     root_value=None,
                     variable_values=variables,
                     context_value=context,
+                    subscribe_field_resolver=subscribe_field_resolver,
                     middleware_manager=graphql.MiddlewareManager(
                         self._on_gql_start__root_middleware,
                         *self.middleware,
@@ -572,7 +580,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # When subscr_result is an AsyncGenerator, consume
                 # stream of notifications and send them to clients.
-                if hasattr(subscr_result, "__aiter__"):
+                if not isinstance(subscr_result, graphql.ExecutionResult):
                     stream = cast(AsyncIterator[graphql.ExecutionResult], subscr_result)
                     # Send subscription activation message (if enabled)
                     # NOTE: We do it before reading the the stream
@@ -591,12 +599,21 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         consumer_init_done.set()
                         try:
                             async for item in stream:
-                                try:
-                                    await self._send_gql_data(
-                                        op_id, item.data, item.errors
-                                    )
-                                except asyncio.CancelledError:
-                                    break
+                                # Publish raises `SkipNotificationError`
+                                # in case it needs to suppress 
+                                # notification.
+                                for error in item.errors or []:
+                                    if isinstance(
+                                        error.original_error, self.SkipNotificationError
+                                    ):
+                                        break
+                                else:
+                                    try:
+                                        await self._send_gql_data(
+                                            op_id, item.data, item.errors
+                                        )
+                                    except asyncio.CancelledError:
+                                        break
                         except Exception as ex:  # pylint: disable=broad-except
                             LOG.debug(
                                 "Exception in the subscription GraphQL resolver!"
@@ -621,9 +638,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     # This allows us to avoid the race condition between
                     # simultaneous subscribe and unsubscribe calls.
                     await consumer_init_done.wait()
+                    return
 
                 # Else (when gql_subscribe returns ExecutionResult
                 # containing error) fallback to standard handling below.
+                exec_result = subscr_result
 
             # If the operation is query or mutation.
             else:
@@ -811,7 +830,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             nearly identical to the "ExecuteQuery" algorithm, for which
             :func:`~graphql.execute` is also used.
             """
-            result = await graphql.execute(
+            result = graphql.execute(
                 self.schema.graphql_schema,
                 document,
                 payload,
@@ -821,8 +840,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 field_resolver,
                 middleware=middleware_manager,
             )  # type: ignore
-            if inspect.isawaitable(result):
-                return cast(graphql.ExecutionResult, await result)
+            result = await result if inspect.isawaitable(result) else result
             return cast(graphql.ExecutionResult, result)
 
         # Map every source value to a ExecutionResult value.
@@ -834,7 +852,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Root middleware injected right before resolver invocation.
 
         This middleware is here to do two things:
-        1. Offload sync resolvers to the thread our of main event loop.
+        1. Offload sync resolvers to the thread out of main event loop.
         2. Issue a warning if resolver execution time exceeds a limit.
 
         It is highly probable that resolvers will invoke
@@ -927,35 +945,110 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             fn = self._on_gql_start__unwrap(fn.__wrapped__)
         return fn
 
-    async def _on_gql_start__register_subscription(
-        self,
-        op_id,
-        groups,
-        enqueue_notification,
-        unsubscribed_callback,
-    ):
-        """Register a new subscription when client subscribes.
+    async def _initialize_subscription_stream(self, op_id, root, info, *args, **kwds):
+        subscription_class = info.return_type.graphene_type
 
-        This function is called from the Subscription._resolver() when a
-        client subscribes.
+        # Attach current subscription to the group corresponding to
+        # the concrete class. This allows to trigger all the
+        # subscriptions of the current type, by invoking `publish`
+        # without setting the `group` argument.
+        groups = [subscription_class._group_name()]
 
-        This is a part of START message processing routine so the name
-        prefixed with `_on_gql_start__` to make this explicit.
+        # Invoke the subclass-specified `subscribe` method to get
+        # the groups subscription must be attached to.
+        if subscription_class._meta.subscribe is not None:
+            subclass_groups = subscription_class._meta.subscribe(root, info, *args, **kwds)
+            # Properly handle `async def subscribe`.
+            if asyncio.iscoroutinefunction(subscription_class._meta.subscribe):
+                subclass_groups = await subclass_groups
+            assert subclass_groups is None or isinstance(
+                subclass_groups, (list, tuple)
+            ), (
+                f"Method 'subscribe' returned a value of an incorrect type"
+                f" {type(subclass_groups)}! A list, a tuple, or 'None' expected."
+            )
+            subclass_groups = subclass_groups or []
+        else:
+            subclass_groups = []
 
-        Args:
-            op_id: GraphQL operation id.
-            groups: A list of subscription group names to put the
-                subscription into.
-            enqueue_notification: A function that triggers the
-                subscription notification.
-            unsubscribed_callback: Called to notify when a client
-                unsubscribes.
-        """
-        # Start listening for broadcasts (subscribe to the Channels
-        # groups), spawn the notification processing task and put
-        # subscription information into the registry.
-        # NOTE: Update of `_sids_by_group` & `_subscriptions` must be
-        # atomic i.e. without `awaits` in between.
+        groups += [subscription_class._group_name(group) for group in subclass_groups]
+
+        # The subscription notification queue. Required to preserve the
+        # order of notifications within a single subscription.
+        queue_size = subscription_class.notification_queue_limit
+        if not queue_size or queue_size < 0:
+            # Take default limit from the Consumer class.
+            queue_size = self.subscription_notification_queue_limit
+        # The subscription notification queue.
+        # NOTE: The asyncio.Queue class is not thread-safe. So use the
+        # `notification_queue_lock` as a guard while reading or writing
+        # to the queue.
+        notification_queue: asyncio.Queue = asyncio.Queue(maxsize=queue_size)
+        # Lock to ensure that `notification_queue` operations are
+        # thread safe.
+        notification_queue_lock = threading.RLock()
+
+        unsubscribed = subscription_class._meta.unsubscribed
+        
+        async def unsubscribed_callback():
+            """Call `unsubscribed` notification.
+
+            The `cls._meta.unsubscribed` might do blocking operations,
+            so offload it to the thread.
+            """
+            
+            if unsubscribed is None:
+                return None
+            # Properly handle `async def unsubscribed`.
+            if asyncio.iscoroutinefunction(unsubscribed):
+                await unsubscribed(None, info, *args, **kwds)
+            else:
+                await self.sync_to_async(unsubscribed)(None, info, *args, **kwds)
+
+        def enqueue_notification(payload):
+            """Put notification to the queue.
+
+            Called by the WebSocket consumer (instance of the
+            GraphqlWsConsumer subclass) when it receives the broadcast
+            message (from the Channels group) sent by the
+            Subscription.broadcast.
+
+            Args:
+                sid: Operation id of the subscription.
+            """
+            while True:
+                with notification_queue_lock:
+                    try:
+                        notification_queue.put_nowait(payload)
+                        break  # The item was enqueued. Exit the loop.
+                    except asyncio.QueueFull:
+                        # The queue is full - issue a warning and throw
+                        # away the oldest item from the queue.
+                        # NOTE: Queue with the size 1 means that it is
+                        # safe to drop intermediate notifications.
+                        if notification_queue.maxsize != 1:
+                            LOG.warning(
+                                "Subscription notification dropped!"
+                                " Operation %s(%s).",
+                                info.context.graphql_operation_name,
+                                info.context.graphql_operation_id,
+                            )
+                        notification_queue.get_nowait()
+                        notification_queue.task_done()
+
+                        # Try to put the incoming item to the queue
+                        # within the same lock. This is an speed
+                        # optimization.
+                        try:
+                            notification_queue.put_nowait(payload)
+                            # The item was enqueued. Exit the loop.
+                            break
+                        except asyncio.QueueFull:
+                            # Kind'a impossible to get here, but if we
+                            # do, then we should retry until the queue
+                            # have capacity to process item.
+                            pass
+
         waitlist = []
         for group in groups:
             self._sids_by_group.setdefault(group, []).append(op_id)
@@ -972,6 +1065,19 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
         if waitlist:
             await asyncio.wait(waitlist)
+
+        _deserialize = channels.db.database_sync_to_async(Serializer.deserialize)
+
+        # For each notification (event) yielded from this function the 
+        # `_on_gql_start__subscribe` function will call normal 
+        # subscription resolver (`publish`).
+        while True:
+            with notification_queue_lock:
+                payload = await notification_queue.get()
+            data = await _deserialize(payload)
+            yield data
+            with notification_queue_lock:
+                notification_queue.task_done()
 
     async def _on_gql_stop(self, op_id):
         """Process the STOP message.
