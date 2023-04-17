@@ -23,7 +23,7 @@
 
 import pathlib
 from collections import defaultdict
-from typing import DefaultDict, List
+from typing import Any, DefaultDict
 
 import asgiref
 import channels
@@ -43,7 +43,7 @@ import channels_graphql_ws
 
 # Fake storage for the chat history. Do not do this in production, it
 # lives only in memory of the running server and does not persist.
-chats: DefaultDict[str, List[str]] = defaultdict(list)
+chats: DefaultDict[str, list[dict[str, Any]]] = defaultdict(list)
 
 
 # ---------------------------------------------------------------------- TYPES & QUERIES

@@ -42,12 +42,12 @@ import dataclasses
 import functools
 import inspect
 import logging
-import time
 import threading
+import time
 import traceback
 import weakref
 from collections.abc import Sequence
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional, Union, cast
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional, Type, Union, cast
 
 import asgiref.sync
 import channels.db
@@ -80,9 +80,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     `subscriptions-transport-ws` library (used by Apollo):
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md
     """
-
-    class SkipNotificationError(Exception):
-        pass
 
     # ----------------------------------------------------------------- PUBLIC INTERFACE
 
@@ -198,6 +195,55 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         enqueue_notification: Callable[[Any], None]
         # The callback to invoke when client unsubscribes.
         unsubscribed_callback: Callable[..., Awaitable[None]]
+
+    class _SubscriptionExecutionContext(graphql.ExecutionContext):
+        """Special execution context for subscriptions.
+
+        Subscription `publish` method is called via `graphql.execute`
+        like normal resolver. But subscription may return
+        `GraphqlWsConsumer.SKIP` object instead of declared result type.
+        When `graphql.execute` can not build resulting type from the
+        resolver return value it sets result to `None` which may lead to
+        GraphQL errors in case of required field or confuse skipped
+        event with missing value. We have to promote
+        `GraphqlWsConsumer.SKIP` value to the GraphQL operation results
+        and remove skipped values from the final response.
+        """
+
+        @staticmethod
+        def build_response(
+            data: Optional[dict[str, Any]], errors: list[graphql.GraphQLError]
+        ) -> graphql.ExecutionResult:
+            """Remove skipped subscription events from results.
+
+            `data` is a dictionary where the key is subscription field
+            name and value is a subscription resolver result. Value will
+            be `GraphqlWsConsumer.SKIP` object for skipped events.
+            """
+            if data:
+                data = {
+                    field_name: value
+                    for field_name, value in data.items()
+                    if value is not GraphqlWsConsumer.SKIP
+                }
+            return graphql.ExecutionContext.build_response(data, errors)
+
+        def complete_value(
+            self,
+            return_type: graphql.GraphQLOutputType,
+            field_nodes: list[graphql.FieldNode],
+            info: graphql.GraphQLResolveInfo,
+            path: graphql.pyutils.Path,
+            result: Any,
+        ):
+            """Do not create return_type value for skipped events.
+
+            We will remove `GraphqlWsConsumer.SKIP` marks from the final
+            result in the `build_response` method.
+            """
+            if result is GraphqlWsConsumer.SKIP:
+                return result
+            return super().complete_value(return_type, field_nodes, info, path, result)
 
     def __init__(self, *args, **kwargs):
         """Consumer constructor."""
@@ -552,6 +598,24 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             assert doc_ast is not None
             assert op_ast is not None
 
+            async def unbound_root_middleware(*args, **kwds):
+                """Unbound function for root middleware.
+
+                `graphql.MiddlewareManager` accepts only unbound
+                functions as middleware.
+                """
+                return await self._on_gql_start__root_middleware(*args, **kwds)
+
+            # NOTE: Middlewares order is important, root middleware
+            # should always be the closest to the real resolver (first
+            # in the middleware list).
+            middleware_manager: Optional[
+                graphql.MiddlewareManager
+            ] = graphql.MiddlewareManager(
+                unbound_root_middleware,
+                *self.middleware,
+            )
+
             # If the operation is subscription.
             if op_ast.operation == graphql.language.ast.OperationType.SUBSCRIPTION:
                 LOG.debug(
@@ -562,20 +626,17 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # This returns asynchronous generator or ExecutionResult
                 # instance in case of error.
-                subscribe_field_resolver = functools.partial(
-                    self._initialize_subscription_stream, op_id
-                )
                 subscr_result = await self._on_gql_start__subscribe(
                     doc_ast,
                     operation_name=op_name,
                     root_value=None,
                     variable_values=variables,
                     context_value=context,
-                    subscribe_field_resolver=subscribe_field_resolver,
-                    middleware_manager=graphql.MiddlewareManager(
-                        self._on_gql_start__root_middleware,
-                        *self.middleware,
+                    subscribe_field_resolver=functools.partial(
+                        self._on_gql_start__initialize_subscription_stream, op_id
                     ),
+                    middleware=middleware_manager,
+                    execution_context_class=self._SubscriptionExecutionContext,
                 )
 
                 # When subscr_result is an AsyncGenerator, consume
@@ -599,15 +660,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         consumer_init_done.set()
                         try:
                             async for item in stream:
-                                # Publish raises `SkipNotificationError`
-                                # in case it needs to suppress 
-                                # notification.
-                                for error in item.errors or []:
-                                    if isinstance(
-                                        error.original_error, self.SkipNotificationError
-                                    ):
-                                        break
-                                else:
+                                # Skipped subscription event may have no
+                                # data and no errors. Send message only
+                                # when we have something to send.
+                                if item.data or item.errors:
                                     try:
                                         await self._send_gql_data(
                                             op_id, item.data, item.errors
@@ -642,7 +698,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
                 # Else (when gql_subscribe returns ExecutionResult
                 # containing error) fallback to standard handling below.
-                exec_result = subscr_result
+                operation_result = cast(graphql.ExecutionResult, subscr_result)
 
             # If the operation is query or mutation.
             else:
@@ -662,11 +718,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     # IntrospectionQuery. There no real resolvers. Only
                     # the type information.
                     middleware_manager = None
-                else:
-                    middleware_manager = graphql.execution.MiddlewareManager(
-                        self._on_gql_start__root_middleware,
-                        *self.middleware,
-                    )
                 exec_result = graphql.execution.execute(
                     self.schema.graphql_schema,
                     document=doc_ast,
@@ -678,6 +729,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 )
                 if inspect.isawaitable(exec_result):
                     exec_result = await exec_result
+                operation_result = cast(graphql.ExecutionResult, exec_result)
 
                 if self.warn_operation_timeout:
                     duration = time.perf_counter() - start_time
@@ -700,9 +752,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         )
             # Respond to a query or mutation immediately.
             await self._send_gql_data(
-                op_id,
-                cast(graphql.ExecutionResult, exec_result).data,
-                cast(graphql.ExecutionResult, exec_result).errors,
+                op_id, operation_result.data, operation_result.errors
             )
             await self._send_gql_complete(op_id)
 
@@ -789,18 +839,20 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _on_gql_start__subscribe(
         self,
         document: graphql.DocumentNode,
-        middleware_manager: graphql.MiddlewareManager,
         root_value: Any = None,
         context_value: Any = None,
         variable_values: Optional[dict[str, Any]] = None,
         operation_name: Optional[str] = None,
         field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
         subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
+        middleware: graphql.Middleware = None,
+        execution_context_class: Optional[Type[graphql.ExecutionContext]] = None,
     ) -> Union[AsyncIterator[graphql.ExecutionResult], graphql.ExecutionResult]:
         """Create a GraphQL subscription.
 
         This is a copy of `graphql.execution.subscribe.subscribe` from
-        the GraphQL-core library v3.2.3 improved to support middlewares.
+        the GraphQL-core library v3.2.3 improved to support middlewares
+        and user defined execution_context_class.
 
         This is a part of START message processing routine so the name
         prefixed with `_on_gql_start__` to make this explicit.
@@ -838,7 +890,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 variable_values,
                 operation_name,
                 field_resolver,
-                middleware=middleware_manager,
+                middleware=middleware,
+                execution_context_class=execution_context_class,
             )  # type: ignore
             result = await result if inspect.isawaitable(result) else result
             return cast(graphql.ExecutionResult, result)
@@ -883,8 +936,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Do not offload async resolvers and resolvers from
         # GraphQL-core/Graphene since they are not blocking.
-        if not module.startswith(("graphql.type.", "graphene.types.")) and (
-            not asyncio.iscoroutinefunction(real_resolver)
+        if (
+            not module.startswith("graphql.type.")
+            and not module.startswith("graphene.types.")
+            and not asyncio.iscoroutinefunction(real_resolver)
         ):
             # Offload synchronous resolvers.
             @functools.wraps(next_middleware)
@@ -899,14 +954,16 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     result = list(result)
                 return result
 
-            next_middleware = self.sync_to_async(wrapped_next_middleware)
+            next_resolver = self.sync_to_async(wrapped_next_middleware)
+        else:
+            next_resolver = next_middleware
 
         # Start measuring resolver execution time.
         if self.warn_resolver_timeout:
             start_time = time.perf_counter()
 
         # Execute resolver.
-        result = next_middleware(root, info, *args, **kwds)
+        result = next_resolver(root, info, *args, **kwds)
         if inspect.isawaitable(result):
             result = await result
 
@@ -914,12 +971,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         if self.warn_resolver_timeout:
             duration = time.perf_counter() - start_time
             if duration >= self.warn_resolver_timeout:
-                resolver_fn = self._on_gql_start__unwrap(next_middleware)
-                pretty_name = (
-                    f"{resolver_fn.__self__.__qualname__}.{resolver_fn.__qualname__}"
-                    if hasattr(resolver_fn, "__self__")
-                    else f"{resolver_fn.__qualname__}"
-                )
+                pretty_name = f"{real_resolver.__qualname__}"
+                if hasattr(real_resolver, "__self__"):
+                    pretty_name = f"{real_resolver.__self__.__qualname__}.{pretty_name}"
                 LOG.warning(
                     "Resolver %s took %.3f seconds (>%.3f)!"
                     " Operation %s(%s), path: %s.",
@@ -945,8 +999,28 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             fn = self._on_gql_start__unwrap(fn.__wrapped__)
         return fn
 
-    async def _initialize_subscription_stream(self, op_id, root, info, *args, **kwds):
-        subscription_class = info.return_type.graphene_type
+    async def _on_gql_start__initialize_subscription_stream(
+        self, op_id: int, root: Any, info: graphql.GraphQLResolveInfo, *args, **kwds
+    ):
+        """Create asynchronous generator with subscription events.
+
+        Called inside `_on_gql_start__subscribe` function by
+        graphql-core as `subscribe_field_resolver` argument.
+
+        This is a part of START message processing routine so the name
+        prefixed with `_on_gql_start__` to make this explicit.
+        """
+        # Graphene stores original subscription class in `graphene_type`
+        # field of `return_type` object. Since subscriptions are build
+        # on top of `graphene` we always have graphene specific
+        # `return_type` class.
+        subscription_class = info.return_type.graphene_type  # type: ignore[union-attr]
+
+        # It is ok to access private fields of `Subscription`
+        # implementation. `Subscription` class used to create
+        # subscriptions as graphene object but actually it is a part of
+        # consumer implementation.
+        # pylint: disable=protected-access
 
         # Attach current subscription to the group corresponding to
         # the concrete class. This allows to trigger all the
@@ -957,7 +1031,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Invoke the subclass-specified `subscribe` method to get
         # the groups subscription must be attached to.
         if subscription_class._meta.subscribe is not None:
-            subclass_groups = subscription_class._meta.subscribe(root, info, *args, **kwds)
+            subclass_groups = subscription_class._meta.subscribe(
+                root, info, *args, **kwds
+            )
             # Properly handle `async def subscribe`.
             if asyncio.iscoroutinefunction(subscription_class._meta.subscribe):
                 subclass_groups = await subclass_groups
@@ -989,14 +1065,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         notification_queue_lock = threading.RLock()
 
         unsubscribed = subscription_class._meta.unsubscribed
-        
+
         async def unsubscribed_callback():
             """Call `unsubscribed` notification.
 
             The `cls._meta.unsubscribed` might do blocking operations,
             so offload it to the thread.
             """
-            
+
             if unsubscribed is None:
                 return None
             # Properly handle `async def unsubscribed`.
@@ -1068,9 +1144,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         _deserialize = channels.db.database_sync_to_async(Serializer.deserialize)
 
-        # For each notification (event) yielded from this function the 
-        # `_on_gql_start__subscribe` function will call normal 
-        # subscription resolver (`publish`).
+        # For each notification (event) yielded from this function the
+        # `_on_gql_start__subscribe` function will call subscription
+        # resolver (`publish`) via `graphql.execute` method.
         while True:
             with notification_queue_lock:
                 payload = await notification_queue.get()

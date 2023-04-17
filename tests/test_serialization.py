@@ -62,11 +62,8 @@ async def test_models_serialization_with_nested_db_query(gql, transactional_db):
 
     class UserModel(
         graphene_django.types.DjangoObjectType,
-        model=User,
-        only_fields=(
-            "username",
-            "id",
-        ),
+        model=User,  # type: ignore[call-arg]
+        only_fields=("username", "id"),  # type: ignore[call-arg]
     ):
         """User data."""
 

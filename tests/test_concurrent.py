@@ -30,6 +30,7 @@ import itertools
 import textwrap
 import time
 import uuid
+from typing import Optional
 
 import graphene
 import pytest
@@ -377,7 +378,7 @@ async def test_subscribe_and_many_unsubscribes(
     wait_timeout = 60
     # Generate operations ids for subscriptions. In the future, we will
     # unsubscribe from all these subscriptions.
-    op_ids = set()
+    op_ids: set[str] = set()
     # List to collect tasks. We immediately add a handler to receive
     # successful messages.
     awaitables = [receiver(op_ids)]
@@ -825,7 +826,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 # Will be set on the test start. In python < 3.10 you can not create
 # asyncio loop bound structures when there is no running event loop.
 # Here the loop is not yet active.
-WAKEUP = None
+WAKEUP: Optional[asyncio.Event] = None
 
 
 class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: ignore
@@ -837,6 +838,7 @@ class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: igno
     async def mutate(root, info):
         """Sleep until `WAKEUP` event is set."""
         del root, info
+        assert WAKEUP is not None, "Make mypy happy."
         await WAKEUP.wait()
         return LongMutation(True)
 

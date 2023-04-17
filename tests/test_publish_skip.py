@@ -56,7 +56,7 @@ async def test_publish_skip(gql):
             len(headers) == 1 and headers[0][0] == b"cookie"
         ), f"Unexpected headers received: {headers}"
         cookie_header = headers[0][1].decode()
-        cookie = http.cookies.SimpleCookie(cookie_header)
+        cookie: http.cookies.SimpleCookie = http.cookies.SimpleCookie(cookie_header)
         sessionid = cookie["sessionid"].value
         return sessionid
 

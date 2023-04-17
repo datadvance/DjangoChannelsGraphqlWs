@@ -107,7 +107,8 @@ async def test_main_usecase(gql):
     resp = await client.receive(assert_id=sub_id, assert_type="data")
     event = resp["data"]["on_chat_message_sent"]["event"]
     assert json.loads(event) == {
-        "user_id": UserId.ALICE.value,  # pylint: disable=no-member
+        # pylint: disable=no-member
+        "user_id": UserId.ALICE.value,  # type: ignore[attr-defined]
         "payload": message,
     }, "Subscription notification contains wrong data!"
 
@@ -331,7 +332,7 @@ async def test_subscription_groups(gql):
     await trigger_subscription(comm_alice, tom_id, message)
     # Check Tom's notifications.
     resp = await comm_tom.receive(assert_id=uid_tom, assert_type="data")
-    check_resp(resp, UserId[tom_id].value, message)
+    check_resp(resp, UserId[tom_id].value, message)  # type: ignore[misc]
     # Any other did not receive any notifications.
     await comm_alice.assert_no_messages()
     print("Trigger subscription: send message to Alice.")
@@ -339,7 +340,7 @@ async def test_subscription_groups(gql):
     await trigger_subscription(comm_tom, alice_id, message)
     # Check Alice's notifications.
     resp = await comm_alice.receive(assert_id=uid_alice, assert_type="data")
-    check_resp(resp, UserId[alice_id].value, message)
+    check_resp(resp, UserId[alice_id].value, message)  # type: ignore[misc]
     # Any other did not receive any notifications.
     await comm_tom.assert_no_messages()
 
@@ -349,9 +350,9 @@ async def test_subscription_groups(gql):
 
     print("Check Tom's and Alice's notifications.")
     resp = await comm_tom.receive(assert_id=uid_tom, assert_type="data")
-    check_resp(resp, UserId[tom_id].value, message)
+    check_resp(resp, UserId[tom_id].value, message)  # type: ignore[misc]
     resp = await comm_alice.receive(assert_id=uid_alice, assert_type="data")
-    check_resp(resp, UserId[alice_id].value, message)
+    check_resp(resp, UserId[alice_id].value, message)  # type: ignore[misc]
 
     print("Disconnect and wait the application to finish gracefully.")
     await comm_tom.finalize()

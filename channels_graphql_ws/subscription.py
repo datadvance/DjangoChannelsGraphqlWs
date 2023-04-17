@@ -29,7 +29,7 @@ import asyncio
 import collections
 import hashlib
 import logging
-import inspect
+from typing import Optional
 
 import asgiref.sync
 import channels.db
@@ -64,7 +64,7 @@ class Subscription(graphene.ObjectType):
         [async] publish(payload, info, *args, **kwds):
             This method invoked each time subscription "triggers".
             Raising an exception here will lead to sending the
-            notification with the error. Technically the WebSocker
+            notification with the error. Technically the WebSocket
             message will contain extra field "extensions.code" holding
             the classname of the exception raised. To suppress the
             notification return `Subscription.SKIP`.
@@ -165,7 +165,7 @@ class Subscription(graphene.ObjectType):
     # notifications come faster than server processes them. Setting this
     # to 1 drops all notifications in the queue except the latest one.
     # Useful to skip intermediate notifications, e.g. progress reports.
-    notification_queue_limit = None
+    notification_queue_limit: Optional[int] = None
 
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
@@ -298,10 +298,10 @@ class Subscription(graphene.ObjectType):
                 on_new_chat_message = OnNewChatMessage.Field()
 
         """
-        return graphene.Field(            
+        return graphene.Field(
             cls._meta.output,
             args=cls._meta.arguments,
-            resolver=cls._meta.resolver,
+            resolver=cls._meta.publish,
             name=name,
             description=description,
             deprecation_reason=deprecation_reason,
@@ -368,21 +368,11 @@ class Subscription(graphene.ObjectType):
 
         # Auxiliary alias.
         graphene_get_function = graphene.utils.get_unbound_function.get_unbound_function
-        publish = graphene_get_function(publish)
-
-        # Raise `SkipNotificationError` when resolver returns `SKIP`.
-        # TODO: May be it is possible to put this into middleware.
-        async def publish_with_skip(root, info, *args, **kwds):
-            result = publish(root, info, *args, **kwds)
-            result = await result if inspect.isawaitable(result) else result
-            if result == cls.SKIP:
-                raise GraphqlWsConsumer.SkipNotificationError()
-            return result
 
         # pylint: disable=attribute-defined-outside-init
         _meta.arguments = arguments
         _meta.output = output
-        _meta.resolver = publish_with_skip
+        _meta.publish = graphene_get_function(publish)
         _meta.subscribe = graphene_get_function(subscribe)
         _meta.unsubscribed = graphene_get_function(unsubscribed)
 
@@ -420,3 +410,4 @@ class SubscriptionOptions(graphene.types.objecttype.ObjectTypeOptions):
     output = None
     subscribe = None
     publish = None
+    unsubscribed = None
