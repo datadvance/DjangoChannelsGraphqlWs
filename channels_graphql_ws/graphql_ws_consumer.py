@@ -579,10 +579,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             # Prepare a context object.
             context = DictAsObject({})
-            context.graphql_ws_consumer = self
-            context.graphql_operation_id = op_id
-            context.graphql_operation_name = op_name
-            context.channels_consumer = self
             context.channels_scope = self.scope
             context.channel_name = self.channel_name
 
@@ -604,7 +600,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 `graphql.MiddlewareManager` accepts only unbound
                 functions as middleware.
                 """
-                return await self._on_gql_start__root_middleware(*args, **kwds)
+                return await self._on_gql_start__root_middleware(
+                    op_id, op_name, *args, **kwds
+                )
 
             # NOTE: Middlewares order is important, root middleware
             # should always be the closest to the real resolver (first
@@ -900,7 +898,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)
 
     async def _on_gql_start__root_middleware(
-        self, next_middleware, root, info: graphql.GraphQLResolveInfo, *args, **kwds
+        self,
+        operation_id: int,
+        operation_name: str,
+        next_middleware,
+        root,
+        info: graphql.GraphQLResolveInfo,
+        *args,
+        **kwds,
     ):
         """Root middleware injected right before resolver invocation.
 
@@ -980,8 +985,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     pretty_name,
                     duration,
                     self.warn_resolver_timeout,
-                    info.context.graphql_operation_name,
-                    info.context.graphql_operation_id,
+                    operation_name,
+                    operation_id,
                     info.path,
                 )
 
