@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -36,7 +36,11 @@ def test_pylint(src_dir):
 
     pylint = plumbum.local["pylint"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = pylint(src_dir)
+        # There is the bug in pylint_django:
+        # https://github.com/PyCQA/pylint-django/issues/369#issuecomment-1305725496
+        #
+        # The `env` parameter should be removed once that bug is fixed.
+        result = pylint(src_dir, env={"PYTHONPATH": "."})
         if result:
             print("\nPylint:", result)
 
@@ -56,7 +60,7 @@ def test_isort(src_dir):
     """Run Isort."""
     isort = plumbum.local["isort"]
     with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = isort("--check-only", "-rc", src_dir)
+        result = isort("--check-only", src_dir)
         if result:
             print("\nIsort:", result)
 

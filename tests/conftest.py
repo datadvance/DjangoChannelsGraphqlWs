@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -56,6 +56,27 @@ def event_loop(request):
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+class DummyQuery(graphene.ObjectType):
+    """Dummy query to use if no query supplied to the `gql` call.
+
+    Graphene will throw a exception from the `graphene.Schema` constructor
+    call if the `query` parameter is `None`. The `query` with no fields
+    will also result in an exception.
+
+    Our `gql` function should allow `None` value for the `query`
+    parameter to make tests code simplier. So this "DummyQuery" will be
+    used as a substitution for the `query` parameter of the
+    `graphene.Schema` constructor call.
+    """
+
+    value = graphene.String()
+
+    def resolve_value(self):
+        """Resolver to return predefined value which can be tested."""
+        del self
+        return "test"
 
 
 @pytest.fixture
@@ -124,9 +145,21 @@ def gql(db, request):
         communicator_kwds=None,
     ):
         """Setup GraphQL consumer and the communicator for tests."""
+        # Graphene will throw a exception from the `graphene.Schema`
+        # constructor call if the `query` parameter is `None`. The
+        # `query` with no fields will also result in exception.
+        #
+        # If no `query` provided to the `client_constructor`, then use
+        # DummyQuery, since Graphene requires one.
+        if query is None:
+            query = DummyQuery
 
         class ChannelsConsumer(channels_graphql_ws.GraphqlWsConsumer):
             """Channels WebSocket consumer for GraphQL API."""
+
+            # Redefine the group prefix to be able to detect that it is
+            # really changed.
+            group_name_prefix = "TEST"
 
             schema = graphene.Schema(
                 query=query,
@@ -171,6 +204,9 @@ def gql(db, request):
 def synchronize_inmemory_channel_layer():
     """Monkeypatch `InMemoryChannelLayer` to make it thread safe.
 
+    The `InMemoryChannelLayer` is not thread safe by default since it use the
+    `asyncio.Queue`.
+
     Without this we have a blinking fails in the unit tests run:
     Traceback (most recent call last):
         File ".../site-packages/promise/promise.py", line 842, in handle_future_result
@@ -183,7 +219,7 @@ def synchronize_inmemory_channel_layer():
             "payload": serialized_payload,
         File ".../site-packages/channels/layers.py", line 351, in group_send
             for channel in self.groups.get(group, set()):
-     graphql.error.located_error.GraphQLLocatedError:
+     graphql.error.GraphQLError:
          dictionary changed size during iteration
     """
     guard = threading.RLock()

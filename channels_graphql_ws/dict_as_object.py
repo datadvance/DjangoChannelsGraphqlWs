@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -19,11 +19,11 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""Wrapper for the Channels scope."""
+"""Dict wrapper to access keys as attributes."""
 
 
-class ScopeAsContext:
-    """Wrapper to make Channels `scope` appear as an `info.context`."""
+class DictAsObject:
+    """Dict wrapper to access keys as attributes."""
 
     def __init__(self, scope):
         """Remember given `scope`."""
@@ -33,7 +33,7 @@ class ScopeAsContext:
         """Provide inner Channels scope object."""
         return self._scope
 
-    # ---------------------------------------------------------------- WRAPPER FUNCTIONS
+    # ------------------------------------------------ WRAPPER FUNCTIONS
     def __getattr__(self, name):
         """Route attributes to the scope object."""
         if name.startswith("_"):
@@ -49,7 +49,7 @@ class ScopeAsContext:
             super().__setattr__(name, value)
         self._scope[name] = value
 
-    # --------------------------------------------------------------------- DICT WRAPPER
+    # ----------------------------------------------------- DICT WRAPPER
     def __getitem__(self, key):
         """Wrap dict method."""
         return self._scope[key]

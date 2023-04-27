@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -27,7 +27,8 @@ import textwrap
 import time
 import uuid
 
-from .transport import GraphqlWsTransport
+# Underscored to avoid name clash with GraphqlWsClient init's argument.
+from . import transport as _transport
 
 
 class GraphqlWsClient:
@@ -51,19 +52,18 @@ class GraphqlWsClient:
     Args:
         transport: The `GraphqlWsTransport` instance used to send and
             receive messages over the WebSocket connection.
-
     """
 
-    def __init__(self, transport: GraphqlWsTransport):
+    def __init__(self, transport: _transport.GraphqlWsTransport):
         """Constructor."""
         assert isinstance(
-            transport, GraphqlWsTransport
-        ), "The 'transport' must implement the 'GraphqlWsTransport' interface!"
+            transport, _transport.GraphqlWsTransport
+        ), "Given transport does not implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
         self._is_connected = False
 
     @property
-    def transport(self) -> GraphqlWsTransport:
+    def transport(self) -> _transport.GraphqlWsTransport:
         """Underlying network transport."""
         return self._transport
 

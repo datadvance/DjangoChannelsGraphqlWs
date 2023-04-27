@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -52,24 +52,36 @@ async def test_broadcast(gql):
     # Test subscription notifications order, even with disabled ordering
     # notifications must be send in the order they were broadcasted.
     settings = {"strict_ordering": False}
-    client = gql(mutation=Mutation, subscription=Subscription, consumer_attrs=settings)
-    await client.connect_and_init()
+    client_sender = gql(
+        mutation=Mutation, subscription=Subscription, consumer_attrs=settings
+    )
+    client_recipient = gql(
+        mutation=Mutation, subscription=Subscription, consumer_attrs=settings
+    )
+    await client_sender.connect_and_init()
+    await client_recipient.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await client.send(
+    sub_id = await client_recipient.send(
         msg_type="start",
         payload={
-            "query": "subscription on_message_sent { on_message_sent { message } }",
+            "query": textwrap.dedent(
+                """
+                subscription on_message_sent {
+                    on_message_sent { message }
+                }
+                """
+            ),
             "variables": {},
             "operationName": "on_message_sent",
         },
     )
 
-    await client.assert_no_messages()
+    await client_recipient.assert_no_messages()
 
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
-    msg_id = await client.send(
+    msg_id = await client_sender.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -87,18 +99,18 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client.receive(assert_id=msg_id, assert_type="data")
+    resp = await client_sender.receive(assert_id=msg_id, assert_type="data")
     assert resp["data"] == {"send_message": {"success": True}}
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
-    resp = await client.receive(assert_id=sub_id, assert_type="data")
+    resp = await client_recipient.receive(assert_id=sub_id, assert_type="data")
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
 
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
-    msg_id = await client.send(
+    msg_id = await client_sender.send(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
@@ -116,13 +128,13 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client.receive(assert_id=msg_id, assert_type="data")
+    resp = await client_sender.receive(assert_id=msg_id, assert_type="data")
     assert resp["data"] == {"send_timestamps": {"success": True}}
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     timestamps = []
     for _ in range(count):
-        resp = await client.receive(assert_id=sub_id, assert_type="data")
+        resp = await client_recipient.receive(assert_id=sub_id, assert_type="data")
         data = resp["data"]["on_message_sent"]
         timestamps.append(data["message"])
     assert timestamps == sorted(
@@ -130,9 +142,54 @@ async def test_broadcast(gql):
     ), "Server does not preserve messages order for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
-    await client.assert_no_messages(
+    await client_sender.assert_no_messages(
         "Unexpected message received at the end of the test!"
     )
+    await client_sender.finalize()
+    await client_recipient.assert_no_messages(
+        "Unexpected message received at the end of the test!"
+    )
+    await client_recipient.finalize()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_unsubscribe(gql):
+    """Test that the asynchronous `unsubscribe()` works.
+
+    Test the server able to handle client unsubscribe before connection
+    were initialized properly.
+
+    In real life this case is rare if not impossible. But in our async
+    tests it is common since server and client are launched by using
+    same eventloop.
+    """
+
+    print("Establish & initialize WebSocket GraphQL connection.")
+
+    # Test subscription notifications order, even with disabled ordering
+    # notifications must be send in the order they were broadcasted.
+    client = gql(mutation=Mutation, subscription=Subscription)
+    await client.connect_and_init()
+
+    print("Subscribe to GraphQL subscription.")
+    sub_id = await client.send(
+        msg_type="start",
+        payload={
+            "query": textwrap.dedent(
+                """
+                subscription on_message_sent {
+                    on_message_sent { message }
+                }
+                """
+            ),
+            "variables": {},
+            "operationName": "on_message_sent",
+        },
+    )
+    await client.send(msg_id=sub_id, msg_type="stop")
+    # If server was not able to handle unsubscribe command, then test
+    # will hang here.
+    await client.receive(assert_type="complete")
     await client.finalize()
 
 
@@ -155,7 +212,6 @@ class SendMessage(graphene.Mutation, name="SendMessagePayload"):  # type: ignore
         del root, info
 
         await OnMessageSent.broadcast(payload={"message": message})
-
         return SendMessage(success=True)
 
 
@@ -184,7 +240,7 @@ class SendTimestamps(graphene.Mutation, name="SendTimestampsPayload"):  # type: 
 
         for idx in range(count):
             now = datetime.fromtimestamp(time.monotonic())
-            payload = dict(message=now.isoformat(), delay=(count - idx) / 10)
+            payload = {"message": now.isoformat(), "delay": (count - idx) / 10}
             await OnMessageSent.broadcast(payload=payload)
 
         return SendTimestamps(success=True)

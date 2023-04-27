@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -26,17 +26,16 @@
 
 # --------------------------------------------------------- BUILD-SYSTEM
 [build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 # --------------------------------------------------------------- POETRY
 # Python packaging and dependency management.
 # Docs: https://python-poetry.org/docs/
 [tool.poetry]
 name = "django-channels-graphql-ws"
-version = "0.9.1"
-description = """Django Channels based WebSocket GraphQL server with \
-                 Graphene-like subscriptions"""
+version = "1.0.0rc1"
+description = """Django Channels based WebSocket GraphQL server with Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
 homepage = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
 repository = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
@@ -44,31 +43,30 @@ license = "MIT"
 packages = [
     { include = "channels_graphql_ws/" },
 ]
-[tool.poetry.dependencies]
+
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
-python = "^3.6.0"
+[tool.poetry.dependencies]
+python = "^3.8.0"
 aiohttp = "^3"
 asgiref = "^3"
-backports-datetime-fromisoformat = {version = "^1", python = "~3.6"}
-channels = "^3"
-dataclasses = {version = "^0.7", python = "~3.6"}
-Django = "^3"
-graphene = "^2.1"
-graphql-core = ">=2.2"
-msgpack = ">=0.6.1, <2"
-[tool.poetry.dev-dependencies]
+channels = "^4"
+Django = "^4"
+graphene = "^3"
+graphql-core = "3.2.3" # Carefully test after upgrade, since we path private internals.
+msgpack = "^1"
+
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
-black = { version = "*", allow-prereleases = true }
+[tool.poetry.group.dev.dependencies]
+black = { version = "*" }
+channels = {version = "^4", extras = ["daphne"]}
 channels-redis = "*"
 coverage = "*"
 graphene-django = "*"
-ipython = "*"
 isort = {version = "*", extras = ["pyproject"]}
 mypy = "*"
 plumbum = "*"
-pre-commit = "*"
 pydocstyle = "*"
 pylint = "*"
 pylint-django = "*"
@@ -80,13 +78,12 @@ pytest-django = "*"
 pytest-pythonpath = "*"
 pytest-xdist = "*"
 tox = "*"
-types-dataclasses = {version = "*", python = "~3.6"}
 
 # ---------------------------------------------------------------- BLACK
 # Black - the uncompromising code formatter.
 # https://black.readthedocs.io/en/stable/index.html
 [tool.black]
-target-version = ['py36', 'py37', 'py38']
+target-version = ['py37', 'py38', 'py39', 'py310']
 
 # ---------------------------------------------------------------- ISORT
 # Isort configuration.
@@ -112,10 +109,9 @@ persistent = "no"
 # Allow to load C extension modules.
 unsafe-load-any-extension = "yes"
 [tool.pylint."MESSAGES CONTROL"]
-# bad-continuation: Black does the job, no need to check.
 # design: Do not count lines, members, ..., no use.
 # similarities: Duplication does not mean bad design by itself.
-disable = "bad-continuation,design,similarities"
+disable = "design,similarities"
 enable = "c-extension-no-member"
 [tool.pylint.BASIC]
 # It is OK to have 2-letters identifiers, e.g. 'id' or 'ok'. Also allow
@@ -170,9 +166,60 @@ omit = ["**/test_*.py"]
 legacy_tox_ini = """
 [tox]
 isolated_build = true
-envlist = py36,py37,py38,py39
+envlist = py38,py39,py310
 [testenv]
-whitelist_externals = poetry
+allowlist_externals = poetry
 commands_pre = poetry install -v
 commands = poetry run pytest {posargs}
 """
+
+# ----------------------------------------------------------------- MYPY
+# MyPy configuration.
+# Docs: https://mypy.readthedocs.io/en/latest/config_file.html
+[tool.mypy]
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+
+# --------------------------------------------------------------- PYTEST
+# https://docs.pytest.org/en/latest/reference.html#ini-options-ref
+[tool.pytest.ini_options]
+# Might be useful to enable logging for debug:
+# log_cli = true
+# log_cli_level = "DEBUG"
+# log_cli_format = "[%(levelname)s] [%(asctime)s,%(msecs)s] [%(thread)d %(threadName)s] - %(message)s"
+# log_cli_date_format = "%Y-%m-%dT%H:%M:%S"
+
+# pytest-pythonpath:
+# Set up paths to import Python modules from.
+python_paths = ". example"
+# pytest-django:
+# NOTE: This influence to both Pytest and to `pylint_django`, cause
+# in fact, it simply sets `DJANGO_SETTINGS_MODULE` environment variable.
+DJANGO_SETTINGS_MODULE = "example.settings"
+# Test files to explore.
+python_files = "**/test_*.py"
+# Default command-line arguments:
+#   - Enable coverage measurement and set config file.
+#   - Force verbose output: output list of tests by default.
+addopts = "--cov --verbose"
+
+# ----------------------------------------------------------- PYDOCSTYLE
+# Pydocstyle configuration reference:
+# http://www.pydocstyle.org/en/latest/usage.html#available-options
+[tool.pydocstyle]
+# Redefine match rules, cause by default it skips `test_*` files.
+match=".*\\.py"
+# Disable some checks:
+# - D202: No blank lines allowed after function docstring. We cannot
+#   follow this, cause Black inject blank line before function
+#   declaration and if it is a nested function when this violates this
+#   rule.
+# - D401: First line should be in imperative mood; try rephrasing. Often
+#   it is not possible. Especially for callback functions such as "A new
+#   message handler."
+# - D403: First word of the first line should be properly capitalized.
+#   There is nothing bad in using words like "WebSocket" or
+#   "MessagePack" even in the beginning of the docstring.
+add_ignore="D202,D401,D403"

@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -161,16 +161,19 @@ async def test_custom_confirmation_message(gql):
         },
     )
 
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as error:
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
         await client.receive(assert_id=sub_op_id, assert_type="data")
-        expected_errors = [
-            {"message": f"{type(expected_error).__name__}: {expected_error}"}
-        ]
-        assert error.errors == expected_errors, "Wrong confirmation errors received!"
-        assert error.response == {
-            "data": expected_data,
-            "errors": expected_errors,
-        }, "Wrong subscription confirmation message received!"
+    expected_errors = [
+        {
+            "message": f"{type(expected_error).__name__}: {expected_error}",
+            "extensions": {"code": "RuntimeError"},
+        }
+    ]
+    payload = ex.value.response["payload"]
+    assert payload["errors"] == expected_errors, "Wrong confirmation errors received!"
+    assert (
+        payload["data"] == expected_data
+    ), "Wrong subscription confirmation message received!"
 
     print("Trigger the subscription.")
 

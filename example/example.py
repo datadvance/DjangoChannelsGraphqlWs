@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -23,7 +23,7 @@
 
 import pathlib
 from collections import defaultdict
-from typing import DefaultDict, List
+from typing import Any, DefaultDict
 
 import asgiref
 import channels
@@ -34,15 +34,16 @@ import django.contrib.auth
 import django.core.asgi
 import graphene
 import graphene_django.types
+import graphql
 
 import channels_graphql_ws
 
 # It is OK, Graphene works this way.
-# pylint: disable=no-self-use,unsubscriptable-object,invalid-name
+# pylint: disable=unsubscriptable-object,invalid-name
 
 # Fake storage for the chat history. Do not do this in production, it
 # lives only in memory of the running server and does not persist.
-chats: DefaultDict[str, List[str]] = defaultdict(list)
+chats: DefaultDict[str, list[dict[str, Any]]] = defaultdict(list)
 
 
 # ---------------------------------------------------------------------- TYPES & QUERIES
@@ -214,7 +215,7 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
         That allows to consider a structure of the `payload` as an
         implementation details.
         """
-        cls.broadcast(
+        cls.broadcast_sync(
             group=chatroom,
             payload={"chatroom": chatroom, "text": text, "sender": sender},
         )
@@ -229,7 +230,7 @@ class Subscription(graphene.ObjectType):
 # ----------------------------------------------------------- GRAPHQL WEBSOCKET CONSUMER
 
 
-def demo_middleware(next_middleware, root, info, *args, **kwds):
+async def demo_middleware(next_middleware, root, info, *args, **kwds):
     """Demo GraphQL middleware.
 
     For more information read:
@@ -245,11 +246,16 @@ def demo_middleware(next_middleware, root, info, *args, **kwds):
         print("    name      :", info.operation.name.value)
 
     # Invoke next middleware.
-    return next_middleware(root, info, *args, **kwds)
+    result = next_middleware(root, info, *args, **kwds)
+    if graphql.pyutils.is_awaitable(result):
+        result = await result
+    return result
 
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
+
+    send_keepalive_every = 1
 
     async def on_connect(self, payload):
         """Handle WebSocket connection event."""
@@ -285,12 +291,15 @@ application = channels.routing.ProtocolTypeRouter(
     }
 )
 
+
 # -------------------------------------------------------------------- URL CONFIGURATION
 def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
     del request
     graphiql_filepath = pathlib.Path(__file__).absolute().parent / "graphiql.html"
-    with open(graphiql_filepath) as f:
+    # It is better to specify an encoding when opening documents. Using the
+    # system default implicitly can create problems on other operating systems.
+    with open(graphiql_filepath, encoding="utf-8") as f:
         return django.http.response.HttpResponse(f.read())
 
 

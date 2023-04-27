@@ -1,5 +1,5 @@
 <!--
-Copyright (C) DATADVANCE, 2010-2022
+Copyright (C) DATADVANCE, 2010-2023
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the
@@ -23,13 +23,31 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc1] - 2022-11-16
+
+- DjangoChannelsGraphqlWs has migrated to the recent versions of Django,
+  Channels, and Graphene. All other Python dependencies updated.
+- Server outputs a warning to the log when operation/resolver takes
+  longer than specified timeout, which is one second by default. The
+  settings `GraphqlWsConsumer.warn_operation_timeout` and
+  `GraphqlWsConsumer.warn_resolver_timeout` allow to tune the timeout or
+  even disable the warning at all.
+- If exception raises from the resolver a response now contains a field
+  "extensions.code" with a class name of the exception.
+- Added support for async resolvers and middlewares.
+- WARNING: This release is not backward compatible with previous ones!
+  The main cause is a major update of Django, Channels, and Graphene,
+  but there are some introduced by the library itself. In particular:
+  - Context lifetime and content have changed. See README.md for
+    details.
+
 ## [0.9.1] - 2022-01-27
 
 - Minor fix in logging.
 
 ## [0.9.0] - 2021-10-19
 
-- Ability to configure server notification queue limit per subscribtion.
+- Ability to configure server notification queue limit per subscription.
 
 ## [0.8.0] - 2021-02-12
 

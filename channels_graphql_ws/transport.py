@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -20,7 +20,7 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-"""GraphQL WebSocket client transports."""
+"""GraphQL WebSocket client transport."""
 
 import asyncio
 import json
@@ -77,11 +77,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         # HTTP headers.
         self._headers = headers
         # AIOHTTP connection.
-        self._connection = None
+        self._connection: aiohttp.ClientWebSocketResponse
         # A task which processes incoming messages.
-        self._message_processor = None
+        self._message_processor: asyncio.Task
         # A queue for incoming messages.
-        self._incoming_messages = asyncio.Queue()
+        self._incoming_messages: asyncio.Queue = asyncio.Queue()
 
     async def connect(self, timeout: Optional[float] = None) -> None:
         """Establish a connection with the WebSocket server.
@@ -92,7 +92,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
 
         """
         connected = asyncio.Event()
-        self._message_processor = asyncio.ensure_future(
+        self._message_processor = asyncio.create_task(
             self._process_messages(connected, timeout or self.TIMEOUT)
         )
         await asyncio.wait(

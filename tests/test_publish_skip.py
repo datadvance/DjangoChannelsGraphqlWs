@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -56,7 +56,7 @@ async def test_publish_skip(gql):
             len(headers) == 1 and headers[0][0] == b"cookie"
         ), f"Unexpected headers received: {headers}"
         cookie_header = headers[0][1].decode()
-        cookie = http.cookies.SimpleCookie(cookie_header)
+        cookie: http.cookies.SimpleCookie = http.cookies.SimpleCookie(cookie_header)
         sessionid = cookie["sessionid"].value
         return sessionid
 
@@ -76,7 +76,9 @@ async def test_publish_skip(gql):
             del root
             OnNewMessage.broadcast(
                 payload={
-                    "author_sessionid": sessionid_from_headers(info.context.headers),
+                    "author_sessionid": sessionid_from_headers(
+                        info.context.channels_scope["headers"]
+                    ),
                     "message": message,
                 }
             )
@@ -90,7 +92,7 @@ async def test_publish_skip(gql):
         @staticmethod
         def publish(payload, info):
             """Notify all clients except the author of the message."""
-            sessionid = sessionid_from_headers(info.context.headers)
+            sessionid = sessionid_from_headers(info.context.channels_scope["headers"])
             if payload["author_sessionid"] == sessionid:
                 return OnNewMessage.SKIP
 

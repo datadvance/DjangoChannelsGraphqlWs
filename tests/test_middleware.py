@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -22,6 +22,7 @@
 """Test GraphQL middleware."""
 
 import graphene
+import graphql.pyutils
 import pytest
 
 import channels_graphql_ws
@@ -93,17 +94,17 @@ async def test_middleware_called_in_mutation(gql):
 
 @pytest.mark.asyncio
 async def test_middleware_called_in_subscription(gql):
-    """Check that middleware called during subscription processing.
+    """Check that middleware called during subscription processing."""
 
-    Middleware expected to be called two times: during subscribing to
-    the subscription and during a notification.
-    """
     middleware_call_counter = 0
 
-    def middleware(next_middleware, root, info, *args, **kwds):
+    async def middleware(next_middleware, root, info, *args, **kwds):
         nonlocal middleware_call_counter
         middleware_call_counter += 1
-        return next_middleware(root, info, *args, **kwds)
+        result = next_middleware(root, info, *args, **kwds)
+        if graphql.pyutils.is_awaitable(result):
+            result = await result
+        return result
 
     print("Initialize WebSocket GraphQL connection with middleware enabled.")
     client = gql(
@@ -120,8 +121,9 @@ async def test_middleware_called_in_subscription(gql):
     )
     await client.assert_no_messages()
 
+    # Middleware is not called during subscription initialization.
     assert (
-        middleware_call_counter == 1
+        middleware_call_counter == 0
     ), "Middleware is not called during subscribing to the subscription!"
 
     print("Manually trigger the subscription.")
@@ -131,9 +133,12 @@ async def test_middleware_called_in_subscription(gql):
     # subscription processing has finished.
     await client.receive(assert_id=sub_id, assert_type="data")
 
+    # Middleware must be called two times:
+    #  - to resolve "on_trigger";
+    #  - to resolve "ok".
     assert (
         middleware_call_counter == 2
-    ), "Middleware is not called two times for subscription!"
+    ), "Middleware is not called three times for subscription!"
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.finalize()
@@ -180,7 +185,7 @@ async def test_middleware_invocation_order(gql):
 
 
 # Mute Pytest for the Graphene DSL for the GraphQL setup.
-# pylint: disable=arguments-differ,no-self-use
+# pylint: disable=arguments-differ
 
 
 class OnTrigger(channels_graphql_ws.Subscription):

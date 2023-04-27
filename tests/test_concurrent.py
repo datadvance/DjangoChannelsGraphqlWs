@@ -1,4 +1,4 @@
-# Copyright (C) DATADVANCE, 2010-2021
+# Copyright (C) DATADVANCE, 2010-2023
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -28,9 +28,9 @@ import asyncio
 import concurrent.futures
 import itertools
 import textwrap
-import threading
 import time
 import uuid
+from typing import Optional
 
 import graphene
 import pytest
@@ -42,11 +42,15 @@ import channels_graphql_ws
 async def test_concurrent_queries(gql):
     """Check a single hanging operation does not block other ones."""
 
+    global WAKEUP  # pylint: disable=global-statement
+    WAKEUP = asyncio.Event()
     print("Establish & initialize WebSocket GraphQL connection.")
     client = gql(query=Query, mutation=Mutation)
     await client.connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
+    # Since tests and server are launched using same eventloop we should
+    # not await for response here.
     long_op_id = await client.send(
         msg_type="start",
         payload={
@@ -98,7 +102,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
     been processed. This test reveals hanging worker threads.
     """
 
-    # Name of Graphql Query used in this test.
+    # Name of GraphQL Query used in this test.
     if sync_resolvers == "sync":
         query = "fast_op_sync"
     elif sync_resolvers == "async":
@@ -119,7 +123,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
                 msg_id=op_id,
                 msg_type="start",
                 payload={
-                    "query": "query op_name { %s }" % query,
+                    "query": f"query op_name {{ {query} }}",
                     "variables": {},
                     "operationName": "op_name",
                 },
@@ -165,7 +169,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
        the second and the third subscription.
     """
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -194,10 +198,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -207,10 +210,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -220,10 +222,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
+                f"""
+                subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
                 """
-                subscription op_name { %s(user_id: ALICE) { event } }
-                """
-                % subscription
             ),
             "variables": {},
             "operationName": "op_name",
@@ -240,14 +241,13 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         msg_type="start",
         payload={
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
@@ -296,7 +296,7 @@ async def test_subscribe_and_many_unsubscribes(
     2) Check that all requests have been successfully processed.
     """
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -327,12 +327,11 @@ async def test_subscribe_and_many_unsubscribes(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -379,7 +378,7 @@ async def test_subscribe_and_many_unsubscribes(
     wait_timeout = 60
     # Generate operations ids for subscriptions. In the future, we will
     # unsubscribe from all these subscriptions.
-    op_ids = set()
+    op_ids: set[str] = set()
     # List to collect tasks. We immediately add a handler to receive
     # successful messages.
     awaitables = [receiver(op_ids)]
@@ -419,14 +418,13 @@ async def test_subscribe_and_many_unsubscribes(
         msg_type="start",
         payload={
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {"message": message, "user_id": "ALICE"},
             "operationName": "op_name",
@@ -469,7 +467,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     # Gradually stop the test if time is up.
     TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
-    # Names of Graphql mutation and subscription used in this test.
+    # Names of GraphQL mutation and subscription used in this test.
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
@@ -494,12 +492,11 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -611,12 +608,11 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": "ALICE"},
                 "operationName": "op_name",
@@ -626,14 +622,13 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
         spam_payload = {
             "query": textwrap.dedent(
-                """
-                mutation op_name($message: String!, $user_id: UserId) {
-                    %s(message: $message, user_id: $user_id) {
+                f"""
+                mutation op_name($message: String!, $user_id: UserId) {{
+                    {mutation}(message: $message, user_id: $user_id) {{
                         message
-                    }
-                }
+                    }}
+                }}
                 """
-                % mutation
             ),
             "variables": {
                 "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
@@ -738,7 +733,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
 
-    # Name of Graphql subscription used in this test.
+    # Name of GraphQL subscription used in this test.
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
@@ -767,12 +762,11 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             msg_type="start",
             payload={
                 "query": textwrap.dedent(
+                    f"""
+                    subscription op_name($user_id: UserId) {{
+                        {subscription}(user_id: $user_id) {{ event }}
+                    }}
                     """
-                    subscription op_name($user_id: UserId) {
-                        %s(user_id: $user_id) { event }
-                    }
-                    """
-                    % subscription
                 ),
                 "variables": {"user_id": user_id},
                 "operationName": "op_name",
@@ -829,7 +823,10 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
 
 # ---------------------------------------------------------------------- GRAPHQL BACKEND
 
-WAKEUP = threading.Event()
+# Will be set on the test start. In python < 3.10 you can not create
+# asyncio loop bound structures when there is no running event loop.
+# Here the loop is not yet active.
+WAKEUP: Optional[asyncio.Event] = None
 
 
 class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: ignore
@@ -841,7 +838,8 @@ class LongMutation(graphene.Mutation, name="LongMutationPayload"):  # type: igno
     async def mutate(root, info):
         """Sleep until `WAKEUP` event is set."""
         del root, info
-        WAKEUP.wait()
+        assert WAKEUP is not None, "Make mypy happy."
+        await WAKEUP.wait()
         return LongMutation(True)
 
 
@@ -880,7 +878,7 @@ class OnChatMessageSentSync(channels_graphql_ws.Subscription):
     def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"user_id": user_id, "payload": self}
+        event = {"user_id": user_id.value, "payload": self}
 
         return OnChatMessageSentSync(event=event)
 
@@ -920,7 +918,7 @@ class OnChatMessageSentAsync(channels_graphql_ws.Subscription):
     async def publish(self, info, user_id):
         """Publish query result to the subscribers."""
         del info
-        event = {"user_id": user_id, "payload": self}
+        event = {"user_id": user_id.value, "payload": self}
 
         return OnChatMessageSentAsync(event=event)
 
