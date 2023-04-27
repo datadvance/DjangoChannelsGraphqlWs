@@ -23,7 +23,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
-## [1.0.0rc1] - 2022-11-16
+## [1.0.0rc2] - 2023-04-28
+
+Broken support of previous Python version brought back.
+
+## [1.0.0rc1] - 2023-04-28
 
 - DjangoChannelsGraphqlWs has migrated to the recent versions of Django,
   Channels, and Graphene. All other Python dependencies updated.
