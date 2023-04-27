@@ -35,8 +35,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 name = "django-channels-graphql-ws"
 version = "1.0.0rc1"
-description = """Django Channels based WebSocket GraphQL server with \
-                 Graphene-like subscriptions"""
+description = """Django Channels based WebSocket GraphQL server with Graphene-like subscriptions"""
 authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
 homepage = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
 repository = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
@@ -49,23 +48,22 @@ packages = [
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 [tool.poetry.dependencies]
 python = "^3.8.0"
-Django = ">=4.0.0"
 aiohttp = "^3"
 asgiref = "^3"
-channels = "^3"
-graphene = ">=3"
-# Updates of the GraphQL-core library should be carefully tested since
-# we rely on private internals of the library.
-graphql-core = "3.2.3"
-msgpack = ">=0.6.1"
+channels = "^4"
+Django = "^4"
+graphene = "^3"
+graphql-core = "3.2.3" # Carefully test after upgrade, since we path private internals.
+msgpack = "^1"
 
 # Development dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 [tool.poetry.group.dev.dependencies]
-black = { version = "*", allow-prereleases = true }
+black = { version = "*" }
+channels = {version = "^4", extras = ["daphne"]}
 channels-redis = "*"
 coverage = "*"
-graphene-django = ">=3"
+graphene-django = "*"
 isort = {version = "*", extras = ["pyproject"]}
 mypy = "*"
 plumbum = "*"
