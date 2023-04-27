@@ -47,7 +47,17 @@ import time
 import traceback
 import weakref
 from collections.abc import Sequence
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional, Type, Union, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    Optional,
+    Type,
+    Union,
+    cast,
+)
 
 import asgiref.sync
 import channels.db
@@ -109,7 +119,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # The message sent to the client when subscription activation
     # confirmation is enabled.
-    subscription_confirmation_message: dict[str, Any] = {"data": None, "errors": None}
+    subscription_confirmation_message: Dict[str, Any] = {"data": None, "errors": None}
 
     # Issue a warning to the log when operation/resolver takes longer
     # than specified number in seconds. None disables the warning.
@@ -212,7 +222,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         @staticmethod
         def build_response(
-            data: Optional[dict[str, Any]], errors: list[graphql.GraphQLError]
+            data: Optional[Dict[str, Any]], errors: list[graphql.GraphQLError]
         ) -> graphql.ExecutionResult:
             """Remove skipped subscription events from results.
 
@@ -254,14 +264,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
 
         # Registry of active (subscribed) subscriptions.
-        self._subscriptions: dict[
+        self._subscriptions: Dict[
             int, GraphqlWsConsumer._SubInf
         ] = {}  # {'<sid>': '<SubInf>', ...}
         self._sids_by_group = {}  # {'<grp>': ['<sid0>', '<sid1>', ...], ...}
 
         # Tasks which send notifications to clients indexed by an
         # operation/subscription id.
-        self._notifier_tasks: dict[int, asyncio.Task] = {}
+        self._notifier_tasks: Dict[int, asyncio.Task] = {}
 
         # Task that sends keepalive messages periodically.
         self._keepalive_task = None
@@ -839,7 +849,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         document: graphql.DocumentNode,
         root_value: Any = None,
         context_value: Any = None,
-        variable_values: Optional[dict[str, Any]] = None,
+        variable_values: Optional[Dict[str, Any]] = None,
         operation_name: Optional[str] = None,
         field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
         subscribe_field_resolver: Optional[graphql.GraphQLFieldResolver] = None,
