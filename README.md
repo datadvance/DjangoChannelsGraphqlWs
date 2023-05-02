@@ -366,15 +366,14 @@ asynchronous resolvers in your code. It will work faster.
 ### Context and scope
 
 The context object (`info.context` in resolvers) is a `SimpleNamespace`
-instance useful to transfer extra data between GraphQL resolvers. It
-also contains some useful extras:
-- `graphql_ws_consumer`: An instance of `GraphqlWsConsumer` subclass.
+instance useful to transfer extra data between GraphQL resolvers. The lifetime
+of `info.context` corresponds to the lifetime of GraphQL request, so it does
+not persist content between different queries/mutations/subscriptions. It also
+contains some useful extras:
 - `graphql_operation_id`: The GraphQL operation id came from the client.
 - `graphql_operation_name`: The name of GraphQL operation.
-- `channels_consumer`: The same as `graphql_ws_consumer`.
-- `channels_scope`: [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope),
-  the same as `channels_consumer.scope`.
-- `channel_name`: The same as `channels_consumer.channel_name`.
+- `channels_scope`: [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope).
+- `channel_name`: WebSocket channel name.
 
 
 ### Authentication
