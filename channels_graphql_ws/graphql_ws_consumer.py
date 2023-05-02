@@ -138,6 +138,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     #        result = await result
     #     return result
     # ```
+    # The first middleware in the middlewares list will be the closest
+    # to the resolver in the middlewares call stack.
     # For more information read docs:
     # - https://docs.graphene-python.org/en/latest/execution/middleware/#middleware
     # - https://graphql-core-3.readthedocs.io/en/latest/diffs.html#custom-middleware
@@ -604,12 +606,12 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 )
 
             # NOTE: Middlewares order is important, root middleware
-            # should always be the closest to the real resolver (first
-            # in the middleware list).
-            middlewares = []
+            # should always be the farest from the real resolver (last
+            # in the middleware list). Because we want to calculate
+            # resolver execution time with middlewares included.
+            middlewares = list(self.middleware)
             if self.warn_resolver_timeout is not None:
                 middlewares.append(unbound_root_middleware)
-            middlewares.extend(self.middleware)
             middleware_manager: Optional[graphql.MiddlewareManager] = None
             if middlewares:
                 middleware_manager = graphql.MiddlewareManager(*middlewares)

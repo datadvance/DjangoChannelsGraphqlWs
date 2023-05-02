@@ -503,8 +503,17 @@ processing. For that define `middleware` setting of your
 `GraphqlWsConsumer` subclass, like this:
 
 ```python
-async def threadpool_for_synch_resolvers(next_middleware, root, info, *args, **kwds):
-    """Offload synchronous resolvers to the threadpool."""
+async def threadpool_for_sync_resolvers(next_middleware, root, info, *args, **kwds):
+    """Offload synchronous resolvers to the threadpool.
+    
+    This middleware should always be the last in the middlewares calls
+    stack and the closest to the real resolver. If this middleware is
+    not the last it will check the next middleware to call instead of
+    real resolver.
+
+    The first middleware in the middlewares list will be the closest to
+    the resolver.
+    """
     # Invoke next middleware.
     if asyncio.iscoroutinefunction(next_middleware):
         result = await next_middleware(root, info, *args, **kwds)
@@ -514,7 +523,7 @@ async def threadpool_for_synch_resolvers(next_middleware, root, info, *args, **k
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     ...
-    middleware = [threadpool_for_synch_resolvers]
+    middleware = [threadpool_for_sync_resolvers]
 ```
 
 It is recommended to write asynchronous middlewares. But synchronous
