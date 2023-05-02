@@ -591,6 +591,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             context = DictAsObject({})
             context.channels_scope = self.scope
             context.channel_name = self.channel_name
+            context.graphql_operation_name = op_name
+            context.graphql_operation_id = op_id
 
             # Process the request with Graphene and GraphQL-core.
             doc_ast, op_ast, errors = await self._on_gql_start__parse_query(
@@ -1029,7 +1031,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # field of `return_type` object. Since subscriptions are build
         # on top of `graphene` we always have graphene specific
         # `return_type` class.
-        subscription_class = info.return_type.graphene_type  # type: ignore[union-attr]
+        return_type = info.return_type
+        while graphql.is_wrapping_type(return_type):
+            return_type = return_type.of_type
+        subscription_class = return_type.graphene_type  # type: ignore[union-attr]
 
         # It is ok to access private fields of `Subscription`
         # implementation. `Subscription` class used to create
