@@ -55,10 +55,7 @@ async def test_models_serialization_with_nested_db_query(gql, transactional_db):
     user_id = random.randint(0, 1023)
     username = uuid.uuid4().hex
     async_user_create = channels.db.database_sync_to_async(User.objects.create)
-    user = await async_user_create(
-        id=user_id,
-        username=username,
-    )
+    user = await async_user_create(id=user_id, username=username)
 
     class UserModel(
         graphene_django.types.DjangoObjectType,
@@ -95,18 +92,16 @@ async def test_models_serialization_with_nested_db_query(gql, transactional_db):
         user = graphene.Field(UserModel, description="A username queried from database")
 
         @staticmethod
-        def resolve_user(this, info):
+        async def resolve_user(this, info):
             """Resolves user by reading it from db."""
             del this, info
-            return User.objects.get(id=user_id)
+            return await User.objects.aget(id=user_id)
 
         @staticmethod
-        def publish(payload, info):
+        async def publish(payload, info):
             """Publish models info so test can check it."""
             del payload, info
-            return OnModelsReceived(
-                user=user,
-            )
+            return OnModelsReceived(user=user)
 
     class Subscription(graphene.ObjectType):
         """Root subscription."""

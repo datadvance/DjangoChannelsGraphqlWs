@@ -27,6 +27,7 @@
     "cSpell.allowCompoundWords": true,
     "cSpell.words": [
         "addfinalizer",
+        "aget",
         "aiohttp",
         "asdict",
         "asgi",

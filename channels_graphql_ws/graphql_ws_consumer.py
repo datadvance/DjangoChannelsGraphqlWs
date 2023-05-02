@@ -59,10 +59,8 @@ from typing import (
     cast,
 )
 
-import asgiref.sync
 import channels.db
 import channels.generic.websocket as ch_websocket
-import django.db.models.query
 import graphene
 import graphql
 import graphql.error
@@ -146,17 +144,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # Docs about async middlewares are still missing - read the
     # GraphQL-core sources to know more.
     middleware: Sequence = []
-
-    # A function to execute synchronous resolvers, middlewares, request
-    # parsing functions, etc. from asynchronous context. The default is
-    # a ASGI thread pool in `channels.db.database_sync_to_async` which
-    # cleans up the database connections so resolvers can safely work
-    # with a database.
-    # https://channels.readthedocs.io/en/latest/topics/databases.html#database-sync-to-async
-    # You can redefine this to use designated thread pool or to use
-    # `asgiref.sync.sync_to_async` if you are sure your resolvers does
-    # not work with the database.
-    sync_to_async: asgiref.sync.SyncToAsync = channels.db.database_sync_to_async
 
     # Subscription implementation shall return this to tell consumer
     # to suppress subscription notification.
@@ -619,12 +606,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             # NOTE: Middlewares order is important, root middleware
             # should always be the closest to the real resolver (first
             # in the middleware list).
-            middleware_manager: Optional[
-                graphql.MiddlewareManager
-            ] = graphql.MiddlewareManager(
-                unbound_root_middleware,
-                *self.middleware,
-            )
+            middlewares = []
+            if self.warn_resolver_timeout is not None:
+                middlewares.append(unbound_root_middleware)
+            middlewares.extend(self.middleware)
+            middleware_manager: Optional[graphql.MiddlewareManager] = None
+            if middlewares:
+                middleware_manager = graphql.MiddlewareManager(*middlewares)
 
             # If the operation is subscription.
             if op_ast.operation == graphql.language.ast.OperationType.SUBSCRIPTION:
@@ -643,7 +631,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     variable_values=variables,
                     context_value=context,
                     subscribe_field_resolver=functools.partial(
-                        self._on_gql_start__initialize_subscription_stream, op_id
+                        self._on_gql_start__initialize_subscription_stream,
+                        op_id,
+                        op_name,
                     ),
                     middleware=middleware_manager,
                     execution_context_class=self._SubscriptionExecutionContext,
@@ -714,7 +704,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             else:
                 LOG.debug("New query/mutation. Operation %s(%s).", op_name, op_id)
 
-                if self.warn_operation_timeout:
+                if self.warn_operation_timeout is not None:
                     start_time = time.perf_counter()
 
                 # Standard name for "IntrospectionQuery". We might also
@@ -741,7 +731,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                     exec_result = await exec_result
                 operation_result = cast(graphql.ExecutionResult, exec_result)
 
-                if self.warn_operation_timeout:
+                if self.warn_operation_timeout is not None:
                     duration = time.perf_counter() - start_time
                     if duration >= self.warn_operation_timeout:
                         LOG.warning(
@@ -805,9 +795,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 2: Sequence of errors.
         """
 
-        res = await self.sync_to_async(self._on_gql_start__parse_query_sync_cached)(
-            op_name, query
-        )
+        res = await channels.db.database_sync_to_async(
+            self._on_gql_start__parse_query_sync_cached
+        )(op_name, query)
 
         doc_ast: Optional[graphql.DocumentNode] = res[0]
         op_ast: Optional[graphql.OperationDefinitionNode] = res[1]
@@ -921,14 +911,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     ):
         """Root middleware injected right before resolver invocation.
 
-        This middleware is here to do two things:
-        1. Offload sync resolvers to the thread out of main event loop.
-        2. Issue a warning if resolver execution time exceeds a limit.
-
-        It is highly probable that resolvers will invoke
-        blocking operations, e.g. database operations. To avoid
-        blocking eventloop this method offloads sync resolvers
-        to the thread pool wrapping it into sync_to_async.
+        This middleware issues a warning if resolver execution time
+        exceeds a limit.
 
         Since this middleware always comes first in the list of
         middlewares, it always receives resolver as the first
@@ -949,43 +933,18 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Unwrap resolver from functools.partial or other wrappers.
         real_resolver = self._on_gql_start__unwrap(next_middleware)
-        module = getattr(real_resolver, "__module__", "")
-
-        # Do not offload async resolvers and resolvers from
-        # GraphQL-core/Graphene since they are not blocking.
-        if (
-            not module.startswith("graphql.type.")
-            and not module.startswith("graphene.types.")
-            and not asyncio.iscoroutinefunction(real_resolver)
-        ):
-            # Offload synchronous resolvers.
-            @functools.wraps(next_middleware)
-            def wrapped_next_middleware(root, info, *args, **kwds):
-                result = next_middleware(root, info, *args, **kwds)
-                # Manually evaluate QuerySet, otherwise we will
-                # eventually receive SynchronousOnlyOperation error:
-                # "You cannot call this from an async context - use a
-                # thread or sync_to_async.". This happens when
-                # unevaluated QuerySet moves out of its sync context.
-                if isinstance(result, django.db.models.query.QuerySet):
-                    result = list(result)
-                return result
-
-            next_resolver = self.sync_to_async(wrapped_next_middleware)
-        else:
-            next_resolver = next_middleware
 
         # Start measuring resolver execution time.
-        if self.warn_resolver_timeout:
+        if self.warn_resolver_timeout is not None:
             start_time = time.perf_counter()
 
         # Execute resolver.
-        result = next_resolver(root, info, *args, **kwds)
+        result = next_middleware(root, info, *args, **kwds)
         if inspect.isawaitable(result):
             result = await result
 
         # Warn about long resolver execution if the time limit exceeds.
-        if self.warn_resolver_timeout:
+        if self.warn_resolver_timeout is not None:
             duration = time.perf_counter() - start_time
             if duration >= self.warn_resolver_timeout:
                 pretty_name = f"{real_resolver.__qualname__}"
@@ -1017,7 +976,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         return fn
 
     async def _on_gql_start__initialize_subscription_stream(
-        self, op_id: int, root: Any, info: graphql.GraphQLResolveInfo, *args, **kwds
+        self,
+        operation_id: int,
+        operation_name: str,
+        root: Any,
+        info: graphql.GraphQLResolveInfo,
+        *args,
+        **kwds,
     ):
         """Create asynchronous generator with subscription events.
 
@@ -1033,7 +998,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # `return_type` class.
         return_type = info.return_type
         while graphql.is_wrapping_type(return_type):
-            return_type = return_type.of_type
+            return_type = return_type.of_type  # type: ignore[union-attr]
         subscription_class = return_type.graphene_type  # type: ignore[union-attr]
 
         # It is ok to access private fields of `Subscription`
@@ -1095,11 +1060,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             if unsubscribed is None:
                 return None
+            result = unsubscribed(None, info, *args, **kwds)
             # Properly handle `async def unsubscribed`.
-            if asyncio.iscoroutinefunction(unsubscribed):
-                await unsubscribed(None, info, *args, **kwds)
-            else:
-                await self.sync_to_async(unsubscribed)(None, info, *args, **kwds)
+            if inspect.isawaitable(result):
+                result = await result
 
         def enqueue_notification(payload):
             """Put notification to the queue.
@@ -1124,10 +1088,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         # safe to drop intermediate notifications.
                         if notification_queue.maxsize != 1:
                             LOG.warning(
-                                "Subscription notification dropped!"
-                                " Operation %s(%s).",
-                                info.context.graphql_operation_name,
-                                info.context.graphql_operation_id,
+                                "Subscription notification dropped! Operation %s(%s).",
+                                operation_name,
+                                operation_id,
                             )
                         notification_queue.get_nowait()
                         notification_queue.task_done()
@@ -1147,15 +1110,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         waitlist = []
         for group in groups:
-            self._sids_by_group.setdefault(group, []).append(op_id)
+            self._sids_by_group.setdefault(group, []).append(operation_id)
             waitlist.append(
                 asyncio.create_task(
                     self._channel_layer.group_add(group, self.channel_name)
                 )
             )
-        self._subscriptions[op_id] = self._SubInf(
+        self._subscriptions[operation_id] = self._SubInf(
             groups=groups,
-            sid=op_id,
+            sid=operation_id,
             unsubscribed_callback=unsubscribed_callback,
             enqueue_notification=enqueue_notification,
         )

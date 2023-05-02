@@ -89,6 +89,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admin",
+    "daphne",
     "channels",
 ]
 ALLOWED_HOSTS = ["*"]

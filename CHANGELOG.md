@@ -23,6 +23,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc3] - 2023-05-02
+
+- Call synchronous resolvers in the main eventloop.
+- Added example of middleware which offloads synchronous resolvers to 
+  the threadpool.
+- Fixed bug with GraphQL WrappingTypes like GraphQLNonNull causing
+exceptions when used as subscription field.
+- Fixed broken example.
+
 ## [1.0.0rc2] - 2023-04-28
 
 Broken support of previous Python version brought back.

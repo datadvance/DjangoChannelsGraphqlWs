@@ -85,11 +85,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     - Notification can be suppressed in the subscription resolver method
       `publish`. For example, this is useful to avoid sending
       self-notifications.
-- All GraphQL "resolvers" run either in an eventloop or in a threadpool.
-  So asynchronous "resolvers" able to execute blocking calls with
-  `sync_to_async`.  And synchronous "resolvers" never block the server
-  itself and may communicate with database or perform other blocking
-  tasks.
+- All GraphQL "resolvers" run in the main eventloop. Asynchronous
+  "resolvers" able to execute blocking calls with `asyncio.to_thread` or
+  `channels.db.database_sync_to_async` wrappers.
 - Resolvers (including subscription's `subscribe` & `publish`) can be
   represented both as synchronous or asynchronous (`async def`) methods.
 - Subscription notifications can be sent from both synchronous and
@@ -505,17 +503,18 @@ processing. For that define `middleware` setting of your
 `GraphqlWsConsumer` subclass, like this:
 
 ```python
-async def my_middleware(next_middleware, root, info, *args, **kwds):
-    """My custom GraphQL middleware."""
+async def threadpool_for_synch_resolvers(next_middleware, root, info, *args, **kwds):
+    """Offload synchronous resolvers to the threadpool."""
     # Invoke next middleware.
-    result = next_middleware(root, info, *args, **kwds)
-    if graphql.pyutils.is_awaitable(result):
-       result = await result
+    if asyncio.iscoroutinefunction(next_middleware):
+        result = await next_middleware(root, info, *args, **kwds)
+    else:
+        result = await asyncio.to_thread(next_middleware, root, info, *args, **kwds)
     return result
 
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     ...
-    middleware = [my_middleware]
+    middleware = [threadpool_for_synch_resolvers]
 ```
 
 It is recommended to write asynchronous middlewares. But synchronous
