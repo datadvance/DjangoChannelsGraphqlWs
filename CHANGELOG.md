@@ -25,11 +25,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## [1.0.0rc3] - 2023-05-02
 
-- Call synchronous resolvers in the main eventloop.
-- Added example of middleware which offloads synchronous resolvers to 
+- Invoke synchronous resolvers in the main thread with eventloop. So
+  there is no difference in this aspect with async resolvers. This
+  corresponds to the behavior of the
+  [`graphql-core`](https://github.com/graphql-python/graphql-core)
+  library.
+- Added example of middleware which offloads synchronous resolvers to
   the threadpool.
 - Fixed bug with GraphQL WrappingTypes like GraphQLNonNull causing
-exceptions when used as subscription field.
+  exceptions when used as subscription field.
 - Fixed broken example.
 
 ## [1.0.0rc2] - 2023-04-28

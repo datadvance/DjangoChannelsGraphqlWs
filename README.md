@@ -364,10 +364,10 @@ asynchronous resolvers in your code. It will work faster.
 ### Context and scope
 
 The context object (`info.context` in resolvers) is a `SimpleNamespace`
-instance useful to transfer extra data between GraphQL resolvers. The lifetime
-of `info.context` corresponds to the lifetime of GraphQL request, so it does
-not persist content between different queries/mutations/subscriptions. It also
-contains some useful extras:
+instance useful to transfer extra data between GraphQL resolvers. The
+lifetime of `info.context` corresponds to the lifetime of GraphQL
+request, so it does not persist content between different
+queries/mutations/subscriptions. It also contains some useful extras:
 - `graphql_operation_id`: The GraphQL operation id came from the client.
 - `graphql_operation_name`: The name of GraphQL operation.
 - `channels_scope`: [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope).
@@ -505,14 +505,12 @@ processing. For that define `middleware` setting of your
 ```python
 async def threadpool_for_sync_resolvers(next_middleware, root, info, *args, **kwds):
     """Offload synchronous resolvers to the threadpool.
-    
+
     This middleware should always be the last in the middlewares calls
     stack and the closest to the real resolver. If this middleware is
     not the last it will check the next middleware to call instead of
-    real resolver.
-
-    The first middleware in the middlewares list will be the closest to
-    the resolver.
+    real resolver. The first middleware in the middlewares list will be
+    the closest to the resolver.
     """
     # Invoke next middleware.
     if asyncio.iscoroutinefunction(next_middleware):
