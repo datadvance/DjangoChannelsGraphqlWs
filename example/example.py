@@ -28,6 +28,7 @@ from typing import Any, DefaultDict, Dict
 import asgiref
 import channels
 import channels.auth
+import channels.routing
 import django
 import django.contrib.admin
 import django.contrib.auth
@@ -81,8 +82,8 @@ class Query(graphene.ObjectType):
 
     def resolve_user(self, info):
         """Provide currently logged in user."""
-        if info.context.user.is_authenticated:
-            return info.context.user
+        if info.context.channels_scope["user"].is_authenticated:
+            return info.context.channels_scope["user"]
         return None
 
 
@@ -116,9 +117,9 @@ class Login(graphene.Mutation, name="LoginPayload"):  # type: ignore
         # the session stored in the scope. The `info.context` is
         # practically just a wrapper around Channel `self.scope`, but
         # the `login` method requires dict, so use `_asdict`.
-        asgiref.sync.async_to_sync(channels.auth.login)(info.context._asdict(), user)
+        asgiref.sync.async_to_sync(channels.auth.login)(info.context.channels_scope, user)
         # Save the session, `channels.auth.login` does not do this.
-        info.context.session.save()
+        info.context.channels_scope["session"].save()
 
         return Login(ok=True)
 
@@ -139,8 +140,8 @@ class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):  # type
 
         # Use the username from the connection scope if authorized.
         username = (
-            info.context.user.username
-            if info.context.user.is_authenticated
+            info.context.channels_scope["user"].username
+            if info.context.channels_scope["user"].is_authenticated
             else "Anonymous"
         )
 
@@ -197,8 +198,8 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
 
         # Avoid self-notifications.
         if (
-            info.context.user.is_authenticated
-            and new_msg_sender == info.context.user.username
+            info.context.channels_scope["user"].is_authenticated
+            and new_msg_sender == info.context.channels_scope["user"].username
         ):
             return OnNewChatMessage.SKIP
 
@@ -265,8 +266,9 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
         # Django user object (user model instance or `AnonymousUser`)
         # It is not necessary, but it helps to keep resolver code
         # simpler. Cause in both HTTP/WebSocket requests they can use
-        # `info.context.user`, but not a wrapper. For example objects of
-        # type Graphene Django type `DjangoObjectType` does not accept
+        # `info.context.channels_scope["user"]`, but not a wrapper. For
+        # example objects of type Graphene Django type
+        # `DjangoObjectType` does not accept
         # `channels.auth.UserLazyObject` instances.
         # https://github.com/datadvance/DjangoChannelsGraphqlWs/issues/23
         self.scope["user"] = await channels.auth.get_user(self.scope)

@@ -87,8 +87,9 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.sessions",
     "django.contrib.auth",
     "django.contrib.messages",
-    "django.contrib.staticfiles",
     "django.contrib.admin",
+    "daphne",
+    "django.contrib.staticfiles",
     "channels",
 ]
 ALLOWED_HOSTS = ["*"]
