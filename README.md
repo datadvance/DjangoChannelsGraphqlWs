@@ -336,29 +336,22 @@ the the Django's guide
 - Different requests from different WebSocket client are processed
   asynchronously.
 - By default different requests (WebSocket messages) from a single
-  client are processed concurrently in an event loop (async resolvers)
-  or worker threads (sync resolvers). It is possible to change the
-  maximum number of worker threads with the `ASGI_THREADS` environment
-  variable of the [asgiref](https://github.com/django/asgiref/) library.
-  So there is no guarantee that requests will be processed in the same
-  order the client sent these requests. Actually, with HTTP we have this
-  behavior for decades.
+  client are processed concurrently in an event loop. So there is no
+  guarantee that requests will be processed in the same order the client
+  sent these requests. Actually, with HTTP we have this behavior for
+  decades.
 - It is possible to serialize message processing by setting
   `strict_ordering` to `True`. But note, this disables parallel requests
   execution - in other words, the server will not start processing a new
   request from the client until it finishes the current one. See
-  comments in the class `GraphqlWsConsumer`.
+  comments in the class `GraphqlWsConsumer`. This mode is here primarily
+  for testing.
 - All subscription notifications are delivered in the order they were
   issued.
 - Each request (WebSocket message) processing starts in the main thread.
   The request's parsing and validation is offloaded into the thread
   pool. Resolver calls made from the main thread. And for each resolver
-it checks whether the resolver is a coroutine function. If it is a
-coroutine function, then the resolver is launched from the main thread.
-If it is not a coroutine function (a synchronous function), then the
-resolver is launched from the thread pool. As you know an asyncio
-eventloop call is faster than a thread call. So you should prefer
-asynchronous resolvers in your code. It will work faster.
+  it checks whether the resolver is awaitable and `await` it if so.
 
 
 ### Context and scope
@@ -370,7 +363,10 @@ request, so it does not persist content between different
 queries/mutations/subscriptions. It also contains some useful extras:
 - `graphql_operation_id`: The GraphQL operation id came from the client.
 - `graphql_operation_name`: The name of GraphQL operation.
-- `channels_scope`: [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope).
+- `channels_scope`:
+  [Channels scope](https://channels.readthedocs.io/en/latest/topics/consumers.html#scope).
+  Contrary to the `info.context`, the Channels scope corresponds to the
+  WebSocket connection not to the GraphQL operation/request.
 - `channel_name`: WebSocket channel name.
 
 
@@ -389,7 +385,7 @@ application = channels.routing.ProtocolTypeRouter({
 })
 ```
 
-This gives you a Django user `info.context.channels_scope.user` in
+This gives you a Django user `info.context.channels_scope["user"]` in
 all the resolvers. To authenticate user you can create a `Login`
 mutation like the following:
 
