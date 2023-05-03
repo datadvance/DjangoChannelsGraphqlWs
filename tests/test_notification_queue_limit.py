@@ -100,7 +100,7 @@ async def test_notification_queue_limit(gql):
     print("Trigger notifications.")
 
     await comm.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -109,14 +109,14 @@ async def test_notification_queue_limit(gql):
     )
 
     mut_op_id = await comm.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { send_messages { is_ok } }""",
             "variables": {},
             "operationName": "op_name",
         },
     )
-    await comm.receive(assert_id=mut_op_id, assert_type="data")
+    await comm.receive(assert_id=mut_op_id, assert_type="next")
     await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
     # Here we store ids of processed notifications.

@@ -52,7 +52,7 @@ async def test_concurrent_queries(gql):
     # Since tests and server are launched using same eventloop we should
     # not await for response here.
     long_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "mutation op_name { long_op { is_ok } }",
             "variables": {},
@@ -65,21 +65,21 @@ async def test_concurrent_queries(gql):
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
         fast_op_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": "query op_name { fast_op_sync }",
                 "variables": {},
                 "operationName": "op_name",
             },
         )
-        resp = await client.receive(assert_id=fast_op_id, assert_type="data")
+        resp = await client.receive(assert_id=fast_op_id, assert_type="next")
         assert resp["data"] == {"fast_op_sync": True}
         await client.receive(assert_id=fast_op_id, assert_type="complete")
 
     print("Trigger the wakeup event to let long operation finish.")
     WAKEUP.set()
 
-    resp = await client.receive(assert_id=long_op_id, assert_type="data")
+    resp = await client.receive(assert_id=long_op_id, assert_type="next")
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
     await client.receive(assert_id=long_op_id, assert_type="complete")
@@ -121,7 +121,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
         send_waitlist += [
             client.send(
                 msg_id=op_id,
-                msg_type="start",
+                msg_type="subscribe",
                 payload={
                     "query": f"query op_name {{ {query} }}",
                     "variables": {},
@@ -130,7 +130,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
             )
         ]
         # Expect two messages for each one we have sent.
-        expected_responses.add((op_id, "data"))
+        expected_responses.add((op_id, "next"))
         expected_responses.add((op_id, "complete"))
         receive_waitlist += [client.transport.receive(), client.transport.receive()]
 
@@ -145,7 +145,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
 
     for response in (r.result() for r in responses):
         expected_responses.remove((response["id"], response["type"]))
-        if response["type"] == "data":
+        if response["type"] == "next":
             assert "errors" not in response["payload"]
     assert not expected_responses, "Not all expected responses received!"
 
@@ -163,7 +163,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
 
     0. Subscribe to the subscription twice.
     1. Subscribe to the same subscription from another communicator.
-    2. Send STOP message for the first subscription to unsubscribe.
+    2. Send COMPLETE message for the first subscription to unsubscribe.
     3. Execute some mutation.
     4. Check subscription notifications: there are notifications from
        the second and the third subscription.
@@ -195,7 +195,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
 
     print("Subscribe to GraphQL subscription with the same subscription group.")
     sub_id_1 = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 f"""
@@ -207,7 +207,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     sub_id_2 = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 f"""
@@ -219,7 +219,7 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     sub_id_new = await client_new.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 f"""
@@ -232,13 +232,13 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
     )
 
     print("Stop the first subscription by id.")
-    await client.send(msg_id=sub_id_1, msg_type="stop")
+    await client.send(msg_id=sub_id_1, msg_type="complete")
     await client.receive(assert_id=sub_id_1, assert_type="complete")
 
     print("Trigger the subscription by mutation to receive notifications.")
     message = "HELLO WORLD"
     msg_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 f"""
@@ -254,14 +254,14 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         },
     )
     # Mutation response.
-    await client.receive(assert_id=msg_id, assert_type="data")
+    await client.receive(assert_id=msg_id, assert_type="next")
     await client.receive(assert_id=msg_id, assert_type="complete")
     # Check responses from subscriptions.
-    res = await client.receive(assert_id=sub_id_2, assert_type="data")
+    res = await client.receive(assert_id=sub_id_2, assert_type="next")
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for second subscriber!"
-    res = await client_new.receive(assert_id=sub_id_new, assert_type="data")
+    res = await client_new.receive(assert_id=sub_id_new, assert_type="next")
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for third subscriber!"
@@ -321,10 +321,10 @@ async def test_subscribe_and_many_unsubscribes(
     flag = asyncio.Event()
 
     async def subscribe_unsubscribe(client, user_id, op_id: str):
-        """Subscribe and spam with 'stop' until stop-flag is set."""
+        """Subscribe and spam with 'complete' until stop-flag is set."""
 
         sub_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": textwrap.dedent(
                     f"""
@@ -340,9 +340,9 @@ async def test_subscribe_and_many_unsubscribes(
         )
         assert sub_id == op_id
 
-        # Multiple stop messages.
+        # Multiple complete messages.
         while True:
-            await client.send(msg_id=op_id, msg_type="stop")
+            await client.send(msg_id=op_id, msg_type="complete")
             await asyncio.sleep(0.01)
             if flag.is_set():
                 break
@@ -359,7 +359,7 @@ async def test_subscribe_and_many_unsubscribes(
             if resp["type"] == "complete":
                 op_ids.remove(op_id)
             else:
-                assert resp["type"] == "data" and resp["payload"]["data"] is None, (
+                assert resp["type"] == "next" and resp["payload"]["data"] is None, (
                     "This should be a successful subscription message, not '%s'",
                     resp,
                 )
@@ -415,7 +415,7 @@ async def test_subscribe_and_many_unsubscribes(
     print("Trigger the subscription by mutation.")
     message = "HELLO WORLD"
     msg_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 f"""
@@ -431,7 +431,7 @@ async def test_subscribe_and_many_unsubscribes(
         },
     )
     # Mutation response.
-    await client.receive(assert_id=msg_id, assert_type="data")
+    await client.receive(assert_id=msg_id, assert_type="next")
     await client.receive(assert_id=msg_id, assert_type="complete")
 
     # Check notifications: there are no notifications. We unsubscribed
@@ -456,14 +456,14 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     before the message about the successful unsubscribe.
 
     So test:
-    1) Send subscribe message and many unsubscribe 'stop' messages.
+    1) Send subscribe message and many unsubscribe 'complete' messages.
     2) Check the order of the confirmation message and the
     'complete' message.
     """
 
-    NUMBER_OF_STOP_MESSAGES = 42  # pylint: disable=invalid-name
+    NUMBER_OF_COMPLETE_MESSAGES = 42  # pylint: disable=invalid-name
     # Delay in seconds.
-    DELAY_BETWEEN_STOP_MESSAGES = 0.001  # pylint: disable=invalid-name
+    DELAY_BETWEEN_COMPLETE_MESSAGES = 0.001  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
@@ -486,10 +486,10 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     await client.connect_and_init()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'stop'."""
+        """Subscribe and spam with 'complete'."""
 
         sub_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": textwrap.dedent(
                     f"""
@@ -504,14 +504,14 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
         )
 
         # Spam with stop messages.
-        for _ in range(NUMBER_OF_STOP_MESSAGES):
-            await client.send(msg_id=sub_id, msg_type="stop")
-            await asyncio.sleep(DELAY_BETWEEN_STOP_MESSAGES)
+        for _ in range(NUMBER_OF_COMPLETE_MESSAGES):
+            await client.send(msg_id=sub_id, msg_type="complete")
+            await asyncio.sleep(DELAY_BETWEEN_COMPLETE_MESSAGES)
 
         resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
-            resp["type"] == "data" and resp["payload"]["data"] is None
+            resp["type"] == "next" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
         resp = await client.receive(raw_response=True)
@@ -564,9 +564,9 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
     # Count of spam messages per connection.
     NUMBER_OF_MUTATION_MESSAGES = 50  # pylint: disable=invalid-name
-    # When 40 spam messages are sent, we will send the 'stop'
+    # When 40 spam messages are sent, we will send the 'complete'
     # subscription message.
-    MUTATION_INDEX_TO_SEND_STOP = 40  # pylint: disable=invalid-name
+    MUTATION_INDEX_TO_SEND_COMPLETE = 40  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
     # The timeout after which we suppose that all messages are consumed.
@@ -605,7 +605,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
         """Subscribe and spam notifications from 2 different clients."""
 
         sub_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": textwrap.dedent(
                     f"""
@@ -639,15 +639,15 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
         # Spam with broadcast messages.
         for index in range(NUMBER_OF_MUTATION_MESSAGES):
-            if index == MUTATION_INDEX_TO_SEND_STOP:
-                await client.send(msg_id=sub_id, msg_type="stop")
+            if index == MUTATION_INDEX_TO_SEND_COMPLETE:
+                await client.send(msg_id=sub_id, msg_type="complete")
             await client_spamer.send(
-                msg_type="start",
+                msg_type="subscribe",
                 payload=spam_payload,
                 msg_id=f"mut_spammer_{iteration}_{index}_{uuid.uuid4().hex}",
             )
             await client.send(
-                msg_type="start",
+                msg_type="subscribe",
                 payload=spam_payload,
                 msg_id=f"mut_{iteration}_{index}_{uuid.uuid4().hex}",
             )
@@ -755,11 +755,11 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     pool = concurrent.futures.ThreadPoolExecutor()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'stop' by the sync 'unsubscribe'."""
+        """Subscribe and spam with 'complete' by the sync 'unsubscribe'."""
 
         # Just subscribe.
         sub_id = await client.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={
                 "query": textwrap.dedent(
                     f"""
@@ -791,7 +791,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
         resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
-            resp["type"] == "data" and resp["payload"]["data"] is None
+            resp["type"] == "next" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
         resp = await client.receive(raw_response=True)

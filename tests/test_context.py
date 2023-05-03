@@ -95,8 +95,8 @@ async def test_context_lifetime(gql):
         client = gql(query=Query, consumer_attrs={"strict_ordering": True})
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(msg_type="start", payload={"query": "{ ok }"})
-            await client.receive(assert_type="data")
+            await client.send(msg_type="subscribe", payload={"query": "{ ok }"})
+            await client.receive(assert_type="next")
             await client.receive(assert_type="complete")
         await client.finalize()
 
@@ -135,8 +135,8 @@ async def test_context_channels_scope_lifetime(gql):
         client = gql(query=Query, consumer_attrs={"strict_ordering": True})
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(msg_type="start", payload={"query": "{ ok }"})
-            await client.receive(assert_type="data")
+            await client.send(msg_type="subscribe", payload={"query": "{ ok }"})
+            await client.receive(assert_type="next")
             await client.receive(assert_type="complete")
         await client.finalize()
 

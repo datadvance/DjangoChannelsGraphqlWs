@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <!--
 # Copyright (C) DATADVANCE, 2010-2023
 #
@@ -21,48 +20,56 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -->
-<html>
-    <head>
-        <style>
-            html,
-            body {
-                height: 100%;
-                margin: 0;
-                overflow: hidden;
-                width: 100%;
-            }
-        </style>
-        <link
-            href="//cdn.jsdelivr.net/npm/graphiql@0.11.11/graphiql.css"
-            rel="stylesheet"
-        />
-        <script src="//cdn.jsdelivr.net/react/15.4.2/react.min.js"></script>
-        <script src="//cdn.jsdelivr.net/react/15.4.2/react-dom.min.js"></script>
-        <script src="//cdn.jsdelivr.net/npm/graphiql@0.11.11/graphiql.min.js"></script>
-        <script src="//cdn.jsdelivr.net/npm/graphql-transport-ws@0.8.3/browser/client.js"></script>
-    </head>
+<!DOCTYPE html>
+<html lang="en">
 
-    <body>
-        <script>
-            // Setup subscription client.
-            const GRAPHQL_ENDPOINT =
-                (location.protocol === "https" ? "wss" : "ws") +
-                "://" +
-                location.host +
-                "/graphql/"
-            let subClient = new window.SubscriptionsTransportWs.SubscriptionClient(
-                GRAPHQL_ENDPOINT,
-                {reconnect: true},
-            )
-            subFetcher = subClient.request.bind(subClient)
+<head>
+    <title>GraphiQL</title>
+    <style>
+        body {
+            height: 100%;
+            margin: 0;
+            width: 100%;
+            overflow: hidden;
+        }
 
-            // Render <GraphiQL /> into the body.
-            ReactDOM.render(
-                React.createElement(GraphiQL, {
-                    fetcher: subFetcher, //graphQLFetcher
+        #graphiql {
+            height: 100vh;
+        }
+
+    </style>
+
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/graphiql/graphiql.min.css" />
+</head>
+
+<body>
+    <div id="graphiql">Loading...</div>
+    <script src="https://unpkg.com/graphiql/graphiql.min.js" type="application/javascript"></script>
+    <script>
+        const GRAPHQL_WS_ENDPOINT =
+            (location.protocol === "https" ? "wss" : "ws") +
+            "://" +
+            location.host +
+            "/graphql-ws/";
+        const GRAPHQL_ENDPOINT =
+            location.protocol +
+            "//" +
+            location.host +
+            "/graphql/";
+
+        ReactDOM.render(
+            React.createElement(GraphiQL, {
+                fetcher: GraphiQL.createFetcher({
+                    url: GRAPHQL_ENDPOINT,
+                    subscriptionUrl: GRAPHQL_WS_ENDPOINT,
                 }),
-                document.body,
-            )
-        </script>
-    </body>
+                defaultEditorToolsVisibility: true,
+            }),
+            document.getElementById('graphiql'),
+        );
+    </script>
+</body>
+
 </html>

@@ -47,31 +47,31 @@ async def test_confirmation_enabled(gql):
     print("Subscribe & check there is a subscription confirmation message.")
 
     sub_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
         },
     )
 
-    resp = await client.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await client.receive(assert_id=sub_op_id, assert_type="next")
     assert resp == {"data": None}
 
     print("Trigger the subscription.")
 
     mut_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",
         },
     )
-    await client.receive(assert_id=mut_op_id, assert_type="data")
+    await client.receive(assert_id=mut_op_id, assert_type="next")
     await client.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await client.receive(assert_id=sub_op_id, assert_type="next")
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await client.assert_no_messages(
@@ -96,7 +96,7 @@ async def test_confirmation_disabled(gql):
     print("Subscribe & check there is no subscription confirmation message.")
 
     sub_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
@@ -108,18 +108,18 @@ async def test_confirmation_disabled(gql):
     print("Trigger the subscription.")
 
     mut_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",
         },
     )
-    await client.receive(assert_id=mut_op_id, assert_type="data")
+    await client.receive(assert_id=mut_op_id, assert_type="next")
     await client.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await client.receive(assert_id=sub_op_id, assert_type="next")
     assert resp == {"data": {"on_trigger": {"is_ok": True}}}
 
     await client.assert_no_messages(
@@ -154,7 +154,7 @@ async def test_custom_confirmation_message(gql):
     print("Subscribe & check there is a subscription confirmation message.")
 
     sub_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_trigger { is_ok } }",
             "operationName": "op_name",
@@ -162,7 +162,7 @@ async def test_custom_confirmation_message(gql):
     )
 
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
-        await client.receive(assert_id=sub_op_id, assert_type="data")
+        await client.receive(assert_id=sub_op_id, assert_type="next")
     expected_errors = [
         {
             "message": f"{type(expected_error).__name__}: {expected_error}",
@@ -178,18 +178,18 @@ async def test_custom_confirmation_message(gql):
     print("Trigger the subscription.")
 
     mut_op_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { trigger { is_ok } }""",
             "operationName": "op_name",
         },
     )
-    await client.receive(assert_id=mut_op_id, assert_type="data")
+    await client.receive(assert_id=mut_op_id, assert_type="next")
     await client.receive(assert_id=mut_op_id, assert_type="complete")
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await client.receive(assert_id=sub_op_id, assert_type="next")
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await client.assert_no_messages(

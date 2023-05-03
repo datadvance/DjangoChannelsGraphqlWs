@@ -131,7 +131,7 @@ class GraphqlWsClient:
         """
         while True:
             response = await self._transport.receive()
-            if self._is_keep_alive_response(response):
+            if self._is_ping_pong_response(response):
                 continue
             if wait_id is None or response["id"] == wait_id:
                 break
@@ -163,7 +163,7 @@ class GraphqlWsClient:
             Dictionary with the GraphQL response.
 
         """
-        msg_id = await self.start(query, variables=variables)
+        msg_id = await self.send_subscribe_msg(query, variables=variables)
         try:
             resp = await self.receive(wait_id=msg_id)
         finally:
@@ -185,13 +185,13 @@ class GraphqlWsClient:
             The message identifier.
 
         """
-        msg_id = await self.start(query, variables=variables)
+        msg_id = await self.send_subscribe_msg(query, variables=variables)
         if wait_confirmation:
             await self.receive(wait_id=msg_id)
         return msg_id
 
-    async def start(self, query, *, variables=None):
-        """Start GraphQL request. Responses must be checked explicitly.
+    async def send_subscribe_msg(self, query, *, variables=None):
+        """Send SUBSCRIBE GraphQL request. Responses must be checked explicitly.
 
         Args:
             query: A GraphQL string query. We `dedent` it, so you do not
@@ -203,7 +203,7 @@ class GraphqlWsClient:
 
         """
         return await self.send(
-            msg_type="start",
+            msg_type="subscribe",
             payload={"query": textwrap.dedent(query), "variables": variables or {}},
         )
 
@@ -261,9 +261,9 @@ class GraphqlWsClient:
         self._is_connected = False
 
     @staticmethod
-    def _is_keep_alive_response(response):
-        """Check if received GraphQL response is keep-alive message."""
-        return response.get("type") == "ka"
+    def _is_ping_pong_response(response):
+        """Check if received GraphQL response is ping-pong message."""
+        return response.get("type") == "ping" or response.get("type") == "pong"
 
 
 class GraphqlWsResponseError(Exception):

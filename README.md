@@ -261,22 +261,15 @@ You can start with the following GraphQL requests:
 # Check there are no messages.
 query read { history(chatroom: "kittens") { chatroom text sender }}
 
-# Send a message as Anonymous.
+# Send a message from your session.
 mutation send { sendChatMessage(chatroom: "kittens", text: "Hi all!"){ ok }}
 
-# Check there is a message from `Anonymous`.
+# Check there is a message from `sender` with your `sessionid` cookie value.
 query read { history(chatroom: "kittens") { text sender } }
 
-# Login as `user`.
-mutation send { login(username: "user", password: "pass") { ok } }
-
-# Send a message as a `user`.
-mutation send { sendChatMessage(chatroom: "kittens", text: "It is me!"){ ok }}
-
-# Check there is a message from both `Anonymous` and from `user`.
-query read { history(chatroom: "kittens") { text sender } }
-
-# Subscribe, do this from a separate browser tab, it waits for events.
+# Open another browser or incognito window in the same browser
+# (the main idea is that each window(tab) has a unique `sessionid` cookie.),
+# subscribe from there, it waits for events.
 subscription s { onNewChatMessage(chatroom: "kittens") { text sender }}
 
 # Send something again to check subscription triggers.
@@ -310,10 +303,10 @@ recommended to have a look the documentation of these great projects:
 - [Graphene](http://graphene-python.org/)
 
 The implemented WebSocket-based protocol was taken from the library
-[subscription-transport-ws](https://github.com/apollographql/subscriptions-transport-ws)
+[graphql-ws](https://github.com/enisdenjo/graphql-ws)
 which is used by the [Apollo GraphQL](https://github.com/apollographql).
 Check the
-[protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)
+[protocol description](https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md)
 for details.
 
 
@@ -474,14 +467,10 @@ The original Apollo's protocol does not allow client to know when a
 subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
 when this leads to serious issues.
-[Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
-in the
-[`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
-tracker.
 
 To solve this problem, there is the `GraphqlWsConsumer` setting
 `confirm_subscriptions` which when set to `True` will make the consumer
-issue an additional `data` message which confirms the subscription
+issue an additional `next` message which confirms the subscription
 activation. Please note, you have to modify the client's code to make it
 consume this message, otherwise it will be mistakenly considered as the
 first subscription notification.
@@ -632,8 +621,8 @@ the `Subscription`.
 To better dive in it is useful to understand in general terms how
 regular request are handled. When server receives JSON from the client,
 the `GraphqlWsConsumer.receive_json` method is called by Channels
-routines. Then the request passes to the `_on_gql_start` method which
-handles GraphQL message "START". Most magic happens there.
+routines. Then the request passes to the `_on_gql_subscribe` method which
+handles GraphQL message "SUBSCRIBE". Most magic happens there.
 
 
 ### Running tests

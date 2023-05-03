@@ -130,7 +130,7 @@ async def test_publish_skip(gql):
     print("Subscribe to receive a new message notifications.")
 
     await comm1.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -140,7 +140,7 @@ async def test_publish_skip(gql):
     await comm1.assert_no_messages("Subscribe responded with a message!")
 
     sub_op_id = await comm2.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -152,19 +152,19 @@ async def test_publish_skip(gql):
     print("Send a new message to check we have not received notification about it.")
 
     mut_op_id = await comm1.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": """mutation op_name { send_message(message: "Hi!") { is_ok } }""",
             "variables": {},
             "operationName": "op_name",
         },
     )
-    await comm1.receive(assert_id=mut_op_id, assert_type="data")
+    await comm1.receive(assert_id=mut_op_id, assert_type="next")
     await comm1.receive(assert_id=mut_op_id, assert_type="complete")
 
     await comm1.assert_no_messages("Self-notification happened!")
 
-    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
+    resp = await comm2.receive(assert_id=sub_op_id, assert_type="next")
     assert resp["data"]["on_new_message"]["message"] == "Hi!"
 
     await comm1.assert_no_messages(

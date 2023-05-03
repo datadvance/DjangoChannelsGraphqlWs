@@ -63,7 +63,7 @@ async def test_broadcast(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await client_recipient.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -82,7 +82,7 @@ async def test_broadcast(gql):
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
     msg_id = await client_sender.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -99,19 +99,19 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client_sender.receive(assert_id=msg_id, assert_type="data")
+    resp = await client_sender.receive(assert_id=msg_id, assert_type="next")
     assert resp["data"] == {"send_message": {"success": True}}
     await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
-    resp = await client_recipient.receive(assert_id=sub_id, assert_type="data")
+    resp = await client_recipient.receive(assert_id=sub_id, assert_type="next")
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
 
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
     msg_id = await client_sender.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -128,13 +128,13 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client_sender.receive(assert_id=msg_id, assert_type="data")
+    resp = await client_sender.receive(assert_id=msg_id, assert_type="next")
     assert resp["data"] == {"send_timestamps": {"success": True}}
     await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     timestamps = []
     for _ in range(count):
-        resp = await client_recipient.receive(assert_id=sub_id, assert_type="data")
+        resp = await client_recipient.receive(assert_id=sub_id, assert_type="next")
         data = resp["data"]["on_message_sent"]
         timestamps.append(data["message"])
     assert timestamps == sorted(
@@ -173,7 +173,7 @@ async def test_subscribe_unsubscribe(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await client.send(
-        msg_type="start",
+        msg_type="subscribe",
         payload={
             "query": textwrap.dedent(
                 """
@@ -186,7 +186,7 @@ async def test_subscribe_unsubscribe(gql):
             "operationName": "on_message_sent",
         },
     )
-    await client.send(msg_id=sub_id, msg_type="stop")
+    await client.send(msg_id=sub_id, msg_type="complete")
     # If server was not able to handle unsubscribe command, then test
     # will hang here.
     await client.receive(assert_type="complete")
