@@ -119,10 +119,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # confirmation is enabled.
     subscription_confirmation_message: Dict[str, Any] = {"data": None, "errors": None}
 
-    # Issue a warning to the log when operation/resolver takes longer
-    # than specified number in seconds. None disables the warning.
+    # Issue a warning to the log when operation takes longer than
+    # specified number in seconds. None disables the warning.
     warn_operation_timeout: Optional[float] = 1
-    warn_resolver_timeout: Optional[float] = 1
 
     # The size of the subscription notification queue. If there are more
     # notifications (for a single subscription) than the given number,
@@ -130,7 +129,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     subscription_notification_queue_limit: int = 1024
 
     # GraphQL middleware.
-    # List of functions (callables) like the following:
+    # Instance of `graphql.MiddlewareManager` or the list of functions
+    # (callables) like the following:
     # ```python
     # async def my_middleware(next_middleware, root, info, *args, **kwds):
     #     result = next_middleware(root, info, *args, **kwds)
@@ -145,7 +145,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # - https://graphql-core-3.readthedocs.io/en/latest/diffs.html#custom-middleware
     # Docs about async middlewares are still missing - read the
     # GraphQL-core sources to know more.
-    middleware: Sequence = []
+    middleware: Optional[graphql.Middleware] = None
 
     # Subscription implementation shall return this to tell consumer
     # to suppress subscription notification.
@@ -277,6 +277,15 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._operation_locks: weakref.WeakValueDictionary = (
             weakref.WeakValueDictionary()
         )
+
+        # MiddlewareManager maintains internal cache for resolvers
+        # wrapped with middlewares. Using the same manager for all
+        # operations improves performance.
+        self._middleware = None
+        if self.middleware:
+            self._middleware = self.middleware
+            if not isinstance(self._middleware, graphql.MiddlewareManager):
+                self._middleware = graphql.MiddlewareManager(*self._middleware)
 
         super().__init__(*args, **kwargs)
 
@@ -595,27 +604,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             assert doc_ast is not None
             assert op_ast is not None
 
-            async def unbound_root_middleware(*args, **kwds):
-                """Unbound function for root middleware.
-
-                `graphql.MiddlewareManager` accepts only unbound
-                functions as middleware.
-                """
-                return await self._on_gql_start__root_middleware(
-                    op_id, op_name, *args, **kwds
-                )
-
-            # NOTE: Middlewares order is important, root middleware
-            # should always be the farest from the real resolver (last
-            # in the middleware list). Because we want to calculate
-            # resolver execution time with middlewares included.
-            middlewares = list(self.middleware)
-            if self.warn_resolver_timeout is not None:
-                middlewares.append(unbound_root_middleware)
-            middleware_manager: Optional[graphql.MiddlewareManager] = None
-            if middlewares:
-                middleware_manager = graphql.MiddlewareManager(*middlewares)
-
             # If the operation is subscription.
             if op_ast.operation == graphql.language.ast.OperationType.SUBSCRIPTION:
                 LOG.debug(
@@ -637,7 +625,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         op_id,
                         op_name,
                     ),
-                    middleware=middleware_manager,
+                    middleware=self._middleware,
                     execution_context_class=self._SubscriptionExecutionContext,
                 )
 
@@ -715,6 +703,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # equals to `__schema`. This is a more robust way. But
                 # it will eat up more CPU pre each query. For now lets
                 # check only a query name.
+                middleware_manager = self._middleware
                 if op_name == "IntrospectionQuery":
                     # No need to call middlewares for the
                     # IntrospectionQuery. There no real resolvers. Only
@@ -900,82 +889,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         # Map every source value to a ExecutionResult value.
         return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)
-
-    async def _on_gql_start__root_middleware(
-        self,
-        operation_id: int,
-        operation_name: str,
-        next_middleware,
-        root,
-        info: graphql.GraphQLResolveInfo,
-        *args,
-        **kwds,
-    ):
-        """Root middleware injected right before resolver invocation.
-
-        This middleware issues a warning if resolver execution time
-        exceeds a limit.
-
-        Since this middleware always comes first in the list of
-        middlewares, it always receives resolver as the first
-        argument instead of another middleware.
-
-        This is a part of START message processing routine so the name
-        prefixed with `_on_gql_start__` to make this explicit.
-
-        Args:
-            resolver: Resolver to "wrap" into this middleware
-            root: Anything. Eventually passed to the resolver.
-            info: Passed to the resolver.
-
-        Returns:
-            Any value: result returned by the resolver.
-            AsyncGenerator: when subscription starts.
-        """
-
-        # Unwrap resolver from functools.partial or other wrappers.
-        real_resolver = self._on_gql_start__unwrap(next_middleware)
-
-        # Start measuring resolver execution time.
-        if self.warn_resolver_timeout is not None:
-            start_time = time.perf_counter()
-
-        # Execute resolver.
-        result = next_middleware(root, info, *args, **kwds)
-        if inspect.isawaitable(result):
-            result = await result
-
-        # Warn about long resolver execution if the time limit exceeds.
-        if self.warn_resolver_timeout is not None:
-            duration = time.perf_counter() - start_time
-            if duration >= self.warn_resolver_timeout:
-                pretty_name = f"{real_resolver.__qualname__}"
-                if hasattr(real_resolver, "__self__"):
-                    pretty_name = f"{real_resolver.__self__.__qualname__}.{pretty_name}"
-                LOG.warning(
-                    "Resolver %s took %.3f seconds (>%.3f)!"
-                    " Operation %s(%s), path: %s.",
-                    pretty_name,
-                    duration,
-                    self.warn_resolver_timeout,
-                    operation_name,
-                    operation_id,
-                    info.path,
-                )
-
-        return result
-
-    def _on_gql_start__unwrap(self, fn: Callable) -> Callable:
-        """Auxiliary method which unwraps given function.
-
-        This is a part of START message processing routine so the name
-        prefixed with `_on_gql_start__` to make this explicit.
-        """
-        if isinstance(fn, functools.partial):
-            fn = self._on_gql_start__unwrap(fn.func)
-        elif hasattr(fn, "__wrapped__"):
-            fn = self._on_gql_start__unwrap(fn.__wrapped__)
-        return fn
 
     async def _on_gql_start__initialize_subscription_stream(
         self,

@@ -23,6 +23,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc4] - 2023-05-03
+
+- `GraphqlWsConsumer.warn_resolver_timeout` removed.
+- `GraphqlWsConsumer.middleware` accepts an instance of
+  `graphql.MiddlewareManager` or the list of functions. Same as the
+  argument `middleware` of `graphql.execute` method.
+- Fixed broken example.
+
 ## [1.0.0rc3] - 2023-05-02
 
 - Invoke synchronous resolvers in the main thread with eventloop. So

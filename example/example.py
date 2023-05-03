@@ -25,9 +25,9 @@ import pathlib
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict
 
-import asgiref
 import channels
 import channels.auth
+import channels.db
 import channels.routing
 import django
 import django.contrib.admin
@@ -108,11 +108,13 @@ class Login(graphene.Mutation, name="LoginPayload"):  # type: ignore
         username = graphene.String(required=True)
         password = graphene.String(required=True)
 
-    def mutate(self, info, username, password):
+    async def mutate(self, info, username, password):
         """Login request."""
 
         # Ask Django to authenticate user.
-        user = django.contrib.auth.authenticate(username=username, password=password)
+        user = await channels.db.database_sync_to_async(
+            django.contrib.auth.authenticate
+        )(username=username, password=password)
         if user is None:
             return Login(ok=False)
 
@@ -120,11 +122,10 @@ class Login(graphene.Mutation, name="LoginPayload"):  # type: ignore
         # the session stored in the scope. The
         # `info.context.channels_scope` is a reference to Channel
         # `self.scope` member.
-        asgiref.sync.async_to_sync(channels.auth.login)(
-            info.context.channels_scope, user
-        )
+        await channels.auth.login(info.context.channels_scope, user)
         # Save the session, `channels.auth.login` does not do this.
-        info.context.channels_scope["session"].save()
+        session = info.context.channels_scope["session"]
+        await channels.db.database_sync_to_async(session.save)()
 
         return Login(ok=True)
 
@@ -140,7 +141,7 @@ class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):  # type
         chatroom = graphene.String()
         text = graphene.String()
 
-    def mutate(self, info, chatroom, text):
+    async def mutate(self, info, chatroom, text):
         """Mutation "resolver" - store and broadcast a message."""
 
         # Use the username from the connection scope if authorized.
@@ -151,7 +152,9 @@ class SendChatMessage(graphene.Mutation, name="SendChatMessagePayload"):  # type
         chats[chatroom].append({"chatroom": chatroom, "text": text, "sender": username})
 
         # Notify subscribers.
-        OnNewChatMessage.new_chat_message(chatroom=chatroom, text=text, sender=username)
+        await OnNewChatMessage.new_chat_message(
+            chatroom=chatroom, text=text, sender=username
+        )
 
         return SendChatMessage(ok=True)
 
@@ -208,7 +211,7 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
         )
 
     @classmethod
-    def new_chat_message(cls, chatroom, text, sender):
+    async def new_chat_message(cls, chatroom, text, sender):
         """Auxiliary function to send subscription notifications.
 
         It is generally a good idea to encapsulate broadcast invocation
@@ -216,7 +219,7 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
         That allows to consider a structure of the `payload` as an
         implementation details.
         """
-        cls.broadcast_sync(
+        await cls.broadcast(
             group=chatroom,
             payload={"chatroom": chatroom, "text": text, "sender": sender},
         )
