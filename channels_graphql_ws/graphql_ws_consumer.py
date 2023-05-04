@@ -46,13 +46,13 @@ import threading
 import time
 import traceback
 import weakref
-from collections.abc import Sequence
 from typing import (
     Any,
     AsyncIterator,
     Awaitable,
     Callable,
     Dict,
+    Iterable,
     List,
     Optional,
     Type,
@@ -765,7 +765,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     ) -> tuple[
         Optional[graphql.DocumentNode],
         Optional[graphql.OperationDefinitionNode],
-        Optional[Sequence[graphql.GraphQLError]],
+        Optional[Iterable[graphql.GraphQLError]],
     ]:
         """Parse and validate GraphQL query.
 
@@ -793,7 +793,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         doc_ast: Optional[graphql.DocumentNode] = res[0]
         op_ast: Optional[graphql.OperationDefinitionNode] = res[1]
-        errors: Optional[Sequence[graphql.GraphQLError]] = res[2]
+        errors: Optional[Iterable[graphql.GraphQLError]] = res[2]
 
         return (doc_ast, op_ast, errors)
 
@@ -803,7 +803,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     ) -> tuple[
         Optional[graphql.DocumentNode],
         Optional[graphql.OperationDefinitionNode],
-        Optional[Sequence[graphql.GraphQLError]],
+        Optional[Iterable[graphql.GraphQLError]],
     ]:
         """Parse and validate GraphQL query. Cached sync implementation.
 
@@ -1124,7 +1124,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         )
 
     async def _send_gql_data(
-        self, op_id, data: Optional[dict], errors: Optional[Sequence[Exception]]
+        self, op_id, data: Optional[dict], errors: Optional[Iterable[Exception]]
     ):
         """Send GraphQL `data` message to the client.
 
