@@ -55,6 +55,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Tuple,
     Type,
     Union,
     cast,
@@ -762,7 +763,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def _on_gql_start__parse_query(
         self, op_name: str, query: str
-    ) -> tuple[
+    ) -> Tuple[
         Optional[graphql.DocumentNode],
         Optional[graphql.OperationDefinitionNode],
         Optional[Iterable[graphql.GraphQLError]],
@@ -800,7 +801,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     @functools.lru_cache(maxsize=128)
     def _on_gql_start__parse_query_sync_cached(
         self, op_name: str, query: str
-    ) -> tuple[
+    ) -> Tuple[
         Optional[graphql.DocumentNode],
         Optional[graphql.OperationDefinitionNode],
         Optional[Iterable[graphql.GraphQLError]],
