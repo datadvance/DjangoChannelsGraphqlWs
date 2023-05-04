@@ -954,7 +954,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # The subscription notification queue. Required to preserve the
         # order of notifications within a single subscription.
         queue_size = subscription_class.notification_queue_limit
-        if not queue_size or queue_size < 0:
+        if queue_size is None or queue_size <= 0:
             # Take default limit from the Consumer class.
             queue_size = self.subscription_notification_queue_limit
         # The subscription notification queue.

@@ -30,7 +30,7 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_notification_queue_limit(gql):
+async def test_subscription_notification_queue_limit(gql):
     """Test it is possible to skip intermediate notifications.
 
     Here we start subscription which send 10 messages and server took
