@@ -30,7 +30,7 @@ import itertools
 import textwrap
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Set
 
 import graphene
 import pytest
@@ -378,7 +378,7 @@ async def test_subscribe_and_many_unsubscribes(
     wait_timeout = 60
     # Generate operations ids for subscriptions. In the future, we will
     # unsubscribe from all these subscriptions.
-    op_ids: set[str] = set()
+    op_ids: Set[str] = set()
     # List to collect tasks. We immediately add a handler to receive
     # successful messages.
     awaitables = [receiver(op_ids)]
