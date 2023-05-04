@@ -25,7 +25,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## [1.0.0rc4] - 2023-05-03
 
-- `GraphqlWsConsumer.warn_resolver_timeout` removed.
+- `GraphqlWsConsumer.warn_resolver_timeout` removed to avoid mess with
+  user specified middlewares. This functionality can easily be
+  implemented on the library user level by creating a designated
+  middleware.
 - `GraphqlWsConsumer.middleware` accepts an instance of
   `graphql.MiddlewareManager` or the list of functions. Same as the
   argument `middleware` of `graphql.execute` method.
