@@ -21,6 +21,8 @@
 
 """Test `info.context` and `DictAsObject`."""
 
+from typing import List
+
 import graphene
 import pytest
 
@@ -69,7 +71,7 @@ async def test_context_lifetime(gql):
     """Check `info.context` does hold data between requests."""
 
     # Store ids of `info.context` to check them later.
-    run_log: list[bool] = []
+    run_log: List[bool] = []
 
     print("Setup GraphQL backend and initialize GraphQL client.")
 
@@ -107,7 +109,7 @@ async def test_context_channels_scope_lifetime(gql):
     """Check `info.context.channels_scope` holds data in connection."""
 
     # Store ids of `info.context.channels_scope` to check them later.
-    run_log: list[bool] = []
+    run_log: List[bool] = []
 
     print("Setup GraphQL backend and initialize GraphQL client.")
 

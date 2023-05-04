@@ -53,6 +53,7 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    List,
     Optional,
     Type,
     Union,
@@ -189,7 +190,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # Subscription identifier - protocol operation identifier.
         sid: int
         # Subscription groups the subscription belongs to.
-        groups: list[str]
+        groups: List[str]
         # A function which triggets subscription.
         enqueue_notification: Callable[[Any], None]
         # The callback to invoke when client unsubscribes.
@@ -211,7 +212,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         @staticmethod
         def build_response(
-            data: Optional[Dict[str, Any]], errors: list[graphql.GraphQLError]
+            data: Optional[Dict[str, Any]], errors: List[graphql.GraphQLError]
         ) -> graphql.ExecutionResult:
             """Remove skipped subscription events from results.
 
@@ -230,7 +231,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         def complete_value(
             self,
             return_type: graphql.GraphQLOutputType,
-            field_nodes: list[graphql.FieldNode],
+            field_nodes: List[graphql.FieldNode],
             info: graphql.GraphQLResolveInfo,
             path: graphql.pyutils.Path,
             result: Any,
@@ -330,7 +331,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             LOG.warning("WebSocket connection closed with code: %s!", code)
 
         # The list of awaitables to simultaneously wait at the end.
-        waitlist: list[asyncio.Task] = []
+        waitlist: List[asyncio.Task] = []
 
         # Unsubscribe from the Channels groups.
         waitlist += [
@@ -817,7 +818,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             return None, None, [ex]
 
         # Validation.
-        validation_errors: list[graphql.GraphQLError] = graphql.validate(
+        validation_errors: List[graphql.GraphQLError] = graphql.validate(
             self.schema.graphql_schema, doc_ast
         )
         if validation_errors:
@@ -1071,7 +1072,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         if op_id not in self._subscriptions:
             return
 
-        waitlist: list[asyncio.Task] = []
+        waitlist: List[asyncio.Task] = []
 
         # Remove the subscription from the registry.
         subinf = self._subscriptions.pop(op_id)
