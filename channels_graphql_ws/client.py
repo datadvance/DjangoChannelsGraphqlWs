@@ -147,9 +147,10 @@ class GraphqlWsClient:
         payload = response.get("payload", None)
         if payload is not None and "errors" in payload:
             raise GraphqlWsResponseError(response)
-        if not raw_response:
-            return payload
-        return response
+
+        if raw_response:
+            return response
+        return payload
 
     async def execute(self, query, variables=None):
         """Execute query or mutation request and wait for the reply.
