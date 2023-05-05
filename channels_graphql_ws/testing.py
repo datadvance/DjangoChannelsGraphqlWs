@@ -73,6 +73,9 @@ class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
     Client is implemented based on the Channels `WebsocketCommunicator`.
     """
 
+    # Slightly reduce timeout in testing.
+    TIMEOUT: float = 30
+
     def __init__(self, application, path, communicator_kwds=None):
         """Constructor."""
         self._comm = channels.testing.WebsocketCommunicator(
