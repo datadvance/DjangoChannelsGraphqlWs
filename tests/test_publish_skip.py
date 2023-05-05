@@ -37,9 +37,6 @@ async def test_publish_skip(gql):
     Here we send the message to the fake chat server and make sure that
     the sender does not receive the notification about the message while
     another client receives it.
-
-    Technically we test that returning `SKIP` from the `publish` method
-    suppresses the notification.
     """
 
     print("Prepare the test setup: GraphQL backend classes.")
@@ -94,7 +91,7 @@ async def test_publish_skip(gql):
             """Notify all clients except the author of the message."""
             sessionid = sessionid_from_headers(info.context.channels_scope["headers"])
             if payload["author_sessionid"] == sessionid:
-                return OnNewMessage.SKIP
+                return None
 
             return OnNewMessage(message=payload["message"])
 

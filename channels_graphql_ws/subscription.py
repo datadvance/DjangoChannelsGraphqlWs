@@ -67,7 +67,7 @@ class Subscription(graphene.ObjectType):
             notification with the error. Technically the WebSocket
             message will contain extra field "extensions.code" holding
             the classname of the exception raised. To suppress the
-            notification return `Subscription.SKIP`.
+            notification return `None`.
 
             Can be implemented as both asynchronous (`async def`) or
             synchronous (`def`) function. Asynchronous implementation
@@ -86,9 +86,7 @@ class Subscription(graphene.ObjectType):
                     information.
                 args, kwds: Values of the GraphQL subscription inputs.
             Returns:
-                The same that any Graphene resolver returns. Returning a
-                special object `Subscription.SKIP` indicates that this
-                notification must not be sent to the client at all.
+                The same that any Graphene resolver returns.
 
         [async] subscribe(root, info, *args, **kwds):
             Called when client subscribes. Define this to do some extra
@@ -156,9 +154,6 @@ class Subscription(graphene.ObjectType):
     """
 
     # ----------------------------------------------------------------------- PUBLIC API
-
-    # Return this from the `publish` to suppress the notification.
-    SKIP = GraphqlWsConsumer.SKIP
 
     # Subscription notifications queue limit. Set this to control the
     # amount of notifications server keeps in the queue when

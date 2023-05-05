@@ -141,10 +141,10 @@ class MySubscription(channels_graphql_ws.Subscription):
         """Called to notify the client."""
 
         # Here `payload` contains the `payload` from the `broadcast()`
-        # invocation (see below). You can return `MySubscription.SKIP`
-        # if you wish to suppress the notification to a particular
-        # client. For example, this allows to avoid notifications for
-        # the actions made by this particular client.
+        # invocation (see below). You can return `None` if you wish to
+        # suppress the notification to a particular client. For example,
+        # this allows to avoid notifications for the actions made by
+        # this particular client.
 
         return MySubscription(event="Something has happened!")
 

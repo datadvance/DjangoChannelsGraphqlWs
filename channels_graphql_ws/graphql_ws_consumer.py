@@ -149,10 +149,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     # GraphQL-core sources to know more.
     middleware: Optional[graphql.Middleware] = None
 
-    # Subscription implementation shall return this to tell consumer
-    # to suppress subscription notification.
-    SKIP = object()
-
     async def on_connect(self, payload):
         """Client connection handler.
 
@@ -196,55 +192,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         enqueue_notification: Callable[[Any], None]
         # The callback to invoke when client unsubscribes.
         unsubscribed_callback: Callable[..., Awaitable[None]]
-
-    class _SubscriptionExecutionContext(graphql.ExecutionContext):
-        """Special execution context for subscriptions.
-
-        Subscription `publish` method is called via `graphql.execute`
-        like normal resolver. But subscription may return
-        `GraphqlWsConsumer.SKIP` object instead of declared result type.
-        When `graphql.execute` can not build resulting type from the
-        resolver return value it sets result to `None` which may lead to
-        GraphQL errors in case of required field or confuse skipped
-        event with missing value. We have to promote
-        `GraphqlWsConsumer.SKIP` value to the GraphQL operation results
-        and remove skipped values from the final response.
-        """
-
-        @staticmethod
-        def build_response(
-            data: Optional[Dict[str, Any]], errors: List[graphql.GraphQLError]
-        ) -> graphql.ExecutionResult:
-            """Remove skipped subscription events from results.
-
-            `data` is a dictionary where the key is subscription field
-            name and value is a subscription resolver result. Value will
-            be `GraphqlWsConsumer.SKIP` object for skipped events.
-            """
-            if data:
-                data = {
-                    field_name: value
-                    for field_name, value in data.items()
-                    if value is not GraphqlWsConsumer.SKIP
-                }
-            return graphql.ExecutionContext.build_response(data, errors)
-
-        def complete_value(
-            self,
-            return_type: graphql.GraphQLOutputType,
-            field_nodes: List[graphql.FieldNode],
-            info: graphql.GraphQLResolveInfo,
-            path: graphql.pyutils.Path,
-            result: Any,
-        ):
-            """Do not create return_type value for skipped events.
-
-            We will remove `GraphqlWsConsumer.SKIP` marks from the final
-            result in the `build_response` method.
-            """
-            if result is GraphqlWsConsumer.SKIP:
-                return result
-            return super().complete_value(return_type, field_nodes, info, path, result)
 
     def __init__(self, *args, **kwargs):
         """Consumer constructor."""
@@ -628,7 +575,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                         op_name,
                     ),
                     middleware=self._middleware,
-                    execution_context_class=self._SubscriptionExecutionContext,
                 )
 
                 # When subscr_result is an AsyncGenerator, consume
@@ -887,7 +833,13 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 execution_context_class=execution_context_class,
             )  # type: ignore
             result = await result if inspect.isawaitable(result) else result
-            return cast(graphql.ExecutionResult, result)
+            result = cast(graphql.ExecutionResult, result)
+            # Skip notification if subscription returned `None`.
+            if not result.errors and result.data:
+                for key in list(result.data.keys()):
+                    if result.data[key] is None:
+                        result.data.pop(key)
+            return result
 
         # Map every source value to a ExecutionResult value.
         return graphql.MapAsyncIterator(result_or_stream, map_source_to_response)

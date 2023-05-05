@@ -204,7 +204,7 @@ class OnNewChatMessage(channels_graphql_ws.Subscription):
         # Avoid self-notifications.
         user = info.context.channels_scope["user"]
         if user.is_authenticated and new_msg_sender == user.username:
-            return OnNewChatMessage.SKIP
+            return None
 
         return OnNewChatMessage(
             chatroom=chatroom, text=new_msg_text, sender=new_msg_sender
