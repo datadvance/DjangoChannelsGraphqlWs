@@ -23,6 +23,16 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc5] - 2023-05-05
+
+WARNING: Release contains backward incompatible changes!
+
+- To suppress/drop subscription notification just return `None` from the
+  subscription resolver. Previously it was necessary to return special
+  `SKIP` object which is no longer the case..
+- Python 3.8 compatibility brought back. Tests pass OK.
+
+
 ## [1.0.0rc4] - 2023-05-03
 
 - `GraphqlWsConsumer.warn_resolver_timeout` removed to avoid mess with
