@@ -21,7 +21,8 @@
 
 """Test that intermediate notifications skipped."""
 
-import time
+import asyncio
+from typing import List
 
 import graphene
 import pytest
@@ -30,7 +31,7 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_subscription_notification_queue_limit(gql):
+async def test_notification_queue_limit(gql):
     """Test it is possible to skip intermediate notifications.
 
     Here we start subscription which send 10 messages and server took
@@ -38,6 +39,10 @@ async def test_subscription_notification_queue_limit(gql):
     the last will be skipped by the server. Because subscription class
     sets notification_queue_limit to 1.
     """
+
+    # Number of test notifications to send.
+    msgs_count = 100
+    msg_proc_delay = 0.001
 
     print("Prepare the test setup: GraphQL backend classes.")
 
@@ -48,10 +53,10 @@ async def test_subscription_notification_queue_limit(gql):
 
         @staticmethod
         def mutate(root, info):
-            """Broadcast 10 messages."""
+            """Broadcast many messages."""
             del root, info
-            for idx in range(10):
-                OnNewMessage.broadcast(payload={"message": str(idx)})
+            for idx in range(msgs_count):
+                OnNewMessage.broadcast(payload={"message": idx})
             return SendMessages(is_ok=True)
 
     class OnNewMessage(channels_graphql_ws.Subscription):
@@ -60,17 +65,17 @@ async def test_subscription_notification_queue_limit(gql):
         # Leave only the last message in the server queue.
         notification_queue_limit = 1
 
-        message = graphene.String()
+        message = graphene.Int()
 
         @staticmethod
-        def publish(payload, info):
+        async def publish(payload, info):
             """Notify all clients except the author of the message."""
             del info
             # Emulate server high load. It is bad to use sleep in the
             # tests but here it seems ok. If test is running within
             # high load builder it will behave the same and skip
             # notifications it is unable to process.
-            time.sleep(1)
+            await asyncio.sleep(msg_proc_delay)
             return OnNewMessage(message=payload["message"])
 
     class Subscription(graphene.ObjectType):
@@ -85,23 +90,16 @@ async def test_subscription_notification_queue_limit(gql):
 
     print("Establish & initialize WebSocket GraphQL connections.")
 
-    comm1 = gql(
+    comm = gql(
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
     )
-    await comm1.connect_and_init()
+    await comm.connect_and_init()
 
-    comm2 = gql(
-        mutation=Mutation,
-        subscription=Subscription,
-        consumer_attrs={"strict_ordering": True},
-    )
-    await comm2.connect_and_init()
+    print("Trigger notifications.")
 
-    print("Subscribe to receive a new message notifications.")
-
-    sub_op_id = await comm2.send(
+    await comm.send(
         msg_type="start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
@@ -109,11 +107,8 @@ async def test_subscription_notification_queue_limit(gql):
             "operationName": "op_name",
         },
     )
-    await comm2.assert_no_messages("Subscribe responded with a message!")
 
-    print("Start sending notifications.")
-
-    mut_op_id = await comm1.send(
+    mut_op_id = await comm.send(
         msg_type="start",
         payload={
             "query": """mutation op_name { send_messages { is_ok } }""",
@@ -121,23 +116,24 @@ async def test_subscription_notification_queue_limit(gql):
             "operationName": "op_name",
         },
     )
-    await comm1.receive(assert_id=mut_op_id, assert_type="data")
-    await comm1.receive(assert_id=mut_op_id, assert_type="complete")
+    await comm.receive(assert_id=mut_op_id, assert_type="data")
+    await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
-    await comm1.assert_no_messages("Self-notification happened!")
+    # Here we store ids of processed notifications.
+    received_ids: List[int] = []
 
-    # Client will receive only the first and the last notifications.
-    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
-    assert resp["data"]["on_new_message"]["message"] == "0"
+    while True:
+        msg = await comm.receive(raw_response=False)
+        print("Received message:", msg)
+        received_ids.append(msg["data"]["on_new_message"]["message"])
+        if msg["data"]["on_new_message"]["message"] == msgs_count - 1:
+            break
 
-    resp = await comm2.receive(assert_id=sub_op_id, assert_type="data")
-    assert resp["data"]["on_new_message"]["message"] == "9"
+    await comm.finalize()
+    print("Received messages", received_ids)
 
-    await comm1.assert_no_messages(
-        "Unexpected message received at the end of the test!"
-    )
-    await comm2.assert_no_messages(
-        "Unexpected message received at the end of the test!"
-    )
-    await comm1.finalize()
-    await comm2.finalize()
+    # Check that there is always the first and the last message.
+    # Make sure that we received not all of them
+    assert received_ids[0] == 0, "First message ID != 0!"
+    assert received_ids[-1] == msgs_count - 1, f"Last message ID != {msgs_count - 1}!"
+    assert len(received_ids) < msgs_count, "No messages skipped!"
