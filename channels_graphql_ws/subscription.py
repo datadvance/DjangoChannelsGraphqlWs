@@ -197,7 +197,7 @@ class Subscription(graphene.ObjectType):
         # Manually serialize the `payload` to allow transfer of Django
         # models inside `payload`, auto serialization does not do this.
         serialized_payload = await channels.db.database_sync_to_async(
-            Serializer.serialize
+            Serializer.serialize, thread_sensitive=False
         )(payload)
 
         # Send the message to the Channels group.

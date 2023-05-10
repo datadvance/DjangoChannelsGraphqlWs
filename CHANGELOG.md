@@ -23,6 +23,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc6] - 2023-05-10
+
+- `sync_to_async` calls inside library now runs concurrently.
+
 ## [1.0.0rc5] - 2023-05-05
 
 WARNING: Release contains backward incompatible changes!

@@ -83,13 +83,13 @@ TEMPLATES = [
     }
 ]
 INSTALLED_APPS: List[str] = [
+    "daphne",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.auth",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admin",
-    "daphne",
     "channels",
 ]
 ALLOWED_HOSTS = ["*"]

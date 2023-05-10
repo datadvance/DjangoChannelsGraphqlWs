@@ -735,7 +735,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """
 
         res = await channels.db.database_sync_to_async(
-            self._on_gql_start__parse_query_sync_cached
+            self._on_gql_start__parse_query_sync_cached, thread_sensitive=False
         )(op_name, query)
 
         doc_ast: Optional[graphql.DocumentNode] = res[0]
@@ -994,7 +994,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         if waitlist:
             await asyncio.wait(waitlist)
 
-        _deserialize = channels.db.database_sync_to_async(Serializer.deserialize)
+        _deserialize = channels.db.database_sync_to_async(
+            Serializer.deserialize, thread_sensitive=False
+        )
 
         # For each notification (event) yielded from this function the
         # `_on_gql_start__subscribe` function will call subscription
