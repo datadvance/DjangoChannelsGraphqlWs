@@ -25,7 +25,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## [1.0.0rc6] - 2023-05-10
 
-- `sync_to_async` calls inside library now runs concurrently.
+- GraphQL parsing and message serialization now perform concurrently
+  by `sync_to_async(...,thread_sensitive=False)`.
+
 
 ## [1.0.0rc5] - 2023-05-05
 
