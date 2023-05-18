@@ -58,7 +58,7 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
             except asyncio.TimeoutError:
                 continue
             else:
-                if self._is_ping_pong_response(received):
+                if self._is_ping_pong_message(received):
                     continue
                 assert False, (
                     f"{error_message}\n{received}"
@@ -76,12 +76,18 @@ class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
     # Slightly reduce timeout in testing.
     TIMEOUT: float = 30
 
-    def __init__(self, application, path, communicator_kwds=None):
+    def __init__(
+        self,
+        application,
+        path,
+        communicator_kwds=None,
+        subprotocol="graphql-transport-ws",
+    ):
         """Constructor."""
         self._comm = channels.testing.WebsocketCommunicator(
             application=application,
             path=path,
-            subprotocols=["graphql-transport-ws"],
+            subprotocols=[subprotocol],
             **(communicator_kwds or {}),
         )
 

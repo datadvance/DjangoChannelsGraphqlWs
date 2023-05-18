@@ -33,7 +33,8 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_error_cases(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_error_cases(gql, subprotocol):
     """Test that server responds correctly when errors happen.
 
     Check that server responds with message of type `data` when there
@@ -62,7 +63,7 @@ async def test_error_cases(gql):
             return Query.VALUE
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    client = gql(query=Query)
+    client = gql(query=Query, subprotocol=subprotocol)
     await client.connect_and_init()
 
     print("Check that query syntax error leads to the `error` response.")
@@ -87,7 +88,7 @@ async def test_error_cases(gql):
     )
 
     msg_id = await client.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": "This produces a syntax error!",
             "variables": {},
@@ -95,7 +96,10 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="next")
+        await client.receive(
+            assert_id=msg_id,
+            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+        )
 
     payload = exc_info.value.response["payload"]
     assert "data" in payload
@@ -109,7 +113,7 @@ async def test_error_cases(gql):
 
     print("Check that syntax error leads to the `data` response with `errors` array.")
     msg_id = await client.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": "query op_name { value(issue_error: true) }",
             "variables": {},
@@ -117,7 +121,10 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="next")
+        await client.receive(
+            assert_id=msg_id,
+            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+        )
     payload = exc_info.value.response["payload"]
     assert payload["data"]["value"] is None
     assert len(payload["errors"]) == 1, "Single error expected!"
@@ -130,7 +137,7 @@ async def test_error_cases(gql):
 
     print("Check multiple errors in the `data` message.")
     msg_id = await client.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -144,7 +151,10 @@ async def test_error_cases(gql):
         },
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(assert_id=msg_id, assert_type="next")
+        await client.receive(
+            assert_id=msg_id,
+            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+        )
     payload = exc_info.value.response["payload"]
     assert payload["data"] is None
     assert (
@@ -160,7 +170,8 @@ async def test_error_cases(gql):
 
 
 @pytest.mark.asyncio
-async def test_connection_error(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_connection_error(gql, subprotocol):
     """Test that server disconnects user when `on_connect` raises error.
 
     When GraphqlWsConsumer method `on_connect` raises server must:
@@ -174,7 +185,10 @@ async def test_connection_error(gql):
         del self, payload
         raise RuntimeError("Connection rejected!")
 
-    client = gql(consumer_attrs={"strict_ordering": True, "on_connect": on_connect})
+    client = gql(
+        consumer_attrs={"strict_ordering": True, "on_connect": on_connect},
+        subprotocol=subprotocol,
+    )
     await client.connect_and_init(connect_only=True)
 
     print("Try to initialize the connection.")
@@ -192,7 +206,8 @@ async def test_connection_error(gql):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_return_value(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_subscribe_return_value(gql, subprotocol):
     """Assure the return value of the `subscribe` method is checked.
 
     - Check there is no error when `subscribe` returns nothing, a list
@@ -250,10 +265,10 @@ async def test_subscribe_return_value(gql):
     print("Check there is no error when `subscribe` returns nothing, list, or tuple.")
 
     for result_type in ["NONE", "LIST", "TUPLE"]:
-        client = gql(subscription=Subscription)
+        client = gql(subscription=Subscription, subprotocol=subprotocol)
         await client.connect_and_init()
         await client.send(
-            msg_type="subscribe",
+            msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
             payload={
                 "query": f"""
                 subscription {{ test_subscription (switch: "{result_type}\") {{ ok }} }}
@@ -266,10 +281,10 @@ async def test_subscribe_return_value(gql):
     print("Check there is a error when `subscribe` returns string or dict.")
 
     for result_type in ["STR", "DICT", "EMPTYSTR"]:
-        client = gql(subscription=Subscription)
+        client = gql(subscription=Subscription, subprotocol=subprotocol)
         await client.connect_and_init()
         msg_id = await client.send(
-            msg_type="subscribe",
+            msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
             payload={
                 "query": f"""
                 subscription {{ test_subscription (switch: "{result_type}") {{ ok }} }}
@@ -277,7 +292,10 @@ async def test_subscribe_return_value(gql):
             },
         )
         with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
-            await client.receive(assert_id=msg_id, assert_type="next")
+            await client.receive(
+                assert_id=msg_id,
+                assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+            )
 
         payload = ex.value.response["payload"]
         assert "AssertionError" in payload["errors"][0]["message"], (

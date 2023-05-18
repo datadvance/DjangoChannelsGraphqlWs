@@ -25,9 +25,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## [1.0.0rc7] - 2022-05-12
 
-- The server has been switched to use the new WebSocket sub-protocol - `graphql-transport-ws`.
-  Sub-protocol specification: https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md.
-- NOTE: Changes are not backwards compatible.
+- Support for a new WebSocket sub-protocol `graphql-transport-ws` added.
+  Sub-protocol specification:
+  https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md.
 
 ## [1.0.0rc6] - 2023-05-10
 

@@ -28,8 +28,6 @@ from typing import Optional
 
 import aiohttp
 
-from . import graphql_ws_consumer
-
 
 class GraphqlWsTransport:
     """Transport interface for the `GraphqlWsClient`."""
@@ -169,14 +167,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         async with session as session:
             connection = session.ws_connect(
                 self._url,
-                protocols=[graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL],
+                protocols=["graphql-transport-ws"],
                 timeout=timeout,
             )
             async with connection as self._connection:
-                if (
-                    self._connection.protocol
-                    != graphql_ws_consumer.GRAPHQL_WS_SUBPROTOCOL
-                ):
+                if self._connection.protocol != "graphql-transport-ws":
                     raise RuntimeError(
                         f"Server uses wrong subprotocol: {self._connection.protocol}!"
                     )

@@ -31,7 +31,8 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_notification_queue_limit(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_notification_queue_limit(gql, subprotocol):
     """Test it is possible to skip intermediate notifications.
 
     Here we start subscription which send 10 messages and server took
@@ -94,13 +95,14 @@ async def test_notification_queue_limit(gql):
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
+        subprotocol=subprotocol,
     )
     await comm.connect_and_init()
 
     print("Trigger notifications.")
 
     await comm.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": "subscription op_name { on_new_message { message } }",
             "variables": {},
@@ -109,14 +111,17 @@ async def test_notification_queue_limit(gql):
     )
 
     mut_op_id = await comm.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": """mutation op_name { send_messages { is_ok } }""",
             "variables": {},
             "operationName": "op_name",
         },
     )
-    await comm.receive(assert_id=mut_op_id, assert_type="next")
+    await comm.receive(
+        assert_id=mut_op_id,
+        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+    )
     await comm.receive(assert_id=mut_op_id, assert_type="complete")
 
     # Here we store ids of processed notifications.

@@ -49,18 +49,34 @@ class GraphqlWsClient:
     subscription data or some query result. The response type must be
     checked outside the client manually.
 
+    NOTE: In the comments in brackets near the type of messages in protocol
+    `graphql-transport-ws`, an analogue of this message in protocol
+    `graphql-ws` is specifieded.
+
     Args:
         transport: The `GraphqlWsTransport` instance used to send and
             receive messages over the WebSocket connection.
+        subprotocol: WebSocket subprotocol to use by the Client. Can
+            have a value of "graphql-transport-ws" or "graphql-ws".
+            By default set to "graphql-transport-ws".
     """
 
-    def __init__(self, transport: _transport.GraphqlWsTransport):
+    def __init__(
+        self,
+        transport: _transport.GraphqlWsTransport,
+        subprotocol="graphql-transport-ws",
+    ):
         """Constructor."""
         assert isinstance(
             transport, _transport.GraphqlWsTransport
         ), "Given transport does not implement the 'GraphqlWsTransport' interface!"
         self._transport = transport
         self._is_connected = False
+        assert subprotocol in (
+            "graphql-transport-ws",
+            "graphql-ws",
+        ), "Client only supports graphql-transport-ws and graphql-ws subprotocols!"
+        self._subprotocol = subprotocol
 
     @property
     def transport(self) -> _transport.GraphqlWsTransport:
@@ -131,7 +147,7 @@ class GraphqlWsClient:
         """
         while True:
             response = await self._transport.receive()
-            if self._is_ping_pong_response(response):
+            if self._is_ping_pong_message(response):
                 continue
             if wait_id is None or response["id"] == wait_id:
                 break
@@ -163,7 +179,7 @@ class GraphqlWsClient:
             Dictionary with the GraphQL response.
 
         """
-        msg_id = await self.send_subscribe_msg(query, variables=variables)
+        msg_id = await self.start(query, variables=variables)
         try:
             resp = await self.receive(wait_id=msg_id)
         finally:
@@ -185,13 +201,13 @@ class GraphqlWsClient:
             The message identifier.
 
         """
-        msg_id = await self.send_subscribe_msg(query, variables=variables)
+        msg_id = await self.start(query, variables=variables)
         if wait_confirmation:
             await self.receive(wait_id=msg_id)
         return msg_id
 
-    async def send_subscribe_msg(self, query, *, variables=None):
-        """Send SUBSCRIBE GraphQL request. Responses must be checked explicitly.
+    async def start(self, query, *, variables=None):
+        """Start GraphQL request. Responses must be checked explicitly.
 
         Args:
             query: A GraphQL string query. We `dedent` it, so you do not
@@ -203,7 +219,9 @@ class GraphqlWsClient:
 
         """
         return await self.send(
-            msg_type="subscribe",
+            msg_type="subscribe"
+            if self._subprotocol == "graphql-transport-ws"
+            else "start",
             payload={"query": textwrap.dedent(query), "variables": variables or {}},
         )
 
@@ -261,9 +279,9 @@ class GraphqlWsClient:
         self._is_connected = False
 
     @staticmethod
-    def _is_ping_pong_response(response):
-        """Check if received GraphQL response is ping-pong message."""
-        return response.get("type") == "ping" or response.get("type") == "pong"
+    def _is_ping_pong_message(response):
+        """Check if received GraphQL response is ping(keepalive) or pong message."""
+        return response.get("type") in ("ping", "pong", "ka")
 
 
 class GraphqlWsResponseError(Exception):

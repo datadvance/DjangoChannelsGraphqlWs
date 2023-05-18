@@ -21,7 +21,6 @@
 
 """Simple example of the DjangoChannelsGraphqlWs."""
 
-import logging
 import pathlib
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, List
@@ -36,12 +35,10 @@ import django.contrib.auth
 import django.core.asgi
 import django.urls
 import graphene
+import graphene_django.views
 import graphql
-from graphene_django.views import GraphQLView
 
 import channels_graphql_ws
-
-LOG = logging.getLogger(__name__)
 
 # It is OK, Graphene works this way.
 # pylint: disable=unsubscriptable-object,invalid-name
@@ -187,7 +184,9 @@ async def demo_middleware(next_middleware, root, info, *args, **kwds):
     For more information read:
     https://docs.graphene-python.org/en/latest/execution/middleware/#middleware
     """
-    print("Subscription name:", info.operation.name.value)
+    print("Demo middleware report")
+    print("    operation :", info.operation.operation)
+    print("    name      :", info.operation.name.value)
 
     # Invoke next middleware.
     result = next_middleware(root, info, *args, **kwds)
@@ -199,6 +198,7 @@ async def demo_middleware(next_middleware, root, info, *args, **kwds):
 class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
     """Channels WebSocket consumer which provides GraphQL API."""
 
+    send_ping_every = 1
     schema = graphene.Schema(query=Query, mutation=Mutation, subscription=Subscription)
     middleware = [demo_middleware]
 
@@ -240,7 +240,7 @@ urlpatterns = [
     # `GraphQLView` used to handle mutations and queries requests sended by http.
     django.urls.path(
         "graphql/",
-        GraphQLView.as_view(
+        graphene_django.views.GraphQLView.as_view(
             schema=graphene.Schema(
                 query=Query, mutation=Mutation, subscription=Subscription
             )

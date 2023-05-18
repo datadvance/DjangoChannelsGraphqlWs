@@ -67,7 +67,8 @@ def test_dict__as_object():
 
 
 @pytest.mark.asyncio
-async def test_context_lifetime(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_context_lifetime(gql, subprotocol):
     """Check `info.context` does hold data between requests."""
 
     # Store ids of `info.context` to check them later.
@@ -92,11 +93,22 @@ async def test_context_lifetime(gql):
 
     for _ in range(2):
         print("Make connection,perform query, and close connection.")
-        client = gql(query=Query, consumer_attrs={"strict_ordering": True})
+        client = gql(
+            query=Query,
+            consumer_attrs={"strict_ordering": True},
+            subprotocol=subprotocol,
+        )
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(msg_type="subscribe", payload={"query": "{ ok }"})
-            await client.receive(assert_type="next")
+            await client.send(
+                msg_type="subscribe"
+                if subprotocol == "graphql-transport-ws"
+                else "start",
+                payload={"query": "{ ok }"},
+            )
+            await client.receive(
+                assert_type="next" if subprotocol == "graphql-transport-ws" else "data"
+            )
             await client.receive(assert_type="complete")
         await client.finalize()
 
@@ -105,7 +117,8 @@ async def test_context_lifetime(gql):
 
 
 @pytest.mark.asyncio
-async def test_context_channels_scope_lifetime(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_context_channels_scope_lifetime(gql, subprotocol):
     """Check `info.context.channels_scope` holds data in connection."""
 
     # Store ids of `info.context.channels_scope` to check them later.
@@ -132,11 +145,22 @@ async def test_context_channels_scope_lifetime(gql):
 
     for _ in range(2):
         print("Make connection,perform query, and close connection.")
-        client = gql(query=Query, consumer_attrs={"strict_ordering": True})
+        client = gql(
+            query=Query,
+            consumer_attrs={"strict_ordering": True},
+            subprotocol=subprotocol,
+        )
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(msg_type="subscribe", payload={"query": "{ ok }"})
-            await client.receive(assert_type="next")
+            await client.send(
+                msg_type="subscribe"
+                if subprotocol == "graphql-transport-ws"
+                else "start",
+                payload={"query": "{ ok }"},
+            )
+            await client.receive(
+                assert_type="next" if subprotocol == "graphql-transport-ws" else "data"
+            )
             await client.receive(assert_type="complete")
         await client.finalize()
 

@@ -35,7 +35,8 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_broadcast(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_broadcast(gql, subprotocol):
     """Test that the asynchronous 'broadcast()' call works correctly.
 
     Because we cannot use sync 'broadcasts()' method in the thread
@@ -53,17 +54,23 @@ async def test_broadcast(gql):
     # notifications must be send in the order they were broadcasted.
     settings = {"strict_ordering": False}
     client_sender = gql(
-        mutation=Mutation, subscription=Subscription, consumer_attrs=settings
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs=settings,
+        subprotocol=subprotocol,
     )
     client_recipient = gql(
-        mutation=Mutation, subscription=Subscription, consumer_attrs=settings
+        mutation=Mutation,
+        subscription=Subscription,
+        consumer_attrs=settings,
+        subprotocol=subprotocol,
     )
     await client_sender.connect_and_init()
     await client_recipient.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await client_recipient.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -82,7 +89,7 @@ async def test_broadcast(gql):
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
     msg_id = await client_sender.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -99,19 +106,25 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client_sender.receive(assert_id=msg_id, assert_type="next")
+    resp = await client_sender.receive(
+        assert_id=msg_id,
+        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+    )
     assert resp["data"] == {"send_message": {"success": True}}
     await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     # Subscription notification.
-    resp = await client_recipient.receive(assert_id=sub_id, assert_type="next")
+    resp = await client_recipient.receive(
+        assert_id=sub_id,
+        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+    )
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
 
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
     msg_id = await client_sender.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -128,13 +141,19 @@ async def test_broadcast(gql):
     )
 
     # Mutation response.
-    resp = await client_sender.receive(assert_id=msg_id, assert_type="next")
+    resp = await client_sender.receive(
+        assert_id=msg_id,
+        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+    )
     assert resp["data"] == {"send_timestamps": {"success": True}}
     await client_sender.receive(assert_id=msg_id, assert_type="complete")
 
     timestamps = []
     for _ in range(count):
-        resp = await client_recipient.receive(assert_id=sub_id, assert_type="next")
+        resp = await client_recipient.receive(
+            assert_id=sub_id,
+            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
+        )
         data = resp["data"]["on_message_sent"]
         timestamps.append(data["message"])
     assert timestamps == sorted(
@@ -152,8 +171,9 @@ async def test_broadcast(gql):
     await client_recipient.finalize()
 
 
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 @pytest.mark.asyncio
-async def test_subscribe_unsubscribe(gql):
+async def test_subscribe_unsubscribe(gql, subprotocol):
     """Test that the asynchronous `unsubscribe()` works.
 
     Test the server able to handle client unsubscribe before connection
@@ -173,7 +193,7 @@ async def test_subscribe_unsubscribe(gql):
 
     print("Subscribe to GraphQL subscription.")
     sub_id = await client.send(
-        msg_type="subscribe",
+        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
         payload={
             "query": textwrap.dedent(
                 """
@@ -186,7 +206,10 @@ async def test_subscribe_unsubscribe(gql):
             "operationName": "on_message_sent",
         },
     )
-    await client.send(msg_id=sub_id, msg_type="complete")
+    await client.send(
+        msg_id=sub_id,
+        msg_type="complete" if subprotocol == "graphql-transport-ws" else "stop",
+    )
     # If server was not able to handle unsubscribe command, then test
     # will hang here.
     await client.receive(assert_type="complete")
