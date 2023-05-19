@@ -500,8 +500,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     async def _on_gql_connection_init(self, payload):
         """Process the CONNECTION_INIT message.
 
-        Start sending ping messages if `send_ping_every` set.
-        Respond with PONG message.
+        Start sending ping(keepalive) messages if `send_ping_every` set.
+        Respond with either CONNECTION_ACK or CONNECTION_ERROR message.
 
         NOTE: Depending on the value of the `strict_ordering` setting
         this method is either awaited directly or offloaded to an async

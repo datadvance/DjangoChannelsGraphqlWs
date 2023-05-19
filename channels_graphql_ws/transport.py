@@ -63,10 +63,15 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         url: WebSocket GraphQL endpoint.
         cookies: HTTP request cookies.
         headers: HTTP request headers.
+        subprotocol: WebSocket subprotocol to use by the Transport.
+            Can have a value of "graphql-transport-ws" or "graphql-ws".
+            By default set to "graphql-transport-ws".
 
     """
 
-    def __init__(self, url, cookies=None, headers=None):
+    def __init__(
+        self, url, cookies=None, headers=None, subprotocol="graphql-transport-ws"
+    ):
         """Constructor. See class description for details."""
         # Server URL.
         self._url = url
@@ -74,6 +79,12 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         self._cookies = cookies
         # HTTP headers.
         self._headers = headers
+        assert subprotocol in (
+            "graphql-transport-ws",
+            "graphql-ws",
+        ), "Transport only supports graphql-transport-ws and graphql-ws subprotocols!"
+        # GraphQL subprotocol.
+        self._subprotocol = subprotocol
         # AIOHTTP connection.
         self._connection: aiohttp.ClientWebSocketResponse
         # A task which processes incoming messages.
@@ -167,11 +178,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         async with session as session:
             connection = session.ws_connect(
                 self._url,
-                protocols=["graphql-transport-ws"],
+                protocols=[self._subprotocol],
                 timeout=timeout,
             )
             async with connection as self._connection:
-                if self._connection.protocol != "graphql-transport-ws":
+                if self._connection.protocol != self._subprotocol:
                     raise RuntimeError(
                         f"Server uses wrong subprotocol: {self._connection.protocol}!"
                     )
