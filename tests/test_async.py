@@ -23,7 +23,6 @@
 
 # NOTE: The GraphQL schema is defined at the end of the file.
 
-import textwrap
 import time
 import uuid
 from datetime import datetime
@@ -69,91 +68,63 @@ async def test_broadcast(gql, subprotocol):
     await client_recipient.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await client_recipient.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    sub_id = await client_recipient.start(
+        query="""
                 subscription on_message_sent {
                     on_message_sent { message }
                 }
-                """
-            ),
-            "variables": {},
-            "operationName": "on_message_sent",
-        },
+                """,
+        operation_name="on_message_sent",
     )
 
     await client_recipient.assert_no_messages()
 
     print("Trigger the subscription by mutation to receive notification.")
     message = f"Hi! {str(uuid.uuid4().hex)}"
-    msg_id = await client_sender.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    msg_id = await client_sender.start(
+        query="""
                 mutation send_message($message: String!) {
                     send_message(message: $message) {
                         success
                     }
                 }
-                """
-            ),
-            "variables": {"message": message},
-            "operationName": "send_message",
-        },
+                """,
+        variables={"message": message},
+        operation_name="send_message",
     )
 
     # Mutation response.
-    resp = await client_sender.receive(
-        assert_id=msg_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client_sender.receive_next(msg_id)
     assert resp["data"] == {"send_message": {"success": True}}
-    await client_sender.receive(assert_id=msg_id, assert_type="complete")
+    await client_sender.receive_complete(msg_id)
 
     # Subscription notification.
-    resp = await client_recipient.receive(
-        assert_id=sub_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client_recipient.receive_next(sub_id)
     data = resp["data"]["on_message_sent"]
     assert data["message"] == message, "Subscription notification contains wrong data!"
 
     print("Trigger sequence of timestamps with delayed publish.")
     count = 10
-    msg_id = await client_sender.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    msg_id = await client_sender.start(
+        query="""
                 mutation send_timestamps($count: Int!) {
                     send_timestamps(count: $count) {
                         success
                     }
                 }
-                """
-            ),
-            "variables": {"count": count},
-            "operationName": "send_timestamps",
-        },
+                """,
+        variables={"count": count},
+        operation_name="send_timestamps",
     )
 
     # Mutation response.
-    resp = await client_sender.receive(
-        assert_id=msg_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client_sender.receive_next(msg_id)
     assert resp["data"] == {"send_timestamps": {"success": True}}
-    await client_sender.receive(assert_id=msg_id, assert_type="complete")
+    await client_sender.receive_complete(msg_id)
 
     timestamps = []
     for _ in range(count):
-        resp = await client_recipient.receive(
-            assert_id=sub_id,
-            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-        )
+        resp = await client_recipient.receive_next(sub_id)
         data = resp["data"]["on_message_sent"]
         timestamps.append(data["message"])
     assert timestamps == sorted(
@@ -188,31 +159,22 @@ async def test_subscribe_unsubscribe(gql, subprotocol):
 
     # Test subscription notifications order, even with disabled ordering
     # notifications must be send in the order they were broadcasted.
-    client = gql(mutation=Mutation, subscription=Subscription)
+    client = gql(mutation=Mutation, subscription=Subscription, subprotocol=subprotocol)
     await client.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    sub_id = await client.start(
+        query="""
                 subscription on_message_sent {
                     on_message_sent { message }
                 }
-                """
-            ),
-            "variables": {},
-            "operationName": "on_message_sent",
-        },
+                """,
+        operation_name="on_message_sent",
     )
-    await client.send(
-        msg_id=sub_id,
-        msg_type="complete" if subprotocol == "graphql-transport-ws" else "stop",
-    )
+    await client.complete(sub_id)
     # If server was not able to handle unsubscribe command, then test
     # will hang here.
-    await client.receive(assert_type="complete")
+    await client.receive_raw_message(assert_type="complete")
     await client.finalize()
 
 

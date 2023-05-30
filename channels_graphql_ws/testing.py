@@ -66,6 +66,14 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
                     else f"Message received when nothing expected!\n{received}"
                 )
 
+    async def send_raw_message(self, message):
+        """Sends a raw message.
+
+        This can be useful for testing, for example, to check that
+        the server responds appropriately to wrong messages.
+        """
+        await self._transport.send(message)
+
 
 class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
     """Testing client transport to work without WebSocket connection.

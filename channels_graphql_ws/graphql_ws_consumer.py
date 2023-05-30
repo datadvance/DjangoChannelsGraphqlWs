@@ -398,7 +398,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             task = self._on_gql_ping()
 
         elif msg_type == "PONG":
-            # Do nothing if PONG message recieved.
+            # Do nothing if PONG message received.
             # According to the protocol description, the PONG message is
             # a response to the PING message and does not require any action.
             return

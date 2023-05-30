@@ -100,16 +100,9 @@ async def test_context_lifetime(gql, subprotocol):
         )
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(
-                msg_type="subscribe"
-                if subprotocol == "graphql-transport-ws"
-                else "start",
-                payload={"query": "{ ok }"},
-            )
-            await client.receive(
-                assert_type="next" if subprotocol == "graphql-transport-ws" else "data"
-            )
-            await client.receive(assert_type="complete")
+            op_id = await client.start(query="{ ok }")
+            await client.receive_next(op_id)
+            await client.receive_complete(op_id)
         await client.finalize()
 
     # Expected run log: [False, False, False, False].
@@ -152,16 +145,9 @@ async def test_context_channels_scope_lifetime(gql, subprotocol):
         )
         await client.connect_and_init()
         for _ in range(2):
-            await client.send(
-                msg_type="subscribe"
-                if subprotocol == "graphql-transport-ws"
-                else "start",
-                payload={"query": "{ ok }"},
-            )
-            await client.receive(
-                assert_type="next" if subprotocol == "graphql-transport-ws" else "data"
-            )
-            await client.receive(assert_type="complete")
+            op_id = await client.start(query="{ ok }")
+            await client.receive_next(op_id)
+            await client.receive_complete(op_id)
         await client.finalize()
 
     # Expected run log: [False, True, False, True].

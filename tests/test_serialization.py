@@ -24,7 +24,6 @@
 import datetime
 import random
 import sys
-import textwrap
 import uuid
 
 import channels
@@ -128,19 +127,14 @@ async def test_models_serialization_with_nested_db_query(
 
     print("Subscribe to receive subscription notifications.")
 
-    sub_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    sub_id = await client.start(
+        query="""
                 subscription {
                     on_models_received {
                         user { id, username }
                     }
                 }
                 """
-            )
-        },
     )
 
     print("Invoke mutation which sends Django model to the subscription.")
@@ -149,7 +143,7 @@ async def test_models_serialization_with_nested_db_query(
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await client.receive(assert_id=sub_id)
+    models_info = await client.receive_raw_message(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user"]["id"] == user_id
     assert models_info["user"]["username"] == username
@@ -239,11 +233,8 @@ async def test_models_serialization(gql, transactional_db, subprotocol):
 
     print("Subscribe to receive subscription notifications.")
 
-    sub_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    sub_id = await client.start(
+        query="""
                 subscription {
                     on_models_received {
                         user1_id
@@ -255,8 +246,6 @@ async def test_models_serialization(gql, transactional_db, subprotocol):
                     }
                 }
                 """
-            )
-        },
     )
 
     print("Invoke mutation which sends Django model to the subscription.")
@@ -265,7 +254,7 @@ async def test_models_serialization(gql, transactional_db, subprotocol):
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await client.receive(assert_id=sub_id)
+    models_info = await client.receive_raw_message(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user1_id"] == user1_id
     assert models_info["user2_id"] == user2_id
@@ -358,11 +347,8 @@ async def test_timestamps_serialization(gql, transactional_db, subprotocol):
 
     print("Subscribe to receive subscription notifications.")
 
-    sub_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": textwrap.dedent(
-                """
+    sub_id = await client.start(
+        query="""
                 subscription {
                     on_timestamps_received {
                         now_date
@@ -374,8 +360,6 @@ async def test_timestamps_serialization(gql, transactional_db, subprotocol):
                     }
                 }
                 """
-            )
-        },
     )
 
     print("Invoke mutation which sends timestamps to the subscription.")
@@ -384,7 +368,7 @@ async def test_timestamps_serialization(gql, transactional_db, subprotocol):
 
     print("Receive subscription notification with timestamps info and check it.")
 
-    timestamps_info = await client.receive(assert_id=sub_id)
+    timestamps_info = await client.receive_raw_message(assert_id=sub_id)
     await client.finalize()
 
     timestamps_info = timestamps_info["data"]["on_timestamps_received"]

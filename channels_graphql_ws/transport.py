@@ -63,15 +63,10 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         url: WebSocket GraphQL endpoint.
         cookies: HTTP request cookies.
         headers: HTTP request headers.
-        subprotocol: WebSocket subprotocol to use by the Transport.
-            Can have a value of "graphql-transport-ws" or "graphql-ws".
-            By default set to "graphql-transport-ws".
 
     """
 
-    def __init__(
-        self, url, cookies=None, headers=None, subprotocol="graphql-transport-ws"
-    ):
+    def __init__(self, url, cookies=None, headers=None):
         """Constructor. See class description for details."""
         # Server URL.
         self._url = url
@@ -79,12 +74,6 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         self._cookies = cookies
         # HTTP headers.
         self._headers = headers
-        assert subprotocol in (
-            "graphql-transport-ws",
-            "graphql-ws",
-        ), "Transport only supports graphql-transport-ws and graphql-ws subprotocols!"
-        # GraphQL subprotocol.
-        self._subprotocol = subprotocol
         # AIOHTTP connection.
         self._connection: aiohttp.ClientWebSocketResponse
         # A task which processes incoming messages.
@@ -92,17 +81,25 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         # A queue for incoming messages.
         self._incoming_messages: asyncio.Queue = asyncio.Queue()
 
-    async def connect(self, timeout: Optional[float] = None) -> None:
+    async def connect(
+        self, timeout: Optional[float] = None, subprotocol="graphql-transport-ws"
+    ) -> None:
         """Establish a connection with the WebSocket server.
 
-        Returns:
-            `(True, <chosen-subprotocol>)` if connection accepted.
-            `(False, None)` if connection rejected.
+        Args:
+            timeout: Connection timeout in seconds.
+            subprotocol: WebSocket subprotocol to use by the Transport.
+                Can have a value of "graphql-transport-ws" or "graphql-ws".
+                By default set to "graphql-transport-ws".
 
         """
+        assert subprotocol in (
+            "graphql-transport-ws",
+            "graphql-ws",
+        ), "Transport only supports graphql-transport-ws and graphql-ws subprotocols!"
         connected = asyncio.Event()
         self._message_processor = asyncio.create_task(
-            self._process_messages(connected, timeout or self.TIMEOUT)
+            self._process_messages(connected, timeout or self.TIMEOUT, subprotocol)
         )
         await asyncio.wait(
             [connected.wait(), self._message_processor],
@@ -166,7 +163,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         """Wait server to close the connection."""
         raise NotImplementedError()
 
-    async def _process_messages(self, connected, timeout):
+    async def _process_messages(self, connected, timeout, subprotocol):
         """Process messages coming from the connection.
 
         Args:
@@ -178,11 +175,11 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         async with session as session:
             connection = session.ws_connect(
                 self._url,
-                protocols=[self._subprotocol],
+                protocols=[subprotocol],
                 timeout=timeout,
             )
             async with connection as self._connection:
-                if self._connection.protocol != self._subprotocol:
+                if self._connection.protocol != subprotocol:
                     raise RuntimeError(
                         f"Server uses wrong subprotocol: {self._connection.protocol}!"
                     )

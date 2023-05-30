@@ -132,48 +132,30 @@ async def test_publish_skip(gql, subprotocol):
 
     print("Subscribe to receive a new message notifications.")
 
-    await comm1.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": "subscription op_name { on_new_message { message } }",
-            "variables": {},
-            "operationName": "op_name",
-        },
+    await comm1.start(
+        query="subscription op_name { on_new_message { message } }",
+        operation_name="op_name",
     )
     await comm1.assert_no_messages("Subscribe responded with a message!")
 
-    sub_op_id = await comm2.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": "subscription op_name { on_new_message { message } }",
-            "variables": {},
-            "operationName": "op_name",
-        },
+    sub_op_id = await comm2.start(
+        query="subscription op_name { on_new_message { message } }",
+        operation_name="op_name",
     )
     await comm2.assert_no_messages("Subscribe responded with a message!")
 
     print("Send a new message to check we have not received notification about it.")
 
-    mut_op_id = await comm1.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": """mutation op_name { send_message(message: "Hi!") { is_ok } }""",
-            "variables": {},
-            "operationName": "op_name",
-        },
+    mut_op_id = await comm1.start(
+        query="""mutation op_name { send_message(message: "Hi!") { is_ok } }""",
+        operation_name="op_name",
     )
-    await comm1.receive(
-        assert_id=mut_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await comm1.receive(assert_id=mut_op_id, assert_type="complete")
+    await comm1.receive_next(mut_op_id)
+    await comm1.receive_complete(mut_op_id)
 
     await comm1.assert_no_messages("Self-notification happened!")
 
-    resp = await comm2.receive(
-        assert_id=sub_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await comm2.receive_next(sub_op_id)
     assert resp["data"]["on_new_message"]["message"] == "Hi!"
 
     await comm1.assert_no_messages(

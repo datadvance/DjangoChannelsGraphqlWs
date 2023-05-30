@@ -48,41 +48,24 @@ async def test_confirmation_enabled(gql, subprotocol):
 
     print("Subscribe & check there is a subscription confirmation message.")
 
-    sub_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": "subscription op_name { on_trigger { is_ok } }",
-            "operationName": "op_name",
-        },
+    sub_op_id = await client.start(
+        query="subscription op_name { on_trigger { is_ok } }", operation_name="op_name"
     )
 
-    resp = await client.receive(
-        assert_id=sub_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client.receive_next(sub_op_id)
     assert resp == {"data": None}
 
     print("Trigger the subscription.")
 
-    mut_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": """mutation op_name { trigger { is_ok } }""",
-            "operationName": "op_name",
-        },
+    mut_op_id = await client.start(
+        query="mutation op_name { trigger { is_ok } }", operation_name="op_name"
     )
-    await client.receive(
-        assert_id=mut_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=mut_op_id, assert_type="complete")
+    await client.receive_next(mut_op_id)
+    await client.receive_complete(mut_op_id)
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(
-        assert_id=sub_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client.receive_next(sub_op_id)
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await client.assert_no_messages(
@@ -108,37 +91,24 @@ async def test_confirmation_disabled(gql, subprotocol):
 
     print("Subscribe & check there is no subscription confirmation message.")
 
-    sub_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": "subscription op_name { on_trigger { is_ok } }",
-            "operationName": "op_name",
-        },
+    sub_op_id = await client.start(
+        query="subscription op_name { on_trigger { is_ok } }",
+        operation_name="op_name",
     )
 
     await client.assert_no_messages("Subscribe responded with a message!")
 
     print("Trigger the subscription.")
 
-    mut_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": """mutation op_name { trigger { is_ok } }""",
-            "operationName": "op_name",
-        },
+    mut_op_id = await client.start(
+        query="mutation op_name { trigger { is_ok } }", operation_name="op_name"
     )
-    await client.receive(
-        assert_id=mut_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=mut_op_id, assert_type="complete")
+    await client.receive_next(mut_op_id)
+    await client.receive_complete(mut_op_id)
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(
-        assert_id=sub_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client.receive_next(sub_op_id)
     assert resp == {"data": {"on_trigger": {"is_ok": True}}}
 
     await client.assert_no_messages(
@@ -174,19 +144,12 @@ async def test_custom_confirmation_message(gql, subprotocol):
 
     print("Subscribe & check there is a subscription confirmation message.")
 
-    sub_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": "subscription op_name { on_trigger { is_ok } }",
-            "operationName": "op_name",
-        },
+    sub_op_id = await client.start(
+        query="subscription op_name { on_trigger { is_ok } }", operation_name="op_name"
     )
 
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
-        await client.receive(
-            assert_id=sub_op_id,
-            assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-        )
+        await client.receive_next(sub_op_id)
     expected_errors = [
         {
             "message": f"{type(expected_error).__name__}: {expected_error}",
@@ -201,25 +164,15 @@ async def test_custom_confirmation_message(gql, subprotocol):
 
     print("Trigger the subscription.")
 
-    mut_op_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={
-            "query": """mutation op_name { trigger { is_ok } }""",
-            "operationName": "op_name",
-        },
+    mut_op_id = await client.start(
+        query="mutation op_name { trigger { is_ok } }", operation_name="op_name"
     )
-    await client.receive(
-        assert_id=mut_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=mut_op_id, assert_type="complete")
+    await client.receive_next(mut_op_id)
+    await client.receive_complete(mut_op_id)
 
     print("Check that subscription notification received.")
 
-    resp = await client.receive(
-        assert_id=sub_op_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    resp = await client.receive_next(sub_op_id)
     assert resp["data"]["on_trigger"]["is_ok"] is True
 
     await client.assert_no_messages(

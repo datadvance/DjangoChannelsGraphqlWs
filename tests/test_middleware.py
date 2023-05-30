@@ -51,15 +51,9 @@ async def test_middleware_called_in_query(gql, subprotocol):
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={"query": "query { ok }"},
-    )
-    await client.receive(
-        assert_id=msg_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="query { ok }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_called, "Middleware is not called!"
 
@@ -90,15 +84,9 @@ async def test_middleware_called_in_mutation(gql, subprotocol):
     await client.connect_and_init()
 
     print("Make simple mutation and assert that middleware function called.")
-    msg_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={"query": "mutation { noop { ok } }"},
-    )
-    await client.receive(
-        assert_id=msg_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="mutation { noop { ok } }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_called, "Middleware is not called!"
 
@@ -132,10 +120,7 @@ async def test_middleware_called_in_subscription(gql, subprotocol):
     await client.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={"query": "subscription { on_trigger{ ok } }"},
-    )
+    sub_id = await client.start(query="subscription { on_trigger{ ok } }")
     await client.assert_no_messages()
 
     # Middleware is not called during subscription initialization.
@@ -148,10 +133,7 @@ async def test_middleware_called_in_subscription(gql, subprotocol):
 
     # Receive subscription notification to guarantee that the
     # subscription processing has finished.
-    await client.receive(
-        assert_id=sub_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
+    await client.receive_next(sub_id)
 
     # Middleware must be called two times:
     #  - to resolve "on_trigger";
@@ -193,15 +175,9 @@ async def test_middleware_invocation_order(gql, subprotocol):
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(
-        msg_type="subscribe" if subprotocol == "graphql-transport-ws" else "start",
-        payload={"query": "query { ok }"},
-    )
-    await client.receive(
-        assert_id=msg_id,
-        assert_type="next" if subprotocol == "graphql-transport-ws" else "data",
-    )
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="query { ok }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_invocation_log == [1, 2], "Middleware invocation order is wrong!"
 
