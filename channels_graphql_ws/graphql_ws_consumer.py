@@ -78,7 +78,7 @@ LOG = logging.getLogger(__name__)
 
 # WebSocket subprotocol used for the GraphQL.
 GRAPHQL_WS_SUBPROTOCOL = "graphql-ws"
-
+TRANSPORT_WS_SUBPROTOCOL = "graphql-transport-ws"
 
 class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
     """Channels consumer for the WebSocket GraphQL backend.
@@ -242,23 +242,20 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         """Handle new WebSocket connection."""
-
+        found_protocol = None
         # Check the subprotocol told by the client.
         #
         # NOTE: In Python 3.6 `scope["subprotocols"]` was a string, but
         # starting with Python 3.7 it is a bytes. This can be a proper
         # change or just a bug in the Channels to be fixed. So let's
         # accept both variants until it becomes clear.
-        assert GRAPHQL_WS_SUBPROTOCOL in (
-            (sp.decode() if isinstance(sp, bytes) else sp)
-            for sp in self.scope["subprotocols"]
-        ), (
-            f"WebSocket client does not request for the subprotocol "
-            f"{GRAPHQL_WS_SUBPROTOCOL}!"
-        )
+        for protocol in [GRAPHQL_WS_SUBPROTOCOL, TRANSPORT_WS_SUBPROTOCOL]:
+            if protocol in self.scope["subprotocols"]:
+                found_protocol = protocol
+                break
 
         # Accept connection with the GraphQL-specific subprotocol.
-        await self.accept(subprotocol=GRAPHQL_WS_SUBPROTOCOL)
+        await self.accept(subprotocol=found_protocol)
 
     async def disconnect(self, code):
         """Handle WebSocket disconnect.
@@ -336,7 +333,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         elif msg_type == "CONNECTION_TERMINATE":
             task = self._on_gql_connection_terminate()
 
-        elif msg_type == "START":
+        elif msg_type == "SUBSCRIBE":
             op_id = content["id"]
 
             # Create and lock a mutex for this particular operation id,
@@ -364,7 +361,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
             task = on_start()
 
-        elif msg_type == "STOP":
+        elif msg_type == "COMPLETE":
             op_id = content["id"]
 
             async def on_stop():
@@ -1102,7 +1099,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         await self.send_json(
             {
-                "type": "data",
+                "type": "next",
                 "id": op_id,
                 "payload": {
                     "data": data,
