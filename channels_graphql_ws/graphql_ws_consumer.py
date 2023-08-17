@@ -29,9 +29,9 @@ library `subscription-transport-ws` (which is used by Apollo).
 
 NOTE: Links based on which this functionality is implemented:
 - Protocol description:
-  graphql-transport-ws:
+  graphql-transport-ws (the recent one):
     https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md
-  graphql-ws:
+  graphql-ws (the legacy one):
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md
     https://github.com/apollographql/subscriptions-transport-ws/blob/master/src/message-types.ts
 - ASGI specification for WebSockets:
@@ -388,7 +388,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             op_id = content["id"]
 
             async def on_complete():
-                # Wait until SUBSCRIBE(START) message processing finishes, if any.
+                # Wait until SUBSCRIBE(START) message processing
+                # finishes, if any.
                 async with self._operation_locks.setdefault(op_id, asyncio.Lock()):
                     await self._on_gql_complete(op_id)
 
@@ -398,9 +399,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             task = self._on_gql_ping()
 
         elif msg_type == "PONG":
-            # Do nothing if PONG message received.
-            # According to the protocol description, the PONG message is
-            # a response to the PING message and does not require any action.
+            # Do nothing if PONG message received. According to the
+            # protocol description, the PONG message is a response to
+            # the PING message and does not require any action.
             return
 
         else:

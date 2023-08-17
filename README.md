@@ -309,6 +309,13 @@ Check the
 [protocol description](https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md)
 for details.
 
+NOTE: Prior to 1.0.0rc7 the library used another protocol:
+[subscription-transport-ws](https://github.com/apollographql/subscriptions-transport-ws)
+(see [the protocol description](https://github.com/apollographql/subscriptions-transport-ws/blob/master/PROTOCOL.md)).
+In fact [Apollo GraphQL](https://github.com/apollographql) has been
+based on this protocol for years, but eventually has switched to a new
+one, so we did this as well.
+
 
 ### Automatic Django model serialization
 
@@ -467,6 +474,10 @@ The original Apollo's protocol does not allow client to know when a
 subscription activates. This inevitably leads to the race conditions on
 the client side. Sometimes it is not that crucial, but there are cases
 when this leads to serious issues.
+[Here is the discussion](https://github.com/apollographql/subscriptions-transport-ws/issues/451)
+in the
+[`subscriptions-transport-ws`](https://github.com/apollographql/subscriptions-transport-ws)
+tracker.
 
 To solve this problem, there is the `GraphqlWsConsumer` setting
 `confirm_subscriptions` which when set to `True` will make the consumer

@@ -23,11 +23,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
-## [1.0.0rc7] - 2022-05-12
+## [1.0.0rc7] - 2023-08-17
 
-- Support for a new WebSocket sub-protocol `graphql-transport-ws` added.
-  Sub-protocol specification:
+- Supported the most recent WebSocket sub-protocol
+  `graphql-transport-ws` used by Apollo. See the specification:
   https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md.
+
 
 ## [1.0.0rc6] - 2023-05-10
 

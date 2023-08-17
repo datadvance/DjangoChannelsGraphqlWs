@@ -67,10 +67,10 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
                 )
 
     async def send_raw_message(self, message):
-        """Sends a raw message.
+        """Send a raw message.
 
-        This can be useful for testing, for example, to check that
-        the server responds appropriately to wrong messages.
+        This can be useful for testing, for example, to check that the
+        server responds appropriately to malformed messages.
         """
         await self._transport.send(message)
 
