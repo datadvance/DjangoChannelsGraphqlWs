@@ -51,7 +51,9 @@ class GraphqlWsTransport:
         """Disconnect from the server."""
         raise NotImplementedError()
 
-    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+    async def wait_disconnect(
+        self, timeout: Optional[float] = None, assert_code: Optional[int] = None
+    ) -> None:
         """Wait server to close the connection."""
         raise NotImplementedError()
 
@@ -89,8 +91,8 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
         Args:
             timeout: Connection timeout in seconds.
             subprotocol: WebSocket subprotocol to use by the Transport.
-                Can have a value of "graphql-transport-ws" or "graphql-ws".
-                By default set to "graphql-transport-ws".
+                Can have a value of "graphql-transport-ws" or
+                "graphql-ws". By default set to "graphql-transport-ws".
 
         """
         assert subprotocol in (
@@ -159,7 +161,9 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
                 except asyncio.CancelledError:
                     pass
 
-    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+    async def wait_disconnect(
+        self, timeout: Optional[float] = None, assert_code: Optional[int] = None
+    ) -> None:
         """Wait server to close the connection."""
         raise NotImplementedError()
 

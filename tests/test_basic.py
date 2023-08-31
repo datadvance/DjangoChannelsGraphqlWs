@@ -107,7 +107,7 @@ async def test_subscribe_unsubscribe(gql, subprotocol):
     """Test subscribe-unsubscribe behavior with the GraphQL over WebSocket.
 
     0. Subscribe to GraphQL subscription: messages for Alice.
-    1. Send COMPLETE(STOP) message and unsubscribe.
+    1. Send COMPLETE/STOP message and unsubscribe.
     2. Subscribe to GraphQL subscription: messages for Tom.
     3. Call unsubscribe method of the Subscription instance
     (via `kick_out_user` mutation).

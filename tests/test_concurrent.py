@@ -158,7 +158,8 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers, subpro
 
     0. Subscribe to the subscription twice.
     1. Subscribe to the same subscription from another communicator.
-    2. Send COMPLETE(STOP) message for the first subscription to unsubscribe.
+    2. Send COMPLETE/STOP message for the first subscription
+       to unsubscribe.
     3. Execute some mutation.
     4. Check subscription notifications: there are notifications from
        the second and the third subscription.
@@ -297,7 +298,7 @@ async def test_subscribe_and_many_unsubscribes(
     flag = asyncio.Event()
 
     async def subscribe_unsubscribe(client, user_id, op_id: str):
-        """Subscribe and spam with 'complete'('stop') until stop-flag is set."""
+        """Subscribe and spam with 'complete'/'stop' until stop-flag is set."""
 
         sub_id = await client.start(
             query=f"""
@@ -311,7 +312,7 @@ async def test_subscribe_and_many_unsubscribes(
         )
         assert sub_id == op_id
 
-        # Multiple complete(stop) messages.
+        # Multiple complete/stop messages.
         while True:
             await client.complete(op_id)
             await asyncio.sleep(0.01)
@@ -431,9 +432,10 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     before the message about the successful unsubscribe.
 
     So test:
-    1) Send subscribe message and many unsubscribe 'complete'('stop') messages.
+    1) Send subscribe message and many unsubscribe
+       'complete'/'stop' messages.
     2) Check the order of the confirmation message and the
-    'complete' message.
+       'complete' message.
     """
 
     NUMBER_OF_COMPLETE_MESSAGES = 42  # pylint: disable=invalid-name
@@ -462,7 +464,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     await client.connect_and_init()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'complete'('stop')."""
+        """Subscribe and spam with 'complete'/'stop'."""
 
         sub_id = await client.start(
             query=f"""
@@ -474,7 +476,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             operation_name="op_name",
         )
 
-        # Spam with stop messages.
+        # Spam with complete/stop messages.
         for _ in range(NUMBER_OF_COMPLETE_MESSAGES):
             await client.complete(sub_id)
             await asyncio.sleep(DELAY_BETWEEN_COMPLETE_MESSAGES)
@@ -538,7 +540,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
     # Count of spam messages per connection.
     NUMBER_OF_MUTATION_MESSAGES = 50  # pylint: disable=invalid-name
-    # When 40 spam messages are sent, we will send the 'complete'('stop')
+    # When 40 spam messages are sent, we will send the 'complete'/'stop'
     # subscription message.
     MUTATION_INDEX_TO_SEND_COMPLETE = 40  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
@@ -653,7 +655,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     print("Subscribe-unsubscribe iterations done.")
 
     # We have unsubscribed from all the subscriptions and received all
-    # 'data' messages.
+    # 'next'/'data' messages.
     while True:
         try:
             resp = await asyncio.wait_for(
@@ -729,7 +731,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     pool = concurrent.futures.ThreadPoolExecutor()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'complete'('stop') by the sync 'unsubscribe'."""
+        """Subscribe and spam with 'complete'/'stop' by the sync 'unsubscribe'."""
 
         # Just subscribe.
         sub_id = await client.start(
@@ -742,7 +744,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             operation_name="op_name",
         )
 
-        # Spam with stop messages (unsubscribe all behavior).
+        # Spam with complete/stop messages (unsubscribe all behavior).
         if sync_resolvers == "sync":
 
             def unsubscribe_all():

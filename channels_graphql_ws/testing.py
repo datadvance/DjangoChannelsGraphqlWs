@@ -74,6 +74,23 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
         """
         await self._transport.send(message)
 
+    async def wait_disconnect(self, timeout=None, assert_code=4000):
+        """Wait server to close the connection.
+
+        Used in tests to check that WebSocket closed with expected code.
+
+        Args:
+            timeout: Seconds to wait the connection to close.
+            assert_code: The code with which the connection should
+                be closed.
+
+        Raises:
+            `asyncio.TimeoutError` when timeout is reached.
+
+        """
+        await self._transport.wait_disconnect(timeout, assert_code)
+        self._is_connected = False
+
 
 class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
     """Testing client transport to work without WebSocket connection.
@@ -119,15 +136,17 @@ class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
         """Disconnect from the server."""
         await self._comm.disconnect(timeout=timeout or self.TIMEOUT)
 
-    async def wait_disconnect(self, timeout: Optional[float] = None) -> None:
+    async def wait_disconnect(
+        self, timeout: Optional[float] = None, assert_code: Optional[int] = 4000
+    ) -> None:
         """Wait server to close the connection."""
         message = await self._comm.receive_output(timeout or self.TIMEOUT)
         assert message["type"] == "websocket.close", (
             "Message with a wrong type received while waiting server to close the"
             f" connection! Expected 'websocket.close' received '{message['type']}'!"
         )
-        assert message["code"] == 4000, (
+        assert message["code"] == assert_code, (
             "Message with a wrong code received while waiting server to close the"
-            f" connection! Expected '4000' received '{message['code']}'!"
+            f" connection! Expected '{assert_code}' received '{message['code']}'!"
         )
         await self._comm.disconnect(timeout=timeout or self.TIMEOUT)

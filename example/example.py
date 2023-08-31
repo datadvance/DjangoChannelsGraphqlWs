@@ -223,21 +223,24 @@ application = channels.routing.ProtocolTypeRouter(
 # -------------------------------------------------------------------- URL CONFIGURATION
 def graphiql(request):
     """Trivial view to serve the `graphiql.html` file."""
-    # It is important to create a session if it hasn't already been created,
-    # because `sessionid` cookie is used to identify the sender.
+    # It is important to create a session if it hasn't already been
+    # created, because `sessionid` cookie is used to identify the
+    # sender.
     if not request.session.session_key:
         request.session.create()
     del request
     graphiql_filepath = pathlib.Path(__file__).absolute().parent / "graphiql.html"
-    # It is better to specify an encoding when opening documents. Using the
-    # system default implicitly can create problems on other operating systems.
+    # It is better to specify an encoding when opening documents.
+    # Using the system default implicitly can create problems on other
+    # operating systems.
     with open(graphiql_filepath, encoding="utf-8") as f:
         return django.http.response.HttpResponse(f.read())
 
 
 urlpatterns = [
     django.urls.path("", graphiql),
-    # `GraphQLView` used to handle mutations and queries requests sended by http.
+    # `GraphQLView` used to handle mutations and queries requests
+    # sended by http.
     django.urls.path(
         "graphql/",
         graphene_django.views.GraphQLView.as_view(
