@@ -326,7 +326,7 @@ async def test_subscribe_and_many_unsubscribes(
         from the 'op_ids' set.
         """
         while True:
-            resp = await client.receive_raw_message(raw_response=True)
+            resp = await client.receive(raw_response=True)
             op_id = resp["id"]
             if resp["type"] == "complete":
                 op_ids.remove(op_id)
@@ -481,7 +481,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             await client.complete(sub_id)
             await asyncio.sleep(DELAY_BETWEEN_COMPLETE_MESSAGES)
 
-        resp = await client.receive_raw_message(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
             resp["type"] == "next"
@@ -489,7 +489,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             else "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
-        resp = await client.receive_raw_message(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert resp["type"] == "complete", (
             "Here we expect to receive a message about the completion"
@@ -627,7 +627,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
         while True:
             try:
-                resp = await client.receive_raw_message(raw_response=True)
+                resp = await client.receive(raw_response=True)
             except Exception:  # pylint: disable=broad-except
                 assert False, (
                     "Here we expect to receive a message about the completion"
@@ -659,7 +659,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     while True:
         try:
             resp = await asyncio.wait_for(
-                client.receive_raw_message(raw_response=True),
+                client.receive(raw_response=True),
                 timeout=NOTHING_RECEIVED_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -759,7 +759,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
                 await OnChatMessageSentAsync.unsubscribe()
                 await asyncio.sleep(DELAY_BETWEEN_UNSUBSCRIBE_CALLS)
 
-        resp = await client.receive_raw_message(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
             resp["type"] == "next"
@@ -767,7 +767,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             else "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
-        resp = await client.receive_raw_message(raw_response=True)
+        resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert resp["type"] == "complete", (
             "Here we expect to receive a message about the completion"

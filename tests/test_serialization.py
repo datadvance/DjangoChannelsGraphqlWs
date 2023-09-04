@@ -143,7 +143,7 @@ async def test_models_serialization_with_nested_db_query(
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await client.receive_raw_message(assert_id=sub_id)
+    models_info = await client.receive(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user"]["id"] == user_id
     assert models_info["user"]["username"] == username
@@ -254,7 +254,7 @@ async def test_models_serialization(gql, transactional_db, subprotocol):
 
     print("Receive subscription notification with models info and check it.")
 
-    models_info = await client.receive_raw_message(assert_id=sub_id)
+    models_info = await client.receive(assert_id=sub_id)
     models_info = models_info["data"]["on_models_received"]
     assert models_info["user1_id"] == user1_id
     assert models_info["user2_id"] == user2_id
@@ -368,7 +368,7 @@ async def test_timestamps_serialization(gql, transactional_db, subprotocol):
 
     print("Receive subscription notification with timestamps info and check it.")
 
-    timestamps_info = await client.receive_raw_message(assert_id=sub_id)
+    timestamps_info = await client.receive(assert_id=sub_id)
     await client.finalize()
 
     timestamps_info = timestamps_info["data"]["on_timestamps_received"]

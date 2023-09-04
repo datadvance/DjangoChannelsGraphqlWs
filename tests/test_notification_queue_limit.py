@@ -117,7 +117,7 @@ async def test_notification_queue_limit(gql, subprotocol):
     received_ids: List[int] = []
 
     while True:
-        msg = await comm.receive_raw_message()
+        msg = await comm.receive()
         print("Received message:", msg)
         received_ids.append(msg["data"]["on_new_message"]["message"])
         if msg["data"]["on_new_message"]["message"] == msgs_count - 1:

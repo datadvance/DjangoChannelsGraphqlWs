@@ -373,10 +373,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             wait_list += [self._ping_task]
 
         # Stop waiting for connection initialization (if enabled).
-        if (
-            self._connection_init_check_task is not None
-            and not self._connection_init_check_task.done()
-        ):
+        if self._connection_init_check_task is not None:
             self._connection_init_check_task.cancel()
             wait_list += [self._connection_init_check_task]
 
@@ -434,7 +431,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 and self._graphql_ws_subprotocol == "graphql-transport-ws"
             ):
                 LOG.warning(
-                    "The WebSocket connection will be closed due to: Unauthorized!"
+                    "The WebSocket connection will be closed due to: "
+                    "`subscribe` message received before connection was acknowledged!"
                 )
                 await self.close(code=4401)
                 return
@@ -657,6 +655,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         else:
             # Mark connection as initialized.
             self._connection_initialized = True
+            # Stop waiting for connection initialization (if enabled).
+            if self._connection_init_check_task is not None:
+                self._connection_init_check_task.cancel()
+                await asyncio.wait([self._connection_init_check_task])
             # Send CONNECTION_ACK message.
             await self._send_gql_connection_ack()
             # Mark connection as acknowledged.
@@ -799,13 +801,6 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                                 # Skipped subscription event may have no
                                 # data and no errors. Send message only
                                 # when we have something to send.
-                                if (
-                                    self._graphql_ws_subprotocol
-                                    == "graphql-transport-ws"
-                                    and item.errors
-                                ):
-                                    await self._send_gql_error(op_id, item.errors)
-                                    break
                                 if item.data or item.errors:
                                     try:
                                         await self._send_gql_next(
@@ -898,16 +893,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                             variables,
                         )
             # Respond to a query or mutation immediately.
-            if (
-                operation_result.errors
-                and self._graphql_ws_subprotocol == "graphql-transport-ws"
-            ):
-                await self._send_gql_error(op_id, operation_result.errors)
-            else:
-                await self._send_gql_next(
-                    op_id, operation_result.data, operation_result.errors
-                )
-                await self._send_gql_complete(op_id)
+            await self._send_gql_next(
+                op_id, operation_result.data, operation_result.errors
+            )
+            await self._send_gql_complete(op_id)
 
         except Exception as ex:  # pylint: disable=broad-except
             if (

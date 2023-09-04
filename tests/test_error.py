@@ -32,35 +32,16 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_error_cases_graphql_ws_protocol(gql):
-    """Test that server responds correctly when errors happen.
+async def test_syntax_error_graphql_ws(gql):
+    """Test that server respond correctly when syntax error(s) happen.
 
-    Check that server responds with message of type `data` when there
-    is a syntax error in the request or the exception in a resolver
-    was raised. Check that server responds with message of type `error`
-    when there was an exceptional situation, for example, field `query`
-    of `payload` is missing or field `type` has a wrong value.
+    Check that server responds with message of `data` type with
+    `errors` array, when there is a syntax error in the request.
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
     client = gql(query=Query, subprotocol="graphql-ws")
     await client.connect_and_init()
-
-    print("Check that query syntax error leads to the `error` response.")
-    msg_id = await client.send_raw_message(
-        {"type": "wrong_type__(ツ)_/¯", "variables": {}, "operationName": ""}
-    )
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_raw_message(assert_id=msg_id, assert_type="error")
-    payload = exc_info.value.response["payload"]
-    assert len(payload["errors"]) == 1, "Multiple errors received instead of one!"
-    assert isinstance(payload["errors"][0], dict), "Error must be of dict type!"
-    assert isinstance(
-        payload["errors"][0]["message"], str
-    ), "Error's message  must be of str type!"
-    assert (
-        payload["errors"][0]["extensions"]["code"] == "Exception"
-    ), "Error must have 'code' field."
 
     print(
         "Check that query syntax error leads to the `data` response "
@@ -79,22 +60,6 @@ async def test_error_cases_graphql_ws_protocol(gql):
         "message" in payload["errors"][0] and "locations" in payload["errors"][0]
     ), "Response missing mandatory fields!"
     assert payload["errors"][0]["locations"] == [{"line": 1, "column": 1}]
-    await client.receive_complete(msg_id)
-
-    print("Check that syntax error leads to the `data` response with `errors` array.")
-    msg_id = await client.start(
-        query="query op_name { value(issue_error: true) }", operation_name="op_name"
-    )
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_next(msg_id)
-    payload = exc_info.value.response["payload"]
-    assert payload["data"]["value"] is None
-    assert len(payload["errors"]) == 1, "Single error expected!"
-    assert payload["errors"][0]["message"] == Query.VALUE
-    assert "locations" in payload["errors"][0]
-    assert (
-        "extensions" not in payload["errors"][0]
-    ), "For syntax error there should be no 'extensions'."
     await client.receive_complete(msg_id)
 
     print("Check multiple errors in the `data` message.")
@@ -122,12 +87,11 @@ async def test_error_cases_graphql_ws_protocol(gql):
 
 
 @pytest.mark.asyncio
-async def test_execution_error_graphql_transport_ws_protocol(gql):
-    """Test that server responds correctly when errors happen.
+async def test_syntax_error_graphql_transport_ws(gql):
+    """Test that server respond correctly when syntax error(s) happen.
 
-    Check that server responds with message of type `error` when there
-    is a syntax error in the request or the exception in a resolver
-    was raised.
+    Check that server responds with message of `error` type, when there
+    is a syntax error in the request.
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
@@ -137,27 +101,13 @@ async def test_execution_error_graphql_transport_ws_protocol(gql):
     print("Check that query syntax error leads to the `error` response.")
     msg_id = await client.start(query="This produces a syntax error!")
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_raw_message(wait_id=msg_id, assert_type="error")
+        await client.receive(wait_id=msg_id, assert_type="error")
     payload = exc_info.value.response["payload"]
     assert len(payload) == 1, "Single error expected!"
     assert (
         "message" in payload[0] and "locations" in payload[0]
     ), "Response missing mandatory fields!"
     assert payload[0]["locations"] == [{"line": 1, "column": 1}]
-
-    print("Check that error in resolver leads to the `error` response.")
-    msg_id = await client.start(
-        query="query op_name { value(issue_error: true) }", operation_name="op_name"
-    )
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_raw_message(wait_id=msg_id, assert_type="error")
-    payload = exc_info.value.response["payload"]
-    assert len(payload) == 1, "Single error expected!"
-    assert payload[0]["message"] == Query.VALUE
-    assert "locations" in payload[0]
-    assert (
-        "extensions" not in payload[0]
-    ), "For syntax error there should be no 'extensions'."
 
     print("Check multiple errors in the `error` message.")
     msg_id = await client.start(
@@ -168,7 +118,7 @@ async def test_execution_error_graphql_transport_ws_protocol(gql):
                 """
     )
     with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_raw_message(wait_id=msg_id, assert_type="error")
+        await client.receive(wait_id=msg_id, assert_type="error")
     payload = exc_info.value.response["payload"]
     assert (
         len(payload) == 5
@@ -182,12 +132,49 @@ async def test_execution_error_graphql_transport_ws_protocol(gql):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_resolver_error(gql, subprotocol):
+    """Test that server responds correctly when error in resolver.
+
+    Check that server responds with message of type `next`/`data` with
+    `errors` array , when the exception in a resolver was raised.
+    """
+
+    print("Establish & initialize WebSocket GraphQL connection.")
+    client = gql(query=Query, subprotocol=subprotocol)
+    await client.connect_and_init()
+
+    print(
+        "Check that syntax error leads to the `next`/`data`"
+        "response with `errors` array."
+    )
+    msg_id = await client.start(
+        query="query op_name { value(issue_error: true) }", operation_name="op_name"
+    )
+    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
+        await client.receive_next(msg_id)
+    payload = exc_info.value.response["payload"]
+    assert payload["data"]["value"] is None
+    assert len(payload["errors"]) == 1, "Single error expected!"
+    assert payload["errors"][0]["message"] == Query.VALUE
+    assert "locations" in payload["errors"][0]
+    assert (
+        "extensions" not in payload["errors"][0]
+    ), "For syntax error there should be no 'extensions'."
+    await client.receive_complete(msg_id)
+
+    print("Disconnect and wait the application to finish gracefully.")
+    await client.assert_no_messages()
+    await client.finalize()
+
+
+@pytest.mark.asyncio
 async def test_connection_init_timeout_error_graphql_transport_ws(gql):
     """Test how server works with `connection_init_wait_timeout`.
 
-    Server must close WebSocket connection if connection was not
-    initialized (client don't send `connection_init` message) after
-    `connection_init_wait_timeout` seconds.
+    Server must close WebSocket connection with code 4408 if connection
+    was not initialized (client don't send `connection_init` message)
+    after `connection_init_wait_timeout` seconds.
     """
 
     print("Establish WebSocket GraphQL connection.")
@@ -211,9 +198,9 @@ async def test_connection_init_timeout_error_graphql_transport_ws(gql):
 async def test_connection_unauthorized_error_graphql_transport_ws(gql):
     """Test how server handles `subscribe` before `connection_ack`.
 
-    Server must close WebSocket connection if client trying to
-    subscribe before connection acknowledgment (before server send
-    `connection_ack` message).
+    Server must close WebSocket connection with code 4401 if client
+    trying to subscribe before connection acknowledgment (before server
+    send `connection_ack` message).
     """
 
     print("Establish WebSocket GraphQL connection.")
@@ -233,24 +220,40 @@ async def test_connection_unauthorized_error_graphql_transport_ws(gql):
 
 
 @pytest.mark.asyncio
-async def test_wrong_message_type_error_graphql_transport_ws(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_wrong_message_type_error(gql, subprotocol):
     """Test how server handles request with wrong message type.
 
-    Server must close WebSocket connection if client send
-    request with wrong message type.
+    If GraphqlWsConsumer working on `graphql-transport-ws` subprotocol,
+    server must close WebSocket connection with code 4400 when client
+    send request with wrong message type.
+    If GraphqlWsConsumer working on `graphql-ws` subprotocol server must
+    send `error` message.
+
     """
 
     print("Establish WebSocket GraphQL connection.")
-    client = gql(
-        consumer_attrs={"strict_ordering": True},
-    )
+    client = gql(consumer_attrs={"strict_ordering": True}, subprotocol=subprotocol)
     await client.connect_and_init(connect_only=True)
 
     print("Send message with wrong type.")
-    await client.send_raw_message(
+    msg_id = await client.send_raw_message(
         {"type": "wrong_type__(ツ)_/¯", "variables": {}, "operationName": ""}
     )
-    await client.wait_disconnect(assert_code=4400)
+    if subprotocol == "graphql-transport-ws":
+        await client.wait_disconnect(assert_code=4400)
+    else:
+        with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
+            await client.receive(assert_id=msg_id, assert_type="error")
+        payload = exc_info.value.response["payload"]
+        assert len(payload["errors"]) == 1, "Multiple errors received instead of one!"
+        assert isinstance(payload["errors"][0], dict), "Error must be of dict type!"
+        assert isinstance(
+            payload["errors"][0]["message"], str
+        ), "Error's message  must be of str type!"
+        assert (
+            payload["errors"][0]["extensions"]["code"] == "Exception"
+        ), "Error must have 'code' field."
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.assert_no_messages()
@@ -261,7 +264,7 @@ async def test_wrong_message_type_error_graphql_transport_ws(gql):
 async def test_many_init_requests_error_graphql_transport_ws(gql):
     """Test how server handles more than 1 `connection_init` messages.
 
-    Server must close WebSocket connection if client send
+    Server must close WebSocket connection with code 4429 if client send
     more than 1 `connection_init` messages.
     """
 
@@ -284,8 +287,8 @@ async def test_many_init_requests_error_graphql_transport_ws(gql):
 async def test_subscriber_already_exists_error_graphql_transport_ws(gql):
     """Test how server handles subscription with same id.
 
-    Server must close WebSocket connection if client sent `subscribe`
-    message with id of subscription that already exists.
+    Server must close WebSocket connection with code 4409 if client sent
+    `subscribe` message with id of subscription that already exists.
     """
 
     print("Establish WebSocket GraphQL connection.")
@@ -316,8 +319,8 @@ async def test_connection_error(gql, subprotocol):
     """Test that server disconnects user when `on_connect` raises error.
 
     If GraphqlWsConsumer working on `graphql-transport-ws` subprotocol,
-    when method `on_connect` raises `RuntimeError` server must:
-        1. Close connection immediately.
+    when method `on_connect` raises `RuntimeError` server must close
+    connection immediately with code 4403.
     If GraphqlWsConsumer working on `graphql-ws` subprotocol
     server must:
         1. Send proper error message - with type `connection_error`.
@@ -339,7 +342,7 @@ async def test_connection_error(gql, subprotocol):
     print("Try to initialize the connection.")
     await client.send_raw_message({"type": "connection_init"})
     if subprotocol == "graphql-ws":
-        resp = await client.receive_raw_message(assert_type="connection_error")
+        resp = await client.receive(assert_type="connection_error")
         assert resp["message"] == "RuntimeError: Connection rejected!"
         assert (
             resp["extensions"]["code"] == "RuntimeError"
@@ -389,7 +392,7 @@ async def test_subscribe_return_value(gql, subprotocol):
         )
         with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
             if subprotocol == "graphql-transport-ws":
-                await client.receive_raw_message(wait_id=msg_id, assert_type="error")
+                await client.receive(wait_id=msg_id, assert_type="error")
             else:
                 await client.receive_next(msg_id)
         errors = (

@@ -174,7 +174,7 @@ async def test_subscribe_unsubscribe(gql, subprotocol):
     await client.complete(sub_id)
     # If server was not able to handle unsubscribe command, then test
     # will hang here.
-    await client.receive_raw_message(assert_type="complete")
+    await client.receive(assert_type="complete")
     await client.finalize()
 
 
