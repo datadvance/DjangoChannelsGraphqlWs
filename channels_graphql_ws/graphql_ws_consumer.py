@@ -1317,11 +1317,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         for ex in errors or []:
             # Typical exception here is `GraphQLLocatedError` which has
             # reference to the original error raised from a resolver.
-            t_b = ex.__traceback__
+            tb = ex.__traceback__
             LOG.warning(
                 "GraphQL resolver failed! Operation id: %s:\n%s",
                 op_id,
-                "".join(traceback.format_exception(type(ex), ex, t_b)).strip(),
+                "".join(traceback.format_exception(type(ex), ex, tb)).strip(),
             )
 
         await self.send_json(

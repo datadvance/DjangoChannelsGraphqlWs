@@ -32,15 +32,16 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_syntax_error_graphql_ws(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_syntax_error(gql, subprotocol):
     """Test that server respond correctly when syntax error(s) happen.
 
-    Check that server responds with message of `data` type with
-    `errors` array, when there is a syntax error in the request.
+    Check that server send errors in response, when there are a syntax
+    error in the request.
     """
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    client = gql(query=Query, subprotocol="graphql-ws")
+    client = gql(query=Query, subprotocol=subprotocol)
     await client.connect_and_init()
 
     print(
@@ -49,18 +50,16 @@ async def test_syntax_error_graphql_ws(gql):
     )
 
     msg_id = await client.start(query="This produces a syntax error!")
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_next(msg_id)
+    errors, data = await client.receive_error(msg_id)
 
-    payload = exc_info.value.response["payload"]
-    assert "data" in payload
-    assert payload["data"] is None
-    assert len(payload["errors"]) == 1, "Single error expected!"
+    assert data is None
+    assert len(errors) == 1, "Single error expected!"
     assert (
-        "message" in payload["errors"][0] and "locations" in payload["errors"][0]
+        "message" in errors[0] and "locations" in errors[0]
     ), "Response missing mandatory fields!"
-    assert payload["errors"][0]["locations"] == [{"line": 1, "column": 1}]
-    await client.receive_complete(msg_id)
+    assert errors[0]["locations"] == [{"line": 1, "column": 1}]
+    if subprotocol == "graphql-ws":
+        await client.receive_complete(msg_id)
 
     print("Check multiple errors in the `data` message.")
     msg_id = await client.start(
@@ -70,62 +69,14 @@ async def test_syntax_error_graphql_ws(gql):
                 { wrong_name }
                 """
     )
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive_next(msg_id)
-    payload = exc_info.value.response["payload"]
-    assert payload["data"] is None
-    assert (
-        len(payload["errors"]) == 5
-    ), f"Five errors expected, but {len(payload['errors'])} errors received!"
-    assert payload["errors"][0]["message"] == payload["errors"][3]["message"]
-    assert "locations" in payload["errors"][2], "The `locations` field expected"
-    assert "locations" in payload["errors"][4], "The `locations` field expected"
-    await client.receive_complete(msg_id)
-
-    print("Disconnect and wait the application to finish gracefully.")
-    await client.finalize()
-
-
-@pytest.mark.asyncio
-async def test_syntax_error_graphql_transport_ws(gql):
-    """Test that server respond correctly when syntax error(s) happen.
-
-    Check that server responds with message of `error` type, when there
-    is a syntax error in the request.
-    """
-
-    print("Establish & initialize WebSocket GraphQL connection.")
-    client = gql(query=Query)
-    await client.connect_and_init()
-
-    print("Check that query syntax error leads to the `error` response.")
-    msg_id = await client.start(query="This produces a syntax error!")
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(wait_id=msg_id, assert_type="error")
-    payload = exc_info.value.response["payload"]
-    assert len(payload) == 1, "Single error expected!"
-    assert (
-        "message" in payload[0] and "locations" in payload[0]
-    ), "Response missing mandatory fields!"
-    assert payload[0]["locations"] == [{"line": 1, "column": 1}]
-
-    print("Check multiple errors in the `error` message.")
-    msg_id = await client.start(
-        query="""
-                query { projects { path wrong_field } }
-                query a { projects }
-                { wrong_name }
-                """
-    )
-    with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as exc_info:
-        await client.receive(wait_id=msg_id, assert_type="error")
-    payload = exc_info.value.response["payload"]
-    assert (
-        len(payload) == 5
-    ), f"Five errors expected, but {len(payload['errors'])} errors received!"
-    assert payload[0]["message"] == payload[3]["message"]
-    assert "locations" in payload[2], "The `locations` field expected"
-    assert "locations" in payload[4], "The `locations` field expected"
+    errors, data = await client.receive_error(msg_id)
+    assert data is None
+    assert len(errors) == 5, f"Five errors expected, but {len(errors)} errors received!"
+    assert errors[0]["message"] == errors[3]["message"]
+    assert "locations" in errors[2], "The `locations` field expected"
+    assert "locations" in errors[4], "The `locations` field expected"
+    if subprotocol == "graphql-ws":
+        await client.receive_complete(msg_id)
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.finalize()
@@ -390,16 +341,7 @@ async def test_subscribe_return_value(gql, subprotocol):
                 subscription {{ test_subscription (switch: "{result_type}") {{ ok }} }}
                 """
         )
-        with pytest.raises(channels_graphql_ws.GraphqlWsResponseError) as ex:
-            if subprotocol == "graphql-transport-ws":
-                await client.receive(wait_id=msg_id, assert_type="error")
-            else:
-                await client.receive_next(msg_id)
-        errors = (
-            ex.value.response["payload"]
-            if subprotocol == "graphql-transport-ws"
-            else ex.value.response["payload"]["errors"]
-        )
+        errors, _ = await client.receive_error(msg_id)
         assert "AssertionError" in errors[0]["message"], (
             "There is no error in response"
             " to the wrong type of the `subscribe` result!"

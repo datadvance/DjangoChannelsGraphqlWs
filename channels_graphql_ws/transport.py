@@ -51,9 +51,7 @@ class GraphqlWsTransport:
         """Disconnect from the server."""
         raise NotImplementedError()
 
-    async def wait_disconnect(
-        self, timeout: Optional[float] = None, assert_code: Optional[int] = None
-    ) -> None:
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> dict:
         """Wait server to close the connection."""
         raise NotImplementedError()
 
@@ -161,9 +159,7 @@ class GraphqlWsTransportAiohttp(GraphqlWsTransport):
                 except asyncio.CancelledError:
                     pass
 
-    async def wait_disconnect(
-        self, timeout: Optional[float] = None, assert_code: Optional[int] = None
-    ) -> None:
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> dict:
         """Wait server to close the connection."""
         raise NotImplementedError()
 

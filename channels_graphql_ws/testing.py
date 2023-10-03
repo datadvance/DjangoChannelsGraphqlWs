@@ -66,6 +66,18 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
                     else f"Message received when nothing expected!\n{received}"
                 )
 
+    async def connect_and_init(self, connect_only: bool = False) -> None:
+        """Establish and initialize WebSocket GraphQL connection.
+
+        1. Establish WebSocket connection.
+        2. Initialize GraphQL connection. Skipped if connect_only=True.
+        """
+        if connect_only:
+            await self._transport.connect()
+            self._is_connected = True
+        else:
+            await super().connect_and_init()
+
     async def send_raw_message(self, message):
         """Send a raw message.
 
@@ -74,7 +86,7 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
         """
         await self._transport.send(message)
 
-    async def wait_disconnect(self, timeout=None, assert_code=4000):
+    async def wait_disconnect(self, timeout=None, assert_code=None):
         """Wait server to close the connection.
 
         Used in tests to check that WebSocket closed with expected code.
@@ -88,8 +100,37 @@ class GraphqlWsClient(channels_graphql_ws.client.GraphqlWsClient):
             `asyncio.TimeoutError` when timeout is reached.
 
         """
-        await self._transport.wait_disconnect(timeout, assert_code)
+        message = await self._transport.wait_disconnect(timeout)
+        if assert_code is not None:
+            assert message["code"] == assert_code, (
+                "The connection was closed with the wrong code!"
+                f" Expected '{assert_code}' received '{message['code']}'!"
+            )
         self._is_connected = False
+
+    async def receive_error(self, msg_id):
+        """Receive GraphQL `error` or `next` message with errors.
+
+        Args:
+            msg_id: Subscribe message ID, in response
+                to which the `next` or `error` message should be sent.
+        Returns:
+            `errors` and `data` values from response.
+
+        """
+        if self._subprotocol == "graphql-transport-ws":
+            try:
+                await self.receive(wait_id=msg_id, assert_type="error")
+            except channels_graphql_ws.GraphqlWsResponseError as ex:
+                return ex.response["payload"], None
+        else:
+            try:
+                await self.receive_next(msg_id)
+            except channels_graphql_ws.GraphqlWsResponseError as ex:
+                return (
+                    ex.response["payload"]["errors"],
+                    ex.response["payload"]["data"],
+                )
 
 
 class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
@@ -136,17 +177,12 @@ class GraphqlWsTransport(channels_graphql_ws.transport.GraphqlWsTransport):
         """Disconnect from the server."""
         await self._comm.disconnect(timeout=timeout or self.TIMEOUT)
 
-    async def wait_disconnect(
-        self, timeout: Optional[float] = None, assert_code: Optional[int] = 4000
-    ) -> None:
+    async def wait_disconnect(self, timeout: Optional[float] = None) -> dict:
         """Wait server to close the connection."""
         message = await self._comm.receive_output(timeout or self.TIMEOUT)
         assert message["type"] == "websocket.close", (
             "Message with a wrong type received while waiting server to close the"
             f" connection! Expected 'websocket.close' received '{message['type']}'!"
         )
-        assert message["code"] == assert_code, (
-            "Message with a wrong code received while waiting server to close the"
-            f" connection! Expected '{assert_code}' received '{message['code']}'!"
-        )
         await self._comm.disconnect(timeout=timeout or self.TIMEOUT)
+        return dict(message)
