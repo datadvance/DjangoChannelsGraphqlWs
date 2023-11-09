@@ -176,6 +176,8 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
     # ------------------------------------------------------------------- IMPLEMENTATION
 
+    SKIP = object()
+
     # A prefix of Channel groups with subscription notifications.
     group_name_prefix: str = "GQLWS"
 
@@ -914,6 +916,10 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         # `notification_queue_lock` as a guard while reading or writing
         # to the queue.
         notification_queue: asyncio.Queue = asyncio.Queue(maxsize=queue_size)
+        # Enqueue the initial payload.
+        initial_payload = subscription_class.initial_payload
+        if initial_payload is not self.SKIP:
+            notification_queue.put_nowait(Serializer.serialize(initial_payload))
         # Lock to ensure that `notification_queue` operations are
         # thread safe.
         notification_queue_lock = threading.RLock()

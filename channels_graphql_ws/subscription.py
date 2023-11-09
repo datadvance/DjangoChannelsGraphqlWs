@@ -162,6 +162,11 @@ class Subscription(graphene.ObjectType):
     # Useful to skip intermediate notifications, e.g. progress reports.
     notification_queue_limit: Optional[int] = None
 
+    # Initial payload. Set it to send an "initial" response with this
+    # payload to a client as soon as it is subscribed (before any call
+    # to `Subscription.broadcast`).
+    initial_payload = GraphqlWsConsumer.SKIP
+
     @classmethod
     def broadcast(cls, *, group=None, payload=None):
         """Call this method to notify all subscriptions in the group.
