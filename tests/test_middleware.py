@@ -29,7 +29,8 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_middleware_called_in_query(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_middleware_called_in_query(gql, subprotocol):
     """Check that middleware called during query request."""
 
     middleware_called = False
@@ -45,13 +46,14 @@ async def test_middleware_called_in_query(gql):
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True, "middleware": [middleware]},
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(msg_type="start", payload={"query": "query { ok }"})
-    await client.receive(assert_id=msg_id, assert_type="data")
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="query { ok }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_called, "Middleware is not called!"
 
@@ -60,7 +62,8 @@ async def test_middleware_called_in_query(gql):
 
 
 @pytest.mark.asyncio
-async def test_middleware_called_in_mutation(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_middleware_called_in_mutation(gql, subprotocol):
     """Check that middleware called during mutation request."""
 
     middleware_called = False
@@ -76,15 +79,14 @@ async def test_middleware_called_in_mutation(gql):
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True, "middleware": [middleware]},
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
     print("Make simple mutation and assert that middleware function called.")
-    msg_id = await client.send(
-        msg_type="start", payload={"query": "mutation { noop { ok } }"}
-    )
-    await client.receive(assert_id=msg_id, assert_type="data")
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="mutation { noop { ok } }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_called, "Middleware is not called!"
 
@@ -93,7 +95,8 @@ async def test_middleware_called_in_mutation(gql):
 
 
 @pytest.mark.asyncio
-async def test_middleware_called_in_subscription(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_middleware_called_in_subscription(gql, subprotocol):
     """Check that middleware called during subscription processing."""
 
     middleware_call_counter = 0
@@ -112,13 +115,12 @@ async def test_middleware_called_in_subscription(gql):
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True, "middleware": [middleware]},
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
     print("Subscribe to GraphQL subscription.")
-    sub_id = await client.send(
-        msg_type="start", payload={"query": "subscription { on_trigger{ ok } }"}
-    )
+    sub_id = await client.start(query="subscription { on_trigger{ ok } }")
     await client.assert_no_messages()
 
     # Middleware is not called during subscription initialization.
@@ -131,7 +133,7 @@ async def test_middleware_called_in_subscription(gql):
 
     # Receive subscription notification to guarantee that the
     # subscription processing has finished.
-    await client.receive(assert_id=sub_id, assert_type="data")
+    await client.receive_next(sub_id)
 
     # Middleware must be called two times:
     #  - to resolve "on_trigger";
@@ -145,7 +147,8 @@ async def test_middleware_called_in_subscription(gql):
 
 
 @pytest.mark.asyncio
-async def test_middleware_invocation_order(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_middleware_invocation_order(gql, subprotocol):
     """Check that several middleware called in a proper order."""
 
     middleware_invocation_log = []
@@ -167,13 +170,14 @@ async def test_middleware_invocation_order(gql):
             "strict_ordering": True,
             "middleware": [middleware2, middleware1],
         },
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
     print("Make simple query and assert that middleware function called.")
-    msg_id = await client.send(msg_type="start", payload={"query": "query { ok }"})
-    await client.receive(assert_id=msg_id, assert_type="data")
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    msg_id = await client.start(query="query { ok }")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     assert middleware_invocation_log == [1, 2], "Middleware invocation order is wrong!"
 

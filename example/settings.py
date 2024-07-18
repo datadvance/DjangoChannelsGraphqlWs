@@ -91,6 +91,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.staticfiles",
     "django.contrib.admin",
     "channels",
+    "graphene_django",
 ]
 ALLOWED_HOSTS = ["*"]
 STATIC_URL = "/static/"

@@ -23,11 +23,17 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # Changelog
 
+## [1.0.0rc7] - 2023-08-17
+
+- Supported the most recent WebSocket sub-protocol
+  `graphql-transport-ws` used by Apollo. See the specification:
+  https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md.
+
+
 ## [1.0.0rc6] - 2023-05-10
 
 - GraphQL parsing and message serialization now perform concurrently
   by `sync_to_async(...,thread_sensitive=False)`.
-
 
 ## [1.0.0rc5] - 2023-05-05
 
@@ -37,7 +43,6 @@ WARNING: Release contains backward incompatible changes!
   subscription resolver. Previously it was necessary to return special
   `SKIP` object which is no longer the case..
 - Python 3.8 compatibility brought back. Tests pass OK.
-
 
 ## [1.0.0rc4] - 2023-05-03
 

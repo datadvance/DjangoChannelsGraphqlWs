@@ -96,7 +96,8 @@ def gql(db, request):
             mutation=None,
             subscription=None,
             consumer_attrs=None,
-            communicator_kwds=None
+            communicator_kwds=None,
+            subprotocol="graphql-transport-ws",
         ):
 
     Args:
@@ -106,6 +107,9 @@ def gql(db, request):
         consumer_attrs: `GraphqlWsConsumer` attributes dict. Optional.
         communicator_kwds: Extra keyword arguments for the Channels
             `channels.testing.WebsocketCommunicator`. Optional.
+        subprotocol: WebSocket subprotocol to use by the Client. Can
+            have a value of "graphql-transport-ws" or "graphql-ws".
+            By default set to "graphql-transport-ws".
 
     Returns:
         An instance of the `GraphqlWsClient` class which has many
@@ -123,7 +127,9 @@ def gql(db, request):
             # `GraphqlWsConsumer` settings.
             consumer_attrs={"strict_ordering": True},
             # `channels.testing.WebsocketCommunicator` settings.
-            communicator_kwds={"headers": [...]}
+            communicator_kwds={"headers": [...]},
+            # Subprotocol to test.
+            subprotocol="graphql-ws"
         )
         ...
     ```
@@ -143,6 +149,7 @@ def gql(db, request):
         subscription=None,
         consumer_attrs=None,
         communicator_kwds=None,
+        subprotocol="graphql-transport-ws",
     ):
         """Setup GraphQL consumer and the communicator for tests."""
         # Graphene will throw a exception from the `graphene.Schema`
@@ -185,9 +192,12 @@ def gql(db, request):
             application=application,
             path="graphql/",
             communicator_kwds=communicator_kwds,
+            subprotocol=subprotocol,
         )
 
-        client = channels_graphql_ws.testing.GraphqlWsClient(transport)
+        client = channels_graphql_ws.testing.GraphqlWsClient(
+            transport, subprotocol=subprotocol
+        )
         issued_clients.append(client)
         return client
 

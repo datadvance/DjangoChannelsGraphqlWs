@@ -39,50 +39,43 @@ import channels_graphql_ws
 
 
 @pytest.mark.asyncio
-async def test_concurrent_queries(gql):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_concurrent_queries(gql, subprotocol):
     """Check a single hanging operation does not block other ones."""
 
     global WAKEUP  # pylint: disable=global-statement
     WAKEUP = asyncio.Event()
     print("Establish & initialize WebSocket GraphQL connection.")
-    client = gql(query=Query, mutation=Mutation)
+    client = gql(query=Query, mutation=Mutation, subprotocol=subprotocol)
     await client.connect_and_init()
 
     print("Invoke a long operation which waits for the wakeup even.")
     # Since tests and server are launched using same eventloop we should
     # not await for response here.
-    long_op_id = await client.send(
-        msg_type="start",
-        payload={
-            "query": "mutation op_name { long_op { is_ok } }",
-            "variables": {},
-            "operationName": "op_name",
-        },
+    long_op_id = await client.start(
+        query="mutation op_name { long_op { is_ok } }",
+        operation_name="op_name",
     )
 
     await client.assert_no_messages()
 
     print("Make several fast operations to check they are not blocked by the long one.")
     for _ in range(3):
-        fast_op_id = await client.send(
-            msg_type="start",
-            payload={
-                "query": "query op_name { fast_op_sync }",
-                "variables": {},
-                "operationName": "op_name",
-            },
+        fast_op_id = await client.start(
+            query="query op_name { fast_op_sync }",
+            operation_name="op_name",
         )
-        resp = await client.receive(assert_id=fast_op_id, assert_type="data")
+        resp = await client.receive_next(fast_op_id)
         assert resp["data"] == {"fast_op_sync": True}
-        await client.receive(assert_id=fast_op_id, assert_type="complete")
+        await client.receive_complete(fast_op_id)
 
     print("Trigger the wakeup event to let long operation finish.")
     WAKEUP.set()
 
-    resp = await client.receive(assert_id=long_op_id, assert_type="data")
+    resp = await client.receive_next(long_op_id)
     assert "errors" not in resp
     assert resp["data"] == {"long_op": {"is_ok": True}}
-    await client.receive(assert_id=long_op_id, assert_type="complete")
+    await client.receive_complete(long_op_id)
 
     print("Disconnect and wait the application to finish gracefully.")
     await client.assert_no_messages(
@@ -95,7 +88,8 @@ async def test_concurrent_queries(gql):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("requests_number", [1, 10, 100, 1000])
-async def test_heavy_load(gql, sync_resolvers, requests_number):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_heavy_load(gql, sync_resolvers, requests_number, subprotocol):
     """Test that server correctly processes many simultaneous requests.
 
     Send many requests simultaneously and make sure all of them have
@@ -109,7 +103,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
         query = "fast_op_async"
 
     print("Establish & initialize WebSocket GraphQL connection.")
-    client = gql(query=Query)
+    client = gql(query=Query, subprotocol=subprotocol)
     await client.connect_and_init()
 
     print(f"Send {requests_number} requests and check {requests_number*2} responses.")
@@ -119,18 +113,16 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
     for _ in range(requests_number):
         op_id = uuid.uuid4().hex
         send_waitlist += [
-            client.send(
+            client.start(
                 msg_id=op_id,
-                msg_type="start",
-                payload={
-                    "query": f"query op_name {{ {query} }}",
-                    "variables": {},
-                    "operationName": "op_name",
-                },
+                query=f"query op_name {{ {query} }}",
+                operation_name="op_name",
             )
         ]
         # Expect two messages for each one we have sent.
-        expected_responses.add((op_id, "data"))
+        expected_responses.add(
+            (op_id, "next" if subprotocol == "graphql-transport-ws" else "data")
+        )
         expected_responses.add((op_id, "complete"))
         receive_waitlist += [client.transport.receive(), client.transport.receive()]
 
@@ -145,7 +137,9 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
 
     for response in (r.result() for r in responses):
         expected_responses.remove((response["id"], response["type"]))
-        if response["type"] == "data":
+        if response["type"] == (
+            "next" if subprotocol == "graphql-transport-ws" else "data"
+        ):
             assert "errors" not in response["payload"]
     assert not expected_responses, "Not all expected responses received!"
 
@@ -158,12 +152,14 @@ async def test_heavy_load(gql, sync_resolvers, requests_number):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
-async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
+async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers, subprotocol):
     """Check that single unsubscribe does not kill other subscriptions.
 
     0. Subscribe to the subscription twice.
     1. Subscribe to the same subscription from another communicator.
-    2. Send STOP message for the first subscription to unsubscribe.
+    2. Send COMPLETE/STOP message for the first subscription
+       to unsubscribe.
     3. Execute some mutation.
     4. Check subscription notifications: there are notifications from
        the second and the third subscription.
@@ -183,85 +179,64 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
+        subprotocol=subprotocol,
     )
     client_new = gql(
         query=Query,
         mutation=Mutation,
         subscription=Subscription,
         consumer_attrs={"strict_ordering": True},
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
     await client_new.connect_and_init()
 
     print("Subscribe to GraphQL subscription with the same subscription group.")
-    sub_id_1 = await client.send(
-        msg_type="start",
-        payload={
-            "query": textwrap.dedent(
-                f"""
+    sub_id_1 = await client.start(
+        query=f"""
                 subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
-                """
-            ),
-            "variables": {},
-            "operationName": "op_name",
-        },
+                """,
+        operation_name="op_name",
     )
-    sub_id_2 = await client.send(
-        msg_type="start",
-        payload={
-            "query": textwrap.dedent(
-                f"""
+    sub_id_2 = await client.start(
+        query=f"""
                 subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
-                """
-            ),
-            "variables": {},
-            "operationName": "op_name",
-        },
+                """,
+        operation_name="op_name",
     )
-    sub_id_new = await client_new.send(
-        msg_type="start",
-        payload={
-            "query": textwrap.dedent(
-                f"""
+    sub_id_new = await client_new.start(
+        query=f"""
                 subscription op_name {{ {subscription}(user_id: ALICE) {{ event }} }}
-                """
-            ),
-            "variables": {},
-            "operationName": "op_name",
-        },
+                """,
+        operation_name="op_name",
     )
 
     print("Stop the first subscription by id.")
-    await client.send(msg_id=sub_id_1, msg_type="stop")
-    await client.receive(assert_id=sub_id_1, assert_type="complete")
+    await client.complete(sub_id_1)
+    await client.receive_complete(sub_id_1)
 
     print("Trigger the subscription by mutation to receive notifications.")
     message = "HELLO WORLD"
-    msg_id = await client.send(
-        msg_type="start",
-        payload={
-            "query": textwrap.dedent(
-                f"""
+    msg_id = await client.start(
+        query=f"""
                 mutation op_name($message: String!, $user_id: UserId) {{
                     {mutation}(message: $message, user_id: $user_id) {{
                         message
                     }}
                 }}
-                """
-            ),
-            "variables": {"message": message, "user_id": "ALICE"},
-            "operationName": "op_name",
-        },
+                """,
+        variables={"message": message, "user_id": "ALICE"},
+        operation_name="op_name",
     )
     # Mutation response.
-    await client.receive(assert_id=msg_id, assert_type="data")
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
     # Check responses from subscriptions.
-    res = await client.receive(assert_id=sub_id_2, assert_type="data")
+    res = await client.receive_next(sub_id_2)
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for second subscriber!"
-    res = await client_new.receive(assert_id=sub_id_new, assert_type="data")
+    res = await client_new.receive_next(sub_id_new)
     assert (
         message in res["data"][subscription]["event"]
     ), "Wrong response for third subscriber!"
@@ -280,8 +255,9 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers):
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 async def test_subscribe_and_many_unsubscribes(
-    gql, confirm_subscriptions, strict_ordering, sync_resolvers
+    gql, confirm_subscriptions, strict_ordering, sync_resolvers, subprotocol
 ):
     """Check single subscribe and many unsubscribes run in parallel.
 
@@ -313,6 +289,7 @@ async def test_subscribe_and_many_unsubscribes(
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
@@ -321,28 +298,23 @@ async def test_subscribe_and_many_unsubscribes(
     flag = asyncio.Event()
 
     async def subscribe_unsubscribe(client, user_id, op_id: str):
-        """Subscribe and spam with 'stop' until stop-flag is set."""
+        """Subscribe and spam with 'complete'/'stop' until stop-flag is set."""
 
-        sub_id = await client.send(
-            msg_type="start",
-            payload={
-                "query": textwrap.dedent(
-                    f"""
+        sub_id = await client.start(
+            query=f"""
                     subscription op_name($user_id: UserId) {{
                         {subscription}(user_id: $user_id) {{ event }}
                     }}
-                    """
-                ),
-                "variables": {"user_id": user_id},
-                "operationName": "op_name",
-            },
+                    """,
+            variables={"user_id": user_id},
+            operation_name="op_name",
             msg_id=op_id,
         )
         assert sub_id == op_id
 
-        # Multiple stop messages.
+        # Multiple complete/stop messages.
         while True:
-            await client.send(msg_id=op_id, msg_type="stop")
+            await client.complete(op_id)
             await asyncio.sleep(0.01)
             if flag.is_set():
                 break
@@ -359,7 +331,11 @@ async def test_subscribe_and_many_unsubscribes(
             if resp["type"] == "complete":
                 op_ids.remove(op_id)
             else:
-                assert resp["type"] == "data" and resp["payload"]["data"] is None, (
+                assert (
+                    resp["type"] == "next"
+                    if subprotocol == "graphql-transport-ws"
+                    else "data" and resp["payload"]["data"] is None
+                ), (
                     "This should be a successful subscription message, not '%s'",
                     resp,
                 )
@@ -414,25 +390,20 @@ async def test_subscribe_and_many_unsubscribes(
 
     print("Trigger the subscription by mutation.")
     message = "HELLO WORLD"
-    msg_id = await client.send(
-        msg_type="start",
-        payload={
-            "query": textwrap.dedent(
-                f"""
+    msg_id = await client.start(
+        query=f"""
                 mutation op_name($message: String!, $user_id: UserId) {{
                     {mutation}(message: $message, user_id: $user_id) {{
                         message
                     }}
                 }}
-                """
-            ),
-            "variables": {"message": message, "user_id": "ALICE"},
-            "operationName": "op_name",
-        },
+                """,
+        variables={"message": message, "user_id": "ALICE"},
+        operation_name="op_name",
     )
     # Mutation response.
-    await client.receive(assert_id=msg_id, assert_type="data")
-    await client.receive(assert_id=msg_id, assert_type="complete")
+    await client.receive_next(msg_id)
+    await client.receive_complete(msg_id)
 
     # Check notifications: there are no notifications. We unsubscribed
     # from all subscriptions and received all messages.
@@ -445,8 +416,13 @@ async def test_subscribe_and_many_unsubscribes(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 async def test_message_order_in_subscribe_unsubscribe_loop(
-    gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
+    gql,
+    strict_ordering,
+    sync_resolvers,
+    subprotocol,
+    confirm_subscriptions=True,
 ):
     """Check an order of messages in the subscribe-unsubscribe loop.
 
@@ -456,14 +432,15 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     before the message about the successful unsubscribe.
 
     So test:
-    1) Send subscribe message and many unsubscribe 'stop' messages.
+    1) Send subscribe message and many unsubscribe
+       'complete'/'stop' messages.
     2) Check the order of the confirmation message and the
-    'complete' message.
+       'complete' message.
     """
 
-    NUMBER_OF_STOP_MESSAGES = 42  # pylint: disable=invalid-name
+    NUMBER_OF_COMPLETE_MESSAGES = 42  # pylint: disable=invalid-name
     # Delay in seconds.
-    DELAY_BETWEEN_STOP_MESSAGES = 0.001  # pylint: disable=invalid-name
+    DELAY_BETWEEN_COMPLETE_MESSAGES = 0.001  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
@@ -482,36 +459,34 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'stop'."""
+        """Subscribe and spam with 'complete'/'stop'."""
 
-        sub_id = await client.send(
-            msg_type="start",
-            payload={
-                "query": textwrap.dedent(
-                    f"""
+        sub_id = await client.start(
+            query=f"""
                     subscription op_name($user_id: UserId) {{
                         {subscription}(user_id: $user_id) {{ event }}
                     }}
-                    """
-                ),
-                "variables": {"user_id": user_id},
-                "operationName": "op_name",
-            },
+                    """,
+            variables={"user_id": user_id},
+            operation_name="op_name",
         )
 
-        # Spam with stop messages.
-        for _ in range(NUMBER_OF_STOP_MESSAGES):
-            await client.send(msg_id=sub_id, msg_type="stop")
-            await asyncio.sleep(DELAY_BETWEEN_STOP_MESSAGES)
+        # Spam with complete/stop messages.
+        for _ in range(NUMBER_OF_COMPLETE_MESSAGES):
+            await client.complete(sub_id)
+            await asyncio.sleep(DELAY_BETWEEN_COMPLETE_MESSAGES)
 
         resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
-            resp["type"] == "data" and resp["payload"]["data"] is None
+            resp["type"] == "next"
+            if subprotocol == "graphql-transport-ws"
+            else "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
         resp = await client.receive(raw_response=True)
@@ -545,8 +520,9 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("confirm_subscriptions", [False, True])
 @pytest.mark.parametrize("strict_ordering", [False, True])
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 async def test_message_order_in_broadcast_unsubscribe_loop(
-    gql, confirm_subscriptions, strict_ordering, sync_resolvers
+    gql, confirm_subscriptions, strict_ordering, sync_resolvers, subprotocol
 ):
     """Check an order of messages in the broadcast-unsubscribe cycle.
 
@@ -564,9 +540,9 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 
     # Count of spam messages per connection.
     NUMBER_OF_MUTATION_MESSAGES = 50  # pylint: disable=invalid-name
-    # When 40 spam messages are sent, we will send the 'stop'
+    # When 40 spam messages are sent, we will send the 'complete'/'stop'
     # subscription message.
-    MUTATION_INDEX_TO_SEND_STOP = 40  # pylint: disable=invalid-name
+    MUTATION_INDEX_TO_SEND_COMPLETE = 40  # pylint: disable=invalid-name
     # Gradually stop the test if time is up.
     TIME_BORDER = 20  # pylint: disable=invalid-name
     # The timeout after which we suppose that all messages are consumed.
@@ -589,6 +565,7 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
@@ -598,26 +575,21 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
+        subprotocol=subprotocol,
     )
     await client_spamer.connect_and_init()
 
     async def subscribe_unsubscribe(iteration: int):
         """Subscribe and spam notifications from 2 different clients."""
 
-        sub_id = await client.send(
-            msg_type="start",
-            payload={
-                "query": textwrap.dedent(
-                    f"""
+        sub_id = await client.start(
+            query=f"""
                     subscription op_name($user_id: UserId) {{
                         {subscription}(user_id: $user_id) {{ event }}
                     }}
-                    """
-                ),
-                "variables": {"user_id": "ALICE"},
-                "operationName": "op_name",
-            },
-            msg_id=f"sub_{iteration} {uuid.uuid4().hex}",
+                    """,
+            variables={"user_id": "ALICE"},
+            operation_name="op_name",
         )
 
         spam_payload = {
@@ -634,21 +606,22 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
                 "message": "__SPAM_SPAM_SPAM_SPAM_SPAM_SPAM__",
                 "user_id": "ALICE",
             },
-            "operationName": "op_name",
         }
 
         # Spam with broadcast messages.
         for index in range(NUMBER_OF_MUTATION_MESSAGES):
-            if index == MUTATION_INDEX_TO_SEND_STOP:
-                await client.send(msg_id=sub_id, msg_type="stop")
-            await client_spamer.send(
-                msg_type="start",
-                payload=spam_payload,
+            if index == MUTATION_INDEX_TO_SEND_COMPLETE:
+                await client.complete(sub_id)
+            await client_spamer.start(
+                query=spam_payload["query"],
+                variables=spam_payload["variables"],
+                operation_name="op_name",
                 msg_id=f"mut_spammer_{iteration}_{index}_{uuid.uuid4().hex}",
             )
-            await client.send(
-                msg_type="start",
-                payload=spam_payload,
+            await client.start(
+                query=spam_payload["query"],
+                variables=spam_payload["variables"],
+                operation_name="op_name",
                 msg_id=f"mut_{iteration}_{index}_{uuid.uuid4().hex}",
             )
 
@@ -682,11 +655,12 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     print("Subscribe-unsubscribe iterations done.")
 
     # We have unsubscribed from all the subscriptions and received all
-    # 'data' messages.
+    # 'next'/'data' messages.
     while True:
         try:
             resp = await asyncio.wait_for(
-                client.receive(raw_response=True), timeout=NOTHING_RECEIVED_TIMEOUT
+                client.receive(raw_response=True),
+                timeout=NOTHING_RECEIVED_TIMEOUT,
             )
         except asyncio.TimeoutError:
             # Ok, there are no messages.
@@ -710,8 +684,9 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_resolvers", ["sync", "async"])
 @pytest.mark.parametrize("strict_ordering", [False, True])
+@pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 async def test_message_order_in_subscribe_unsubscribe_all_loop(
-    gql, strict_ordering, sync_resolvers, confirm_subscriptions=True
+    gql, strict_ordering, sync_resolvers, subprotocol, confirm_subscriptions=True
 ):
     """Check an order of messages in the subscribe-unsubscribe all loop.
 
@@ -748,6 +723,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
             "confirm_subscriptions": confirm_subscriptions,
             "strict_ordering": strict_ordering,
         },
+        subprotocol=subprotocol,
     )
     await client.connect_and_init()
 
@@ -755,25 +731,20 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     pool = concurrent.futures.ThreadPoolExecutor()
 
     async def subscribe_unsubscribe(user_id="TOM"):
-        """Subscribe and spam with 'stop' by the sync 'unsubscribe'."""
+        """Subscribe and spam with 'complete'/'stop' by the sync 'unsubscribe'."""
 
         # Just subscribe.
-        sub_id = await client.send(
-            msg_type="start",
-            payload={
-                "query": textwrap.dedent(
-                    f"""
+        sub_id = await client.start(
+            query=f"""
                     subscription op_name($user_id: UserId) {{
                         {subscription}(user_id: $user_id) {{ event }}
                     }}
-                    """
-                ),
-                "variables": {"user_id": user_id},
-                "operationName": "op_name",
-            },
+                    """,
+            variables={"user_id": user_id},
+            operation_name="op_name",
         )
 
-        # Spam with stop messages (unsubscribe all behavior).
+        # Spam with complete/stop messages (unsubscribe all behavior).
         if sync_resolvers == "sync":
 
             def unsubscribe_all():
@@ -791,7 +762,9 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
         resp = await client.receive(raw_response=True)
         assert sub_id == resp["id"]
         assert (
-            resp["type"] == "data" and resp["payload"]["data"] is None
+            resp["type"] == "next"
+            if subprotocol == "graphql-transport-ws"
+            else "data" and resp["payload"]["data"] is None
         ), "First we expect to get a confirmation message!"
 
         resp = await client.receive(raw_response=True)
