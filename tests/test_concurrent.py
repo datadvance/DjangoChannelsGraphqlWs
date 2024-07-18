@@ -97,6 +97,7 @@ async def test_heavy_load(gql, sync_resolvers, requests_number, subprotocol):
     """
 
     # Name of GraphQL Query used in this test.
+    query = ""
     if sync_resolvers == "sync":
         query = "fast_op_sync"
     elif sync_resolvers == "async":
@@ -166,6 +167,8 @@ async def test_unsubscribe_one_of_many_subscriptions(gql, sync_resolvers, subpro
     """
 
     # Names of GraphQL mutation and subscription used in this test.
+    subscription = ""
+    mutation = ""
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -273,6 +276,8 @@ async def test_subscribe_and_many_unsubscribes(
     """
 
     # Names of GraphQL mutation and subscription used in this test.
+    subscription = ""
+    mutation = ""
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -445,6 +450,7 @@ async def test_message_order_in_subscribe_unsubscribe_loop(
     TIME_LIMIT_SECS = 16  # pylint: disable=invalid-name
 
     # Names of GraphQL mutation and subscription used in this test.
+    subscription = ""
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
@@ -549,6 +555,8 @@ async def test_message_order_in_broadcast_unsubscribe_loop(
     NOTHING_RECEIVED_TIMEOUT = 1  # pylint: disable=invalid-name
 
     # Names of GraphQL mutation and subscription used in this test.
+    subscription = ""
+    mutation = ""
     if sync_resolvers == "sync":
         mutation = "send_chat_message_sync"
         subscription = "on_chat_message_sent_sync"
@@ -709,6 +717,7 @@ async def test_message_order_in_subscribe_unsubscribe_all_loop(
     TIME_BORDER = 20  # pylint: disable=invalid-name
 
     # Name of GraphQL subscription used in this test.
+    subscription = ""
     if sync_resolvers == "sync":
         subscription = "on_chat_message_sent_sync"
     elif sync_resolvers == "async":
