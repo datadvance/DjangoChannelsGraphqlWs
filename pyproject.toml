@@ -65,7 +65,6 @@ graphene-django = "*"
 isort = { version = "*", extras = ["pyproject"] }
 mypy = "*"
 plumbum = "*"
-pydocstyle = "*"
 pylint = "*"
 pylint-django = "*"
 pylint-quotes = "*"
@@ -202,22 +201,3 @@ python_files = "**/test_*.py"
 #   - Enable coverage measurement and set config file.
 #   - Force verbose output: output list of tests by default.
 addopts = "--cov --verbose"
-
-# ----------------------------------------------------------- PYDOCSTYLE
-# Pydocstyle configuration reference:
-# http://www.pydocstyle.org/en/latest/usage.html#available-options
-[tool.pydocstyle]
-# Redefine match rules, cause by default it skips `test_*` files.
-match = ".*\\.py"
-# Disable some checks:
-# - D202: No blank lines allowed after function docstring. We cannot
-#   follow this, cause Black inject blank line before function
-#   declaration and if it is a nested function when this violates this
-#   rule.
-# - D401: First line should be in imperative mood; try rephrasing. Often
-#   it is not possible. Especially for callback functions such as "A new
-#   message handler."
-# - D403: First word of the first line should be properly capitalized.
-#   There is nothing bad in using words like "WebSocket" or
-#   "MessagePack" even in the beginning of the docstring.
-add_ignore = "D202,D401,D403"

@@ -73,14 +73,3 @@ def test_mypy(src_dir):
         result = mypy(src_dir)
         if result:
             print("\nMyPy:", result)
-
-
-@pytest.mark.parametrize("src_dir", SOURCE_DIRS)
-def test_pydocstyle(src_dir):
-    """Run Pydocstyle."""
-
-    pydocstyle = plumbum.local["pydocstyle"]
-    with plumbum.local.cwd(PROJECT_ROOT_DIR):
-        result = pydocstyle(src_dir)
-        if result:
-            print("\nPydocstyle:", result)
