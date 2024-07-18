@@ -577,18 +577,16 @@ _A reminder of how to setup an environment for the development._
    leave the project's directory. Inside the directory `pyenv which
    python` should show you a python installed in pyenv, outside the dir
    it should be the system python.
-3. Install Poetry to the system Python.
+4. Install Poetry (https://python-poetry.org/docs/#installation).
    ```shell
-   $ curl -sSL https://install.python-poetry.org | python3 -
+   $ pipx install poetry
    ```
-   It is important to install Poetry into the system Python, NOT in your
-   virtual environment. For details see Poetry docs: https://python-poetry.org/docs/#installation
-4. Create local virtualenv in `.venv`, install all project dependencies
+5. Create local virtualenv in `.venv`, install all project dependencies
    (from `pyproject.toml`) except the project itself.
    ```shell
    $ poetry install --no-root
    ```
-5. Activate virtualenv
+6. Activate virtualenv
    There are options:
    - With Poetry:
      ```shell
@@ -601,7 +599,7 @@ _A reminder of how to setup an environment for the development._
    - With VS Code: Choose `.venv` with "Python: Select interpreter" and
      reopen the terminal.
 
-6. Upgrade Pip:
+7. Upgrade Pip:
    ```shell
    $ pip install --upgrade pip
    ```
