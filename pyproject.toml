@@ -100,7 +100,10 @@ profile = "black"
 # https://github.com/PyCQA/pylint-django/issues/276
 #jobs = "0"
 jobs = "1"
-load-plugins = "pylint_quotes,pylint_django"
+# Disable Pylint-quotes until its issue is fixed:
+# https://github.com/edaniszewski/pylint-quotes/issues/29.
+## load-plugins = "pylint_quotes,pylint_django"
+load-plugins = "pylint_django"
 # Do not store results of previous runs.
 persistent = "no"
 # Allow to load C extension modules.
