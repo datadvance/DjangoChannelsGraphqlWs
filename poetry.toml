@@ -26,4 +26,10 @@
 # Make Poetry create virtualenvs in the project directory, so all other
 # tools can easily find it. In particular VS Code will easily find and
 # use this virtualenv.
+# https://python-poetry.org/docs/configuration/#virtualenvsin-project
 in-project = true
+
+# Use currently activated Python version to create a new virtual
+# environment.
+# https://python-poetry.org/docs/configuration/#virtualenvsprefer-active-python-experimental
+prefer-active-python = true
