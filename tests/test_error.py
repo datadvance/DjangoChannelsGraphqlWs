@@ -34,11 +34,7 @@ import channels_graphql_ws
 @pytest.mark.asyncio
 @pytest.mark.parametrize("subprotocol", ["graphql-transport-ws", "graphql-ws"])
 async def test_syntax_error(gql, subprotocol):
-    """Test that server respond correctly when syntax error(s) happen.
-
-    Check that server send errors in response, when there are a syntax
-    error in the request.
-    """
+    """Test that server responds correctly on syntax error(s)."""
 
     print("Establish & initialize WebSocket GraphQL connection.")
     client = gql(query=Query, subprotocol=subprotocol)
@@ -175,12 +171,10 @@ async def test_connection_unauthorized_error_graphql_transport_ws(gql):
 async def test_wrong_message_type_error(gql, subprotocol):
     """Test how server handles request with wrong message type.
 
-    If GraphqlWsConsumer working on `graphql-transport-ws` subprotocol,
-    server must close WebSocket connection with code 4400 when client
-    send request with wrong message type.
-    If GraphqlWsConsumer working on `graphql-ws` subprotocol server must
-    send `error` message.
-
+    With the `graphql-transport-ws` subprotocol, server must close
+    WebSocket connection with code 4400 when client send request with
+    the wrong message type. With the `graphql-ws` subprotocol server
+    must send `error` message.
     """
 
     print("Establish WebSocket GraphQL connection.")
@@ -269,13 +263,10 @@ async def test_subscriber_already_exists_error_graphql_transport_ws(gql):
 async def test_connection_error(gql, subprotocol):
     """Test that server disconnects user when `on_connect` raises error.
 
-    If GraphqlWsConsumer working on `graphql-transport-ws` subprotocol,
-    when method `on_connect` raises `RuntimeError` server must close
-    connection immediately with code 4403.
-    If GraphqlWsConsumer working on `graphql-ws` subprotocol
-    server must:
-        1. Send proper error message - with type `connection_error`.
-        2. Disconnect user.
+    With the `graphql-transport-ws` subprotocol, server must close the
+    connection with code 4403 when `on_connect` raises `RuntimeError`.
+    With the `graphql-ws` subprotocol server must send a proper error
+    message (with type `connection_error`) and then disconnect.
     """
 
     print("Establish WebSocket GraphQL connection.")

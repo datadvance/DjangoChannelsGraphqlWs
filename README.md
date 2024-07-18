@@ -264,15 +264,15 @@ query read { history(chatroom: "kittens") { chatroom text sender }}
 # Send a message from your session.
 mutation send { sendChatMessage(chatroom: "kittens", text: "Hi all!"){ ok }}
 
-# Check there is a message from `sender` with your `sessionid` cookie value.
+# Check there is a message.
 query read { history(chatroom: "kittens") { text sender } }
 
-# Open another browser or incognito window in the same browser
-# (the main idea is that each window(tab) has a unique `sessionid` cookie.),
-# subscribe from there, it waits for events.
+# Open another browser or a new incognito window (to have another
+# session cookie) subscribe to make it wait for events.
 subscription s { onNewChatMessage(chatroom: "kittens") { text sender }}
 
-# Send something again to check subscription triggers.
+# Send another message from the original window and see how subscription
+# triggers in the other one.
 mutation send { sendChatMessage(chatroom: "kittens", text: "Something ;-)!"){ ok }}
 ```
 
@@ -632,8 +632,8 @@ the `Subscription`.
 To better dive in it is useful to understand in general terms how
 regular request are handled. When server receives JSON from the client,
 the `GraphqlWsConsumer.receive_json` method is called by Channels
-routines. Then the request passes to the `_on_gql_subscribe` method which
-handles GraphQL message "SUBSCRIBE". Most magic happens there.
+routines. Then the request passes to the `_on_gql_subscribe` method
+which handles GraphQL message "SUBSCRIBE". Most magic happens there.
 
 
 ### Running tests
