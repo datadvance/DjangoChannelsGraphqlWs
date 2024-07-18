@@ -40,9 +40,7 @@ authors = ["Alexander A. Prokhorov <alexander.prokhorov@datadvance.net>"]
 homepage = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
 repository = "https://github.com/datadvance/DjangoChannelsGraphqlWs"
 license = "MIT"
-packages = [
-    { include = "channels_graphql_ws/" },
-]
+packages = [{ include = "channels_graphql_ws/" }]
 
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
@@ -60,11 +58,11 @@ msgpack = "^1"
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 [tool.poetry.group.dev.dependencies]
 black = { version = "*" }
-channels = {version = "^4", extras = ["daphne"]}
+channels = { version = "^4", extras = ["daphne"] }
 channels-redis = "*"
 coverage = "*"
 graphene-django = "*"
-isort = {version = "*", extras = ["pyproject"]}
+isort = { version = "*", extras = ["pyproject"] }
 mypy = "*"
 plumbum = "*"
 pydocstyle = "*"
@@ -89,7 +87,7 @@ target-version = ['py38', 'py39', 'py310']
 # Isort configuration.
 # Docs: https://github.com/timothycrosley/isort/wiki/isort-Settings
 [tool.isort]
-profile="black"
+profile = "black"
 
 # --------------------------------------------------------------- PYLINT
 # Pylint code checker configuration.
@@ -128,8 +126,8 @@ method-rgx = "[a-z_][a-z0-9_]{1,64}$"
 no-docstring-rgx = "^$"
 variable-rgx = "[a-z_][a-z0-9_]{1,64}$"
 [tool.pylint.FORMAT]
-max-line-length="88"
-max-module-lines="9000" # Right, over nine thousand!
+max-line-length = "88"
+max-module-lines = "9000" # Right, over nine thousand!
 [tool.pylint.STRING_QUOTES]
 docstring-quote = "double"
 string-quote = "double-avoid-escape"
@@ -193,7 +191,7 @@ warn_unused_configs = true
 
 # pytest-pythonpath:
 # Set up paths to import Python modules from.
-python_paths = ". example"
+pythonpath = ". example"
 # pytest-django:
 # NOTE: This influence to both Pytest and to `pylint_django`, cause
 # in fact, it simply sets `DJANGO_SETTINGS_MODULE` environment variable.
@@ -210,7 +208,7 @@ addopts = "--cov --verbose"
 # http://www.pydocstyle.org/en/latest/usage.html#available-options
 [tool.pydocstyle]
 # Redefine match rules, cause by default it skips `test_*` files.
-match=".*\\.py"
+match = ".*\\.py"
 # Disable some checks:
 # - D202: No blank lines allowed after function docstring. We cannot
 #   follow this, cause Black inject blank line before function
@@ -222,4 +220,4 @@ match=".*\\.py"
 # - D403: First word of the first line should be properly capitalized.
 #   There is nothing bad in using words like "WebSocket" or
 #   "MessagePack" even in the beginning of the docstring.
-add_ignore="D202,D401,D403"
+add_ignore = "D202,D401,D403"
