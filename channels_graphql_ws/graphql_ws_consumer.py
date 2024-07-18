@@ -226,9 +226,9 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         self._graphql_ws_subprotocol = None
 
         # Registry of active (subscribed) subscriptions.
-        self._subscriptions: Dict[
-            int, GraphqlWsConsumer._SubInf
-        ] = {}  # {'<sid>': '<SubInf>', ...}
+        self._subscriptions: Dict[int, GraphqlWsConsumer._SubInf] = (
+            {}
+        )  # {'<sid>': '<SubInf>', ...}
         self._sids_by_group = {}  # {'<grp>': ['<sid0>', '<sid1>', ...], ...}
 
         # Tasks which send notifications to clients indexed by an
@@ -913,9 +913,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
                 # Respond with general error response.
                 await self._send_gql_error(op_id, [ex])
 
-    async def _on_gql_subscribe__parse_query(
-        self, op_name: str, query: str
-    ) -> Tuple[
+    async def _on_gql_subscribe__parse_query(self, op_name: str, query: str) -> Tuple[
         Optional[graphql.DocumentNode],
         Optional[graphql.OperationDefinitionNode],
         Optional[Iterable[graphql.GraphQLError]],
@@ -1286,9 +1284,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         """Send the `ping`/`ka` message to the client."""
         await self.send_json(
             {
-                "type": "ping"
-                if self._graphql_ws_subprotocol == "graphql-transport-ws"
-                else "ka"
+                "type": (
+                    "ping"
+                    if self._graphql_ws_subprotocol == "graphql-transport-ws"
+                    else "ka"
+                )
             }
         )
 
@@ -1326,9 +1326,11 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
 
         await self.send_json(
             {
-                "type": "next"
-                if self._graphql_ws_subprotocol == "graphql-transport-ws"
-                else "data",
+                "type": (
+                    "next"
+                    if self._graphql_ws_subprotocol == "graphql-transport-ws"
+                    else "data"
+                ),
                 "id": op_id,
                 "payload": {
                     "data": data,
