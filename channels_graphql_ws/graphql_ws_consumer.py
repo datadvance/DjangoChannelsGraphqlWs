@@ -730,9 +730,7 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
             variables = payload.get("variables", {})
 
             # Prepare a context object.
-            context = DictAsObject({})
-            context.channels_scope = self.scope
-            context.channel_name = self.channel_name
+            context = self.get_context()
             context.graphql_operation_name = op_name
             context.graphql_operation_id = op_id
 
@@ -1464,6 +1462,14 @@ class GraphqlWsConsumer(ch_websocket.AsyncJsonWebsocketConsumer):
         background_task = asyncio.create_task(awaitable)
         self._background_tasks.add(background_task)
         return background_task
+
+    def get_context(self):
+        """Prepare the context object to use during GraphQL execution."""
+        context = DictAsObject({})
+        context.channels_scope = self.scope
+        context.channel_name = self.channel_name
+        return context
+
 
     @property
     def _channel_layer(self):
