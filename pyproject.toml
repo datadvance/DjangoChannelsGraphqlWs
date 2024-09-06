@@ -45,11 +45,11 @@ packages = [{ include = "channels_graphql_ws/" }]
 # Production dependencies.
 # Version syntax: https://python-poetry.org/docs/dependency-specification/
 [tool.poetry.dependencies]
-python = "^3.8.0"
+python = "^3"
 aiohttp = "^3"
 asgiref = "^3"
 channels = "^4"
-Django = "^4"
+Django = "^5"
 graphene = "^3"
 graphql-core = "3.2.3" # Carefully test after upgrade, since we path private internals.
 msgpack = "^1"
